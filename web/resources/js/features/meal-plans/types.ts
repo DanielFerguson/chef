@@ -124,6 +124,12 @@ export type MealPlanWorkspace = {
             plan_revision: number;
             achieved_at: string;
         }[];
+        shopping_list: {
+            id: number;
+            status: 'draft' | 'completed';
+            revision: number;
+            stale_at: string | null;
+        } | null;
     };
     conversation: {
         id: number;
@@ -154,12 +160,20 @@ export type MealPlanWorkspace = {
         open_slots: number;
         pending_proposals: number;
         slots_without_participants: number;
+        recipes_required: number;
+        recipes_ready: number;
+        recipes_preparing: number;
+        recipes_failed: number;
+        recipes_unresolved: number;
         ready_for_confirmation: boolean;
         confirmed: boolean;
         next_action:
             | 'fill_open_slots'
             | 'resolve_proposals'
             | 'confirm_participants'
+            | 'prepare_recipes'
+            | 'wait_for_recipes'
+            | 'retry_recipes'
             | 'review_and_confirm'
             | 'begin_shopping'
             | 'continue_planning';

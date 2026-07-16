@@ -51,8 +51,8 @@ it('captures response feedback and carries a completed plan into confirmation fe
         ->assertSee('Thanks — feedback saved.')
         ->pressAndWaitFor('Start shopping list')
         ->assertSee('Shopping list')
-        ->assertSee('1 meal needs structured ingredients')
-        ->assertSee('Chicken katsu curry with rice')
+        ->assertDontSee('needs structured ingredients')
+        ->assertPresent('input[aria-label="Chicken katsu curry with rice ingredients name"]')
         ->assertPresent('input[aria-label="New shopping item"]')
         ->assertNoJavaScriptErrors();
 

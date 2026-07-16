@@ -38,7 +38,9 @@ async function consumeStream(
     }
 }
 
-export function useChefConversation(workspace: MealPlanWorkspace) {
+export function useChefConversation(
+    conversation: MealPlanWorkspace['conversation'],
+) {
     const { auth } = usePage().props;
     const [optimisticMessages, setOptimisticMessages] = useState<
         Message[] | null
@@ -46,7 +48,7 @@ export function useChefConversation(workspace: MealPlanWorkspace) {
     const [input, setInput] = useState('');
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const messages = optimisticMessages ?? workspace.conversation.messages;
+    const messages = optimisticMessages ?? conversation.messages;
 
     const sendMessage = async (event: FormEvent) => {
         event.preventDefault();
@@ -77,9 +79,7 @@ export function useChefConversation(workspace: MealPlanWorkspace) {
                 'meta[name="csrf-token"]',
             )?.content;
             const response = await fetch(
-                ConversationMessageStreamController.url(
-                    workspace.conversation.id,
-                ),
+                ConversationMessageStreamController.url(conversation.id),
                 {
                     method: 'POST',
                     headers: {

@@ -1,9 +1,12 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
     ArrowLeft,
+    ArrowUp,
     Check,
     CircleAlert,
     Ellipsis,
+    LoaderCircle,
+    MessageCircle,
     PackageCheck,
     Plus,
     ReceiptText,
@@ -13,7 +16,7 @@ import {
     Trash2,
     Wallet,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,25 +36,113 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { AssistantMessage } from '@/features/meal-plans/assistant-message';
+import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
 import type {
     ProductPreference,
     ShoppingListItem,
     ShoppingWorkspace,
 } from '@/features/shopping/types';
 
+const dateFormatter = new Intl.DateTimeFormat('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+});
+const moneyFormatter = new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+});
+
 function formatDate(value: string) {
-    return new Intl.DateTimeFormat('en-AU', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-    }).format(new Date(`${value.slice(0, 10)}T00:00:00`));
+    return dateFormatter.format(new Date(`${value.slice(0, 10)}T00:00:00`));
 }
 
-function formatMoney(value: number, currency = 'AUD') {
-    return new Intl.NumberFormat('en-AU', {
-        style: 'currency',
-        currency,
-    }).format(value);
+function formatMoney(value: number) {
+    return moneyFormatter.format(value);
+}
+
+function ShoppingConversation({
+    conversation,
+    planId,
+}: {
+    conversation: ShoppingWorkspace['conversation'];
+    planId: number;
+}) {
+    const { error, input, messages, sending, sendMessage, setInput } =
+        useChefConversation(conversation);
+    const latestAssistant = messages.findLast(
+        (message) => message.role === 'assistant' && message.content !== '',
+    );
+
+    return (
+        <section className="mt-6 border-y py-4">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                    <MessageCircle className="size-4 text-primary" /> Continue
+                    with Chef
+                </p>
+                <Button
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    className="-ml-3 sm:ml-0"
+                >
+                    <Link href={`/meal-plans/${planId}`}>
+                        View full conversation
+                    </Link>
+                </Button>
+            </div>
+            {latestAssistant && (
+                <div className="mt-3 max-w-[48em] text-sm">
+                    <AssistantMessage content={latestAssistant.content} />
+                </div>
+            )}
+            <form
+                onSubmit={sendMessage}
+                className="mt-3 rounded-xl border bg-card p-2 shadow-sm"
+            >
+                <textarea
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                        }
+                    }}
+                    aria-label="Message Chef about shopping"
+                    placeholder="Tell Chef what to add, what you already have, or what to change…"
+                    className="min-h-16 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
+                />
+                {error && (
+                    <p
+                        role="alert"
+                        className="px-2 pb-2 text-xs text-destructive"
+                    >
+                        {error}
+                    </p>
+                )}
+                <div className="flex items-center justify-between">
+                    <p className="px-2 text-xs text-muted-foreground">
+                        This continues the same plan conversation
+                    </p>
+                    <Button
+                        size="icon"
+                        type="submit"
+                        disabled={sending || input.trim() === ''}
+                    >
+                        {sending ? (
+                            <LoaderCircle className="animate-spin" />
+                        ) : (
+                            <ArrowUp />
+                        )}
+                        <span className="sr-only">Send shopping message</span>
+                    </Button>
+                </div>
+            </form>
+        </section>
+    );
 }
 
 function ProductMatchForm({
@@ -771,16 +862,274 @@ function OrderRecorder({
                                 )}
                             </span>
                             <span className="tabular-nums">
-                                {formatMoney(
-                                    order.actual_total,
-                                    order.currency,
-                                )}
+                                {formatMoney(order.actual_total)}
                             </span>
                         </li>
                     ))}
                 </ul>
             )}
         </section>
+    );
+}
+
+type PreparedShoppingList = NonNullable<ShoppingWorkspace['shopping_list']>;
+type MissingMeal = ShoppingWorkspace['missing_meals'][number];
+
+function StartShoppingList({ onPrepare }: { onPrepare: () => void }) {
+    return (
+        <section className="py-12">
+            <div className="mx-auto max-w-lg text-center">
+                <p className="text-sm font-medium">
+                    Prepare this plan&rsquo;s shopping list
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                    Chef will prepare any missing recipes, scale them for your
+                    servings, and combine their ingredients. You&rsquo;ll review
+                    the result before shopping.
+                </p>
+                <Button className="mt-5" onClick={onPrepare}>
+                    <ShoppingBasket /> Prepare shopping list
+                </Button>
+            </div>
+        </section>
+    );
+}
+
+function FailedMealRecovery({
+    failedMeals,
+    shoppingList,
+}: {
+    failedMeals: MissingMeal[];
+    shoppingList: PreparedShoppingList;
+}) {
+    return (
+        <details className="mt-4 border-t pt-3 text-left text-xs text-muted-foreground">
+            <summary className="cursor-pointer font-medium text-foreground">
+                Advanced manual recovery
+            </summary>
+            <p className="mt-2">
+                Retry is recommended. If a meal is deliberately unusual, you can
+                record its ingredients manually instead.
+            </p>
+            <div className="mt-2">
+                {failedMeals.map((meal) => (
+                    <MissingMealIngredients
+                        key={meal.id}
+                        meal={meal}
+                        listId={shoppingList.id}
+                        revision={shoppingList.revision}
+                    />
+                ))}
+            </div>
+        </details>
+    );
+}
+
+function PreparingShoppingList({
+    active,
+    failedMeals,
+    onPrepare,
+    recipePreparation,
+    shoppingList,
+}: {
+    active: boolean;
+    failedMeals: MissingMeal[];
+    onPrepare: () => void;
+    recipePreparation: ShoppingWorkspace['recipe_preparation'];
+    shoppingList: PreparedShoppingList;
+}) {
+    return (
+        <section className="py-12">
+            {recipePreparation.failed > 0 ? (
+                <div className="mx-auto max-w-lg rounded-xl bg-destructive/5 px-5 py-4">
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                        <CircleAlert className="size-4" /> Chef could not
+                        prepare {recipePreparation.failed}{' '}
+                        {recipePreparation.failed === 1 ? 'recipe' : 'recipes'}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        Retry the preparation. Manual ingredient entry remains
+                        available as an advanced recovery option.
+                    </p>
+                    <Button className="mt-4" size="sm" onClick={onPrepare}>
+                        <RefreshCw /> Retry preparation
+                    </Button>
+                    <FailedMealRecovery
+                        failedMeals={failedMeals}
+                        shoppingList={shoppingList}
+                    />
+                </div>
+            ) : (
+                <div className="mx-auto max-w-lg text-center">
+                    <LoaderCircle className="mx-auto size-6 animate-spin text-primary" />
+                    <p className="mt-3 text-sm font-medium">
+                        {active
+                            ? 'Preparing your recipes'
+                            : 'Combining your ingredients'}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {recipePreparation.ready} of{' '}
+                        {recipePreparation.required} recipes are ready. This
+                        page will update automatically.
+                    </p>
+                </div>
+            )}
+        </section>
+    );
+}
+
+function ReadyShoppingList({
+    budget,
+    failedMeals,
+    included,
+    missingMeals,
+    onPrepare,
+    planId,
+    productPreferences,
+    recipePreparation,
+    retailers,
+    shoppingList,
+}: {
+    budget: ShoppingWorkspace['budget'];
+    failedMeals: MissingMeal[];
+    included: number;
+    missingMeals: ShoppingWorkspace['missing_meals'];
+    onPrepare: () => void;
+    planId: number;
+    productPreferences: ShoppingWorkspace['product_preferences'];
+    recipePreparation: ShoppingWorkspace['recipe_preparation'];
+    retailers: ShoppingWorkspace['retailers'];
+    shoppingList: PreparedShoppingList;
+}) {
+    const active = recipePreparation.preparing > 0;
+
+    return (
+        <>
+            {shoppingList.stale_at && (
+                <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-amber-50 px-4 py-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                    <div>
+                        <p className="flex items-center gap-2 text-sm font-medium">
+                            <CircleAlert className="size-4" /> Plan changes need
+                            reviewing
+                        </p>
+                        <p className="mt-1 text-xs">
+                            {shoppingList.stale_reason}
+                        </p>
+                        {shoppingList.stale_diff && (
+                            <ul className="mt-2 space-y-1 text-xs">
+                                {shoppingList.stale_diff.changes.map(
+                                    (change) => (
+                                        <li key={change.revision}>
+                                            Revision {change.revision}:{' '}
+                                            {change.summary}
+                                        </li>
+                                    ),
+                                )}
+                            </ul>
+                        )}
+                    </div>
+                    <Button size="sm" onClick={onPrepare}>
+                        <RefreshCw /> Regenerate
+                    </Button>
+                </section>
+            )}
+
+            {missingMeals.length > 0 && (
+                <section className="mt-6 rounded-xl bg-muted/40 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-medium">
+                                {recipePreparation.failed > 0
+                                    ? `${recipePreparation.failed} recipe preparation ${recipePreparation.failed === 1 ? 'needs' : 'need'} another try`
+                                    : `Preparing ${missingMeals.length} ${missingMeals.length === 1 ? 'recipe' : 'recipes'}`}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                Chef is building the structured recipes. You do
+                                not need to type their ingredients yourself.
+                            </p>
+                        </div>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={onPrepare}
+                            disabled={active}
+                        >
+                            {active ? (
+                                <LoaderCircle className="animate-spin" />
+                            ) : (
+                                <RefreshCw />
+                            )}{' '}
+                            {active ? 'Preparing' : 'Retry'}
+                        </Button>
+                    </div>
+                    {recipePreparation.failed > 0 && (
+                        <FailedMealRecovery
+                            failedMeals={failedMeals}
+                            shoppingList={shoppingList}
+                        />
+                    )}
+                </section>
+            )}
+
+            <section className="mt-8">
+                <div>
+                    <h2 className="font-medium">Items</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {included} included · revision {shoppingList.revision}
+                    </p>
+                </div>
+                <div className="mt-3 divide-y border-y">
+                    {shoppingList.items.map((item) => (
+                        <ShoppingItemRow
+                            key={item.id}
+                            item={item}
+                            revision={shoppingList.revision}
+                            stale={shoppingList.stale_at !== null}
+                            retailers={retailers}
+                            preference={
+                                productPreferences.find(
+                                    (preference) =>
+                                        preference.normalized_item_name ===
+                                        item.normalized_name,
+                                ) ?? null
+                            }
+                        />
+                    ))}
+                    {shoppingList.items.length === 0 && (
+                        <p className="px-1 py-8 text-sm text-muted-foreground">
+                            This plan does not need any groceries yet. Add a
+                            household item or return to the plan to review its
+                            meals.
+                        </p>
+                    )}
+                </div>
+                {!shoppingList.stale_at && (
+                    <AddItemForm
+                        listId={shoppingList.id}
+                        revision={shoppingList.revision}
+                    />
+                )}
+            </section>
+            {shoppingList.items.length > 0 && (
+                <details className="mt-8 border-t pt-4">
+                    <summary className="cursor-pointer text-sm font-medium">
+                        Budget and estimate
+                    </summary>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Optional. Set this after the ingredient and pantry
+                        review if it helps guide product choices.
+                    </p>
+                    <BudgetEditor planId={planId} budget={budget} />
+                </details>
+            )}
+            {shoppingList.status === 'completed' && (
+                <OrderRecorder
+                    listId={shoppingList.id}
+                    retailers={retailers}
+                    orders={shoppingList.orders}
+                />
+            )}
+        </>
     );
 }
 
@@ -793,6 +1142,8 @@ export default function ShoppingShow({
         plan,
         shopping_list: shoppingList,
         missing_meals: missingMeals,
+        recipe_preparation: recipePreparation,
+        conversation,
         retailers,
         product_preferences: productPreferences,
         budget,
@@ -804,10 +1155,43 @@ export default function ShoppingShow({
     const included =
         shoppingList?.items.filter((item) => item.included && !item.in_pantry)
             .length ?? 0;
+    const failedMeals = missingMeals.reduce<MissingMeal[]>((meals, meal) => {
+        if (meal.preparation_status === 'failed') {
+            meals.push(meal);
+        }
+
+        return meals;
+    }, []);
     const completionForm = useForm({
         expected_revision: shoppingList?.revision ?? 0,
     });
     const completionError = Object.values(completionForm.errors)[0];
+    const listPreparing = shoppingList !== null && shoppingList.revision === 0;
+    const preparationActive = recipePreparation.preparing > 0;
+    const shouldPoll = preparationActive || listPreparing;
+
+    useEffect(() => {
+        if (!shouldPoll) {
+            return;
+        }
+
+        const interval = window.setInterval(
+            () =>
+                router.reload({
+                    only: ['workspace'],
+                }),
+            2000,
+        );
+
+        return () => window.clearInterval(interval);
+    }, [shouldPoll]);
+
+    const prepareShopping = () =>
+        router.post(
+            `/meal-plans/${plan.id}/shopping-list`,
+            {},
+            { preserveScroll: true },
+        );
 
     return (
         <>
@@ -820,7 +1204,7 @@ export default function ShoppingShow({
                         </Link>
                     </Button>
 
-                    <header className="mt-5 flex flex-wrap items-start justify-between gap-5 border-b pb-6">
+                    <header className="mt-5 flex flex-col items-start gap-5 border-b pb-6 sm:flex-row sm:justify-between">
                         <div>
                             <div className="flex items-center gap-2">
                                 <ShoppingBasket className="size-5 text-primary" />
@@ -834,7 +1218,19 @@ export default function ShoppingShow({
                                     >
                                         {shoppingList.status === 'completed'
                                             ? 'Completed'
-                                            : `${remaining} remaining`}
+                                            : shoppingList.items.length === 0
+                                              ? 'Preparing'
+                                              : `${remaining} remaining`}
+                                    </Badge>
+                                )}
+                                {!shoppingList && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="font-normal"
+                                    >
+                                        {recipePreparation.ready} of{' '}
+                                        {recipePreparation.required} recipes
+                                        ready
                                     </Badge>
                                 )}
                             </div>
@@ -843,9 +1239,10 @@ export default function ShoppingShow({
                                 {formatDate(plan.ends_on)}
                             </p>
                         </div>
-                        {shoppingList && (
+                        {shoppingList && !listPreparing && (
                             <Button
                                 disabled={
+                                    shoppingList.items.length === 0 ||
                                     remaining > 0 ||
                                     missingMeals.length > 0 ||
                                     shoppingList.stale_at !== null ||
@@ -875,151 +1272,34 @@ export default function ShoppingShow({
                         </p>
                     )}
 
-                    <BudgetEditor planId={plan.id} budget={budget} />
+                    <ShoppingConversation
+                        conversation={conversation}
+                        planId={plan.id}
+                    />
 
                     {!shoppingList ? (
-                        <section className="py-12 text-center">
-                            <p className="text-sm font-medium">
-                                Start this plan&rsquo;s shopping list
-                            </p>
-                            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                                Chef will aggregate ingredients from the exact
-                                recipe versions attached to this confirmed plan.
-                            </p>
-                            <Button
-                                className="mt-5"
-                                onClick={() =>
-                                    router.post(
-                                        `/meal-plans/${plan.id}/shopping-list`,
-                                    )
-                                }
-                            >
-                                <ShoppingBasket /> Generate list
-                            </Button>
-                        </section>
+                        <StartShoppingList onPrepare={prepareShopping} />
+                    ) : listPreparing ? (
+                        <PreparingShoppingList
+                            active={preparationActive}
+                            failedMeals={failedMeals}
+                            onPrepare={prepareShopping}
+                            recipePreparation={recipePreparation}
+                            shoppingList={shoppingList}
+                        />
                     ) : (
-                        <>
-                            {shoppingList.stale_at && (
-                                <section className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl bg-amber-50 px-4 py-3 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-                                    <div>
-                                        <p className="flex items-center gap-2 text-sm font-medium">
-                                            <CircleAlert className="size-4" />
-                                            Plan changes need reviewing
-                                        </p>
-                                        <p className="mt-1 text-xs">
-                                            {shoppingList.stale_reason}
-                                        </p>
-                                        {shoppingList.stale_diff && (
-                                            <ul className="mt-2 space-y-1 text-xs">
-                                                {shoppingList.stale_diff.changes.map(
-                                                    (change) => (
-                                                        <li
-                                                            key={
-                                                                change.revision
-                                                            }
-                                                        >
-                                                            Revision{' '}
-                                                            {change.revision}:{' '}
-                                                            {change.summary}
-                                                        </li>
-                                                    ),
-                                                )}
-                                            </ul>
-                                        )}
-                                    </div>
-                                    <Button
-                                        size="sm"
-                                        onClick={() =>
-                                            router.post(
-                                                `/meal-plans/${plan.id}/shopping-list`,
-                                            )
-                                        }
-                                    >
-                                        <RefreshCw /> Regenerate
-                                    </Button>
-                                </section>
-                            )}
-
-                            {missingMeals.length > 0 && (
-                                <section className="mt-6 rounded-xl bg-muted/50 px-4 py-3">
-                                    <p className="text-sm font-medium">
-                                        {missingMeals.length}{' '}
-                                        {missingMeals.length === 1
-                                            ? 'meal needs'
-                                            : 'meals need'}{' '}
-                                        structured ingredients
-                                    </p>
-                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                        These meals were planned without a
-                                        recipe, so Chef has not guessed their
-                                        ingredients. Add and confirm the
-                                        ingredients for each meal before
-                                        completing the shop.
-                                    </p>
-                                    <div className="mt-2">
-                                        {missingMeals.map((meal) => (
-                                            <MissingMealIngredients
-                                                key={meal.id}
-                                                meal={meal}
-                                                listId={shoppingList.id}
-                                                revision={shoppingList.revision}
-                                            />
-                                        ))}
-                                    </div>
-                                </section>
-                            )}
-
-                            <section className="mt-8">
-                                <div className="flex flex-wrap items-end justify-between gap-3">
-                                    <div>
-                                        <h2 className="font-medium">Items</h2>
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                            {included} included · revision{' '}
-                                            {shoppingList.revision}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="mt-3 divide-y border-y">
-                                    {shoppingList.items.map((item) => (
-                                        <ShoppingItemRow
-                                            key={item.id}
-                                            item={item}
-                                            revision={shoppingList.revision}
-                                            stale={
-                                                shoppingList.stale_at !== null
-                                            }
-                                            retailers={retailers}
-                                            preference={
-                                                productPreferences.find(
-                                                    (preference) =>
-                                                        preference.normalized_item_name ===
-                                                        item.normalized_name,
-                                                ) ?? null
-                                            }
-                                        />
-                                    ))}
-                                    {shoppingList.items.length === 0 && (
-                                        <p className="px-1 py-8 text-sm text-muted-foreground">
-                                            No recipe ingredients were
-                                            available. Add the first item below.
-                                        </p>
-                                    )}
-                                </div>
-                                {!shoppingList.stale_at && (
-                                    <AddItemForm
-                                        listId={shoppingList.id}
-                                        revision={shoppingList.revision}
-                                    />
-                                )}
-                            </section>
-                            {shoppingList.status === 'completed' && (
-                                <OrderRecorder
-                                    listId={shoppingList.id}
-                                    retailers={retailers}
-                                    orders={shoppingList.orders}
-                                />
-                            )}
-                        </>
+                        <ReadyShoppingList
+                            budget={budget}
+                            failedMeals={failedMeals}
+                            included={included}
+                            missingMeals={missingMeals}
+                            onPrepare={prepareShopping}
+                            planId={plan.id}
+                            productPreferences={productPreferences}
+                            recipePreparation={recipePreparation}
+                            retailers={retailers}
+                            shoppingList={shoppingList}
+                        />
                     )}
                 </div>
             </main>

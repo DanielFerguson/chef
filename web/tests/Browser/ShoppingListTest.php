@@ -50,6 +50,11 @@ it('takes a confirmed plan through an editable traceable shopping list', functio
         ->assertSee('For Satay chicken')
         ->assertPresent('input[aria-label="Chicken breast name"]')
         ->assertPresent('input[aria-label="Coconut milk name"]')
+        ->pressAndWaitFor('Back to plan')
+        ->assertSee('Review shopping list')
+        ->pressAndWaitFor('Review shopping list')
+        ->assertSee('For Satay chicken')
+        ->click('Budget and estimate')
         ->type('input[aria-label="Shopping budget"]', '100')
         ->pressAndWaitFor('Save budget')
         ->assertSee('$100.00')
@@ -73,7 +78,7 @@ it('takes a confirmed plan through an editable traceable shopping list', functio
         ->assertNoJavaScriptErrors();
 });
 
-it('resolves ingredients for a custom meal in the shopping workspace', function () {
+it('automatically prepares ingredients for a custom meal without manual reconstruction', function () {
     $workspace = browserShoppingWorkspace();
     $team = $workspace['user']->currentTeam;
     $slot = app(CreateMealSlot::class)->handle(
@@ -94,11 +99,9 @@ it('resolves ingredients for a custom meal in the shopping workspace', function 
     $this->actingAs($workspace['user']);
 
     visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
-        ->assertSee('1 meal needs structured ingredients')
-        ->type('textarea[aria-label="Ingredients for Pulled pork rolls"]', "Bread rolls | 4 | each\nColeslaw | 1 | bag")
-        ->pressAndWaitFor('Add meal ingredients')
-        ->assertDontSee('meal needs structured ingredients')
-        ->assertPresent('input[aria-label="Bread rolls name"]')
+        ->assertDontSee('needs structured ingredients')
+        ->assertNotPresent('textarea[aria-label="Ingredients for Pulled pork rolls"]')
+        ->assertPresent('input[aria-label="Pulled pork rolls ingredients name"]')
         ->assertSee('For Pulled pork rolls')
         ->assertNoJavaScriptErrors();
 });

@@ -1,5 +1,14 @@
 import { router } from '@inertiajs/react';
-import { ArrowRight, ArrowUp, Check, Clock3, Sparkles, X } from 'lucide-react';
+import {
+    ArrowRight,
+    ArrowUp,
+    Check,
+    Clock3,
+    RefreshCw,
+    Sparkles,
+    X,
+} from 'lucide-react';
+import { useEffect } from 'react';
 import {
     accept,
     reject,
@@ -115,26 +124,88 @@ function ProposalCards({ workspace }: { workspace: MealPlanWorkspace }) {
 }
 
 function PlanNextStep({ workspace }: { workspace: MealPlanWorkspace }) {
+    if (workspace.readiness.recipes_failed > 0) {
+        return (
+            <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-destructive/5 px-4 py-3">
+                <div>
+                    <p className="text-sm font-medium">
+                        One or more recipes need another try
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        Chef kept your meal choices. Retry preparation before
+                        confirming the plan.
+                    </p>
+                </div>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                        router.post(
+                            `/meal-plans/${workspace.plan.id}/recipes/prepare`,
+                            {},
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    <RefreshCw /> Retry recipes
+                </Button>
+            </section>
+        );
+    }
+
+    if (workspace.readiness.recipes_preparing > 0) {
+        return (
+            <section className="mx-auto w-full max-w-xl rounded-xl bg-primary/5 px-4 py-3">
+                <p className="text-sm font-medium">Preparing your recipes</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                    {workspace.readiness.recipes_ready} of{' '}
+                    {workspace.readiness.recipes_required} cookable recipes are
+                    ready. You can keep chatting while Chef finishes.
+                </p>
+            </section>
+        );
+    }
+
     if (workspace.readiness.confirmed) {
+        const shoppingList = workspace.plan.shopping_list;
+        const shoppingStarted = shoppingList !== null;
+        const shoppingReady =
+            shoppingList !== null && shoppingList.revision > 0;
+
         return (
             <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 px-4 py-3">
                 <div>
                     <p className="text-sm font-medium">Planning is complete</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                        Shopping is next. Chef will turn the confirmed recipes
-                        into one traceable list and show any meals that still
-                        need ingredients.
+                        {shoppingReady
+                            ? 'Your traceable shopping list is ready to review and edit with Chef.'
+                            : shoppingStarted
+                              ? 'Chef is preparing one traceable list from your confirmed recipes.'
+                              : 'Shopping is next. Chef will turn the confirmed recipes into one traceable list.'}
                     </p>
                 </div>
                 <Button
                     size="sm"
-                    onClick={() =>
+                    onClick={() => {
+                        if (shoppingStarted) {
+                            router.visit(
+                                `/meal-plans/${workspace.plan.id}/shopping`,
+                            );
+
+                            return;
+                        }
+
                         router.post(
                             `/meal-plans/${workspace.plan.id}/shopping-list`,
-                        )
-                    }
+                        );
+                    }}
                 >
-                    Start shopping list <ArrowRight />
+                    {shoppingReady
+                        ? 'Review shopping list'
+                        : shoppingStarted
+                          ? 'View shopping progress'
+                          : 'Start shopping list'}{' '}
+                    <ArrowRight />
                 </Button>
             </section>
         );
@@ -177,7 +248,22 @@ export function ConversationPanel({
     workspace: MealPlanWorkspace;
 }) {
     const { error, input, messages, sending, sendMessage, setInput } =
-        useChefConversation(workspace);
+        useChefConversation(workspace.conversation);
+    useEffect(() => {
+        if (workspace.readiness.recipes_preparing === 0) {
+            return;
+        }
+
+        const interval = window.setInterval(
+            () =>
+                router.reload({
+                    only: ['workspace'],
+                }),
+            2000,
+        );
+
+        return () => window.clearInterval(interval);
+    }, [workspace.readiness.recipes_preparing]);
     const hasPendingProposals = workspace.plan.proposals.some(
         (proposal) => proposal.status === 'pending',
     );
@@ -198,9 +284,11 @@ export function ConversationPanel({
                     <Badge variant="secondary" className="font-normal">
                         {workspace.readiness.confirmed
                             ? 'Confirmed'
-                            : workspace.readiness.ready_for_confirmation
-                              ? 'Ready to confirm'
-                              : 'Planning'}
+                            : workspace.readiness.recipes_preparing > 0
+                              ? 'Preparing recipes'
+                              : workspace.readiness.ready_for_confirmation
+                                ? 'Ready to confirm'
+                                : 'Planning'}
                     </Badge>
                 </div>
             </header>

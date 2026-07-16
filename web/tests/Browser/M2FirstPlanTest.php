@@ -12,6 +12,8 @@ use App\Enums\ConstraintKind;
 use App\Enums\MealSlotKind;
 use App\Enums\MessageRole;
 use App\Models\MealSlot;
+use App\Models\ShoppingList;
+use App\Models\ShoppingListItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -37,6 +39,25 @@ it('creates a first plan and continues its conversation in a real browser', func
             'estimated_cost' => 18,
         ]),
         'I have added satay chicken for you to review.',
+        new ToolCall('inspect-shopping', 'InspectPlanShoppingList', []),
+        fn () => new ToolCall('add-milk', 'AddPlanShoppingItem', [
+            'name' => 'Milk',
+            'quantity' => 3,
+            'unit' => 'litres',
+            'note' => 'Household extra',
+            'staple' => true,
+            'expected_revision' => ShoppingList::query()->sole()->revision,
+        ]),
+        fn () => new ToolCall('pantry-ingredient', 'UpdatePlanShoppingItem', [
+            'item_id' => ShoppingListItem::query()->where('normalized_name', 'satay chicken ingredients')->sole()->id,
+            'in_pantry' => true,
+            'expected_revision' => ShoppingList::query()->sole()->revision,
+        ]),
+        new ToolCall('set-budget', 'SetPlanShoppingBudget', [
+            'amount' => 180,
+            'household_default' => false,
+        ]),
+        'Done — I added three litres of milk, marked the satay ingredients as already at home, and set the budget to $180.',
     ])->preventStrayPrompts();
     $this->actingAs($user);
 
@@ -50,7 +71,24 @@ it('creates a first plan and continues its conversation in a real browser', func
         ->assertSee('Satay chicken')
         ->assertSee('Accept')
         ->click('Accept')
-        ->assertSee('Satay chicken');
+        ->assertSee('Satay chicken')
+        ->assertSee('Your plan is ready to confirm')
+        ->pressAndWaitFor('Review and confirm')
+        ->assertSee('Confirmed')
+        ->pressAndWaitFor('Start shopping list')
+        ->assertSee('Shopping list')
+        ->assertSee('For Satay chicken')
+        ->assertNotPresent('textarea[aria-label="Ingredients for Satay chicken"]')
+        ->type(
+            'textarea[aria-label="Message Chef about shopping"]',
+            'We already have the satay ingredients. Add three litres of milk and keep the shop below $180.',
+        )
+        ->pressAndWaitFor('Send shopping message')
+        ->assertSee('Done — I added three litres of milk')
+        ->assertPresent('input[aria-label="Milk name"]')
+        ->assertSee('Already in pantry')
+        ->click('Budget and estimate')
+        ->assertSee('$180.00');
 
     $page->assertNoJavaScriptErrors();
 });

@@ -89,6 +89,9 @@ export type MissingMeal = {
     title: string;
     date: string;
     kind: string;
+    preparation_id: number | null;
+    preparation_status: 'not_started' | 'pending' | 'processing' | 'failed';
+    failure_message: string | null;
 };
 
 export type ProductPreference = {
@@ -107,6 +110,18 @@ export type ShoppingWorkspace = {
     plan: ShoppingPlan;
     shopping_list: ShoppingList | null;
     missing_meals: MissingMeal[];
+    recipe_preparation: {
+        required: number;
+        ready: number;
+        preparing: number;
+        failed: number;
+        unresolved: number;
+    };
+    conversation: {
+        id: number;
+        messages: Message[];
+        feedback: ConversationFeedback[];
+    };
     retailers: { id: number; name: string; slug: string }[];
     product_preferences: ProductPreference[];
     budget: {
@@ -118,3 +133,7 @@ export type ShoppingWorkspace = {
         currency: string;
     };
 };
+import type {
+    ConversationFeedback,
+    Message,
+} from '@/features/meal-plans/types';
