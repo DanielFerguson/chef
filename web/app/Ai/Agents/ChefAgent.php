@@ -9,14 +9,19 @@ use App\Actions\MealPlans\UpdateMealPlanDateSpan;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\MovePlannedMeal;
 use App\Actions\Planning\ProposeMeal;
+use App\Actions\Planning\SelectPlannedMeal;
+use App\Actions\Recipes\CreateRecipe;
+use App\Ai\Tools\CreateFamilyRecipe;
 use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
 use App\Ai\Tools\CreatePlanMealSlot;
 use App\Ai\Tools\InspectMealPlan;
+use App\Ai\Tools\InspectRecipes;
 use App\Ai\Tools\InspectTeamContext;
 use App\Ai\Tools\MoveSelectedMeal;
 use App\Ai\Tools\RecordHouseholdPreference;
 use App\Ai\Tools\RecordSafetyConstraint;
+use App\Ai\Tools\SelectPlanMeal;
 use App\Ai\Tools\UpdatePlanDateSpan;
 use App\Models\Conversation;
 use App\Models\Message as ChefMessage;
@@ -112,10 +117,13 @@ class ChefAgent implements Agent, Conversational, HasTools
         return [
             new InspectTeamContext($team),
             new InspectMealPlan($mealPlan),
+            new InspectRecipes($team),
             new CreateHouseholdPerson($team, $this->actor, $this->currentMessage, app(CreateHouseholdPersonAction::class)),
             new UpdatePlanDateSpan($mealPlan, $this->actor, app(UpdateMealPlanDateSpan::class)),
             new CreatePlanMealSlot($mealPlan, $this->actor, $this->currentMessage, app(CreateMealSlot::class)),
             new CreateMealProposal($mealPlan, $this->actor, $this->currentMessage, app(ProposeMeal::class)),
+            new CreateFamilyRecipe($team, $this->actor, $this->currentMessage, app(CreateRecipe::class)),
+            new SelectPlanMeal($mealPlan, $this->actor, app(SelectPlannedMeal::class)),
             new MoveSelectedMeal($mealPlan, $this->actor, app(MovePlannedMeal::class)),
             new RecordHouseholdPreference($team, $this->actor, $this->currentMessage, app(RecordPreference::class)),
             new RecordSafetyConstraint($team, $this->actor, $this->currentMessage, app(RecordConstraint::class)),

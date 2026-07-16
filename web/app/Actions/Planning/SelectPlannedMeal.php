@@ -68,6 +68,10 @@ class SelectPlannedMeal
                 ],
             );
 
+            if (! $plannedMeal->wasRecentlyCreated && ! $plannedMeal->wasChanged()) {
+                return $plannedMeal->load('recipeVersion');
+            }
+
             $this->recordRevision->handle($plan, $user, 'Selected '.$resolvedTitle.' for '.$slot->date->toDateString().'.', [
                 'meal_slot_id' => $slot->id,
                 'planned_meal_id' => $plannedMeal->id,

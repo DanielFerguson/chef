@@ -12,6 +12,7 @@ use App\Actions\Recipes\CreateRecipe;
 use App\Actions\Recipes\CreateRecipeVersion;
 use App\Actions\Recipes\ImportRecipeText;
 use App\Actions\Teams\CreateTeamForUser;
+use App\Ai\Agents\ChefAgent;
 use App\Enums\ConstraintKind;
 use App\Enums\MealPlanMilestoneKind;
 use App\Enums\MealSlotKind;
@@ -21,8 +22,10 @@ use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Ai\Responses\Data\ToolCall;
 
 uses(RefreshDatabase::class);
 
@@ -297,4 +300,64 @@ it('returns not found for cross-family M3 route-bound resources', function () {
 
     $this->actingAs($outsider)->get(route('recipes.show', $recipe))->assertNotFound();
     $this->post(route('meal-slots.planned-meal.store', $slot), ['type' => 'open', 'title' => 'Open'])->assertNotFound();
+});
+
+it('lets Chef inspect create and select recipes through replay-safe SDK tools', function () {
+    $workspace = m3PlanningWorkspace();
+    $conversation = $workspace['plan']->conversations->firstOrFail();
+    $slot = app(CreateMealSlot::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        today(),
+        MealSlotKind::Dinner,
+        $workspace['team']->people,
+    );
+    $recipe = m3CreateRecipe($workspace, 'Known recipe');
+    $revisionBeforeSelection = $workspace['plan']->refresh()->revision;
+    $clientId = (string) Str::uuid();
+    ChefAgent::fake([
+        new ToolCall('inspect-recipes', 'InspectRecipes', []),
+        new ToolCall('create-recipe-1', 'CreateFamilyRecipe', [
+            'title' => 'Butter chicken',
+            'summary' => 'A mild curry.',
+            'servings' => 2,
+            'prep_minutes' => 15,
+            'cook_minutes' => 30,
+            'ingredients' => ['500 g chicken thigh', 'Butter chicken sauce'],
+            'steps' => ['Brown the chicken.', 'Simmer in the sauce.'],
+        ]),
+        new ToolCall('create-recipe-replay', 'CreateFamilyRecipe', [
+            'title' => 'Butter chicken',
+            'summary' => 'A mild curry.',
+            'servings' => 2,
+            'prep_minutes' => 15,
+            'cook_minutes' => 30,
+            'ingredients' => ['500 g chicken thigh', 'Butter chicken sauce'],
+            'steps' => ['Brown the chicken.', 'Simmer in the sauce.'],
+        ]),
+        new ToolCall('select-meal-1', 'SelectPlanMeal', [
+            'meal_slot_id' => $slot->id,
+            'type' => 'recipe',
+            'recipe_version_id' => $recipe->latestVersion->id,
+            'servings' => 2,
+        ]),
+        new ToolCall('select-meal-replay', 'SelectPlanMeal', [
+            'meal_slot_id' => $slot->id,
+            'type' => 'recipe',
+            'recipe_version_id' => $recipe->latestVersion->id,
+            'servings' => 2,
+        ]),
+        'The recipe is saved and dinner is selected.',
+    ])->preventStrayPrompts();
+
+    $response = $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $conversation), [
+        'content' => 'Save butter chicken, then use our known recipe for dinner.',
+        'client_message_id' => $clientId,
+    ]);
+    $response->streamedContent();
+
+    expect($workspace['team']->recipes()->where('title', 'Butter chicken')->count())->toBe(1)
+        ->and($slot->plannedMeal()->sole()->recipe_version_id)->toBe($recipe->latestVersion->id)
+        ->and($workspace['plan']->refresh()->revision)->toBe($revisionBeforeSelection + 1)
+        ->and($conversation->messages()->reorder()->latest('id')->firstOrFail()->content)->toBe('The recipe is saved and dinner is selected.');
 });

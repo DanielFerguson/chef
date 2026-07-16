@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['team_id', 'created_by_user_id', 'title', 'summary', 'source_url'])]
+#[Fillable(['team_id', 'created_by_user_id', 'idempotency_key', 'title', 'summary', 'source_url'])]
 class Recipe extends Model
 {
     use ResolvesWithinCurrentTeam;

@@ -21,7 +21,8 @@ class InspectMealPlan implements Tool
     {
         return $this->mealPlan->load([
             'slots.participants',
-            'slots.plannedMeal',
+            'slots.plannedMeal.recipeVersion',
+            'slots.plannedMeal.sourcePlannedMeal',
             'proposals' => fn ($query) => $query->latest(),
         ])->toJson(JSON_PRETTY_PRINT);
     }
