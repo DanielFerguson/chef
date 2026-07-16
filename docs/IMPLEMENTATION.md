@@ -4,24 +4,26 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestone 2 and its M2.1 hardening gate are complete. The Laravel 13
-React/Inertia application in `web/`
-now provides the first end-to-end Chef slice: authenticated family tenancy,
-durable arbitrary-span plans and conversations, streamed Laravel AI SDK
-responses, authorised planning tools, reviewable meal proposals, an editable
-provenance-aware household inspector, invitations, and responsive browser
-coverage without live OpenAI calls in the test suite.
+Milestones 0 through 3.1 are complete. The Laravel 13 React/Inertia application
+in `web/` now provides authenticated family tenancy, durable arbitrary-span
+plans and conversations, versioned recipes, streamed Laravel AI SDK responses,
+authorised planning tools, direct calendar and list editing, plan revisions and
+milestones, invitations, and responsive browser coverage without live OpenAI
+calls in the test suite.
 
-M2.1 makes this slice safe to extend: user-authored messages are the durable
-source for conversational people, preferences, and safety constraints;
-invitations can link an account to an existing `Person`; model tool writes and
-conversation turns have database-backed idempotency; proposal decisions use
-guarded one-way transitions; and every team-owned mutation is policy protected.
+M3.1 hardens the real testing loop before cooking and shopping expand the
+surface. Assistant-message and planning-checkpoint feedback remain distinct
+from later person-specific meal feedback. Stated household preferences retain
+exact human evidence; corrections supersede a wrong active record rather than
+silently duplicating or deleting history. Plan readiness and next actions are
+derived from structured state, and a successful tool-only turn must still
+produce a visible acknowledgement.
 
-The next implementation target is the complete planning workspace in milestone
-3: versioned recipes and imports, richer meal occasions and outcomes, calendar
-and list views, serving overrides, revision tracking, and explainable
-recommendations.
+M4 is the shopping-list vertical slice. Shopping moved ahead of cooking in the
+delivery order after real first-plan testing reached a confirmed plan and found
+no executable next step. This matches the product journey: a confirmed plan is
+reviewed, converted into a trustworthy shopping list, and only then used while
+cooking.
 
 ## Technical stack
 
@@ -102,7 +104,7 @@ Fine-grained custom roles are outside the first version unless real usage demons
 - `MealPlanMilestone` records progress without forcing plans through one rigid linear state.
 - A plan stores milestones such as planning confirmed, shopping list generated, shopping completed, cooking started, and review completed rather than relying on one rigid state enum.
 
-Changing a confirmed plan marks its derived data stale with a human-readable reason. M5 will attach that signal to concrete shopping-list revisions and diffs.
+Changing a confirmed plan marks its derived data stale with a human-readable reason. M4 attaches that signal to concrete shopping-list revisions and diffs.
 
 ### Preferences and safety
 
@@ -122,6 +124,14 @@ inspector shows that human-verifiable source. Direct structured edits record an
 equivalent explicit confirmation event; an agent cannot self-certify safety by
 supplying a boolean tool argument.
 
+Conversational stated preferences retain `source_message_id` and the exact
+supporting quote. Person-scoped writes must identify that person by name or by
+an unambiguous immediate pronoun reference, and the preference subject must be
+present in the quoted text. A correction records its user-authored correction
+message, creates or updates the corrected active preference, and marks the
+erroneous record as superseded. Superseded records remain available for audit
+but are excluded from household truth and recommendation context.
+
 ### Recipes
 
 Recipes are versioned. A `PlannedMeal` points to the exact `RecipeVersion` used when the meal was planned so later edits do not rewrite history. A selected version cannot be deleted while a plan retains it.
@@ -138,7 +148,7 @@ Direct forms, deterministic text import, and Chef tools all use `CreateRecipe`, 
 
 Ingredients and retailer products remain separate:
 
-- `RecipeIngredient` expresses the versioned culinary need in M3; M5 may derive normalised shopping requirements from it;
+- `RecipeIngredient` expresses the versioned culinary need in M3; M4 derives normalised shopping requirements from it;
 - `RetailProduct` expresses a retailer-specific product and pack;
 - `ProductMatch` records how a requirement was satisfied for a particular list or order.
 
@@ -146,7 +156,37 @@ Ingredients and retailer products remain separate:
 
 `ShoppingListItem` is structured data even when edited through a lightweight document-like interface. It records quantity, unit, source meals, inclusion state, pantry status, preferred product, substitution policy, estimated price, and eventual order line.
 
-Freeze a shopping-list revision before starting retailer automation. Record actual products and prices as immutable order snapshots.
+M4 uses one `ShoppingList` per confirmed `MealPlan`.
+`ShoppingListItemSource` retains the exact planned meal and recipe ingredient
+behind every generated quantity, while `ShoppingListRevision` stores a durable
+snapshot after each mutation. Compatible units are normalised before
+aggregation and quantities are scaled from recipe servings to planned
+servings. Manual and staple rows have no invented recipe source. Custom meals
+without recipe versions remain unresolved until a household member explicitly
+records their ingredient rows; `ShoppingListMealResolution` makes that review
+state durable and traceable to the planned meal.
+
+Regeneration replaces recipe-derived rows but preserves manual and staple rows.
+Any later plan revision marks the list stale with the same human-readable
+change summary and a structured revision diff; stale rows are read-only until
+regeneration.
+
+`Retailer` and `RetailProduct` describe the catalogue side of the boundary.
+`ProductMatch` connects a list requirement to a selected pack without changing
+the culinary ingredient, while `ProductPreference` retains household brand,
+pack, maximum-price, and substitution choices for later lists. Matching is
+manual and deterministic in M4; retailer discovery and computer use remain M6.
+
+`Budget` records a household default or a plan-specific override. The Shopping
+workspace compares the effective budget with the known matched-product subtotal
+and states how many items remain unpriced rather than presenting a partial total
+as complete. `Order` and `OrderLine` freeze the list revision, catalogue product
+description, matched price, and estimated line total, while `Order` retains the
+user-entered actual overall total. M6 reconciliation records actual retailer
+products, line prices, and substitutions when that evidence exists.
+There are no update or delete routes for historical order snapshots.
+
+Freeze a shopping-list revision before starting retailer automation. Record reconciled products and prices as immutable order snapshots rather than rewriting the M4 estimate.
 
 ### Conversations
 
@@ -168,6 +208,26 @@ Messages may reference structured artifacts such as:
 - a preference summary.
 
 Do not hide durable application state inside model conversation history.
+
+`ConversationFeedback` records testing feedback separately from household and
+meal feedback. It may refer to one assistant message or to a named workflow
+checkpoint. It retains the responding user, team, conversation, plan and
+revision, current milestone, rating, optional reason tags and comment, and the
+agent invocation identifier when available. Feedback is visible only to its
+author in the household interface and never mutates prompts or preferences
+automatically.
+
+Every planning tool that changes slot state returns a server-derived
+`plan_progress` summary. When all slots have participants and selected meals
+and no proposal remains unresolved, the next action is `review_and_confirm`.
+Selecting the last meal does not itself confirm the plan. Explicit confirmation
+records the planning milestone, after which shopping is the next product step.
+
+The Laravel AI engine synthesises a factual acknowledgement from recorded plan
+revisions or household-truth writes when a tool loop finishes without text. If
+there is neither visible text nor a verifiable structured mutation, the turn is
+failed and remains retryable; a blank completed assistant message is never
+persisted.
 
 ## Application architecture
 

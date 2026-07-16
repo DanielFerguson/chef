@@ -148,10 +148,79 @@ M3 acceptance evidence recorded 16 July 2026:
 - Conversation, calendar, and list views operate on the same structured plan. The calendar exposes drag scheduling, and every move also has a keyboard- and screen-reader-accessible select control.
 - A focused exit-evidence test creates and confirms 28 lunches and dinners across fourteen days, then revises the plan without changing any stored recipe version or per-person serving context.
 - Adversarial tests cover cross-family route binding and policies for every M3 tenant-owned root record, stale-write rollback, non-recipe relationship cleanup, version deletion protection, milestone staleness, and arbitrary meal states.
-- Four M3 browser journeys cover recipe import and reading, recipe selection and confirmation, rescheduling with version retention, and the complete planning workspace at 390 × 844. Together with M2, all nine browser journeys pass without JavaScript errors.
+- Five M3 browser journeys cover recipe import and reading, recipe selection and confirmation, participant serving overrides, rescheduling with version retention, and the complete planning workspace at 390 × 844. Together with the earlier journeys, they pass without JavaScript errors.
 - The final gate passes 104 backend tests and 454 assertions at 89.2% application coverage. Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, migration fresh/rollback/reapply, and both dependency audits pass; React Doctor reports 100/100 with no findings.
 
-## M4 — Cooking and feedback loop
+### M3.1 — Conversation reliability and testing instrumentation
+
+Status: `[x]`
+
+- [x] Add private, attributed thumbs-up/down feedback to assistant messages with optional reason tags and context.
+- [x] Add a lightweight feedback checkpoint after planning confirmation without conflating it with person-specific meal feedback.
+- [x] Retain the conversation, message, plan revision, milestone, and agent invocation that produced each response under review.
+- [x] Give stated preferences exact human evidence and reject unsupported people, subjects, or unrelated later messages.
+- [x] Correct misattributed preferences by superseding the wrong record while retaining the original assertion and correction.
+- [x] Recover visible acknowledgements from successful tool-only turns and never persist a completed blank assistant response.
+- [x] Derive plan readiness and the next action from structured state rather than conversation prose.
+- [x] Require explicit confirmation after the final slot and carry confirmed plans toward shopping.
+- [x] Replay the meal-plan-one failures as deterministic regression coverage without live model calls.
+- [x] Pass the complete backend, frontend, browser, migration, audit, and React Doctor gate.
+
+Exit evidence:
+
+- A tester can flag the exact Chef response that failed, add optional context, and later connect it to the structured plan and agent invocation.
+- A preference cannot be assigned to an unsupported person or cite unrelated evidence; a correction leaves one active truth with a human-verifiable history.
+- A successful tool-only turn always produces a useful visible acknowledgement, and completing the last meal leads directly to review and explicit confirmation.
+
+M3.1 acceptance evidence recorded 16 July 2026:
+
+- Message feedback and the planning-confirmed checkpoint retain their author, conversation, message when applicable, plan revision, milestone, reason tags, optional context, and agent invocation. The household UI returns only the signed-in member's own feedback.
+- Exact transcript regressions reject an unsupported `Dinner guest` attribution, persist Tahlia's pronoun-scoped pesto preference, reject `and 2 and 3` as food evidence, and correct fish and sausages through the real agent tools with one active owner and retained human sources.
+- A tool-only replay of `and 2 and 3` selects both meals, synthesises a non-empty acknowledgement from the resulting plan revisions, reports all slots filled, and leads directly to review and explicit confirmation. An empty engine completion without a verifiable mutation fails instead of persisting a blank assistant message.
+- The complete Composer gate passes 123 backend tests and 593 assertions at 88.6% application coverage. All 18 browser journeys pass with 124 assertions, including feedback, confirmation, plan management, household truth, markdown, messaging, planning, and responsive behaviour.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, SQLite fresh/rollback/reapply, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings.
+
+## M4 — Shopping lists and budgets
+
+Status: `[x]`
+
+- [x] Aggregate recipe requirements and normalise units.
+- [x] Implement structured `ShoppingListItem` records and list revisions.
+- [x] Support manual staples, pantry exclusions, include/exclude state, and annotations.
+- [x] Build a fast document-like shopping-list editor backed by structured rows.
+- [x] Implement retailers, retail products, product preferences, and product matches.
+- [x] Implement plan and household budget defaults and overrides.
+- [x] Store estimated and actual order totals as historical snapshots.
+- [x] Mark shopping lists stale and show diffs when a confirmed plan changes.
+
+Exit evidence:
+
+- A family can generate, edit, share, and complete a trustworthy list whose quantities remain traceable to meals or manual requests.
+
+First vertical slice:
+
+- Generate one team-scoped structured list from a confirmed plan and its exact recipe versions.
+- Scale and aggregate compatible recipe quantities while retaining source-meal traceability.
+- Open the Shopping workspace directly from the confirmed-plan handoff.
+- Support adding staples, inline quantity and note edits, pantry and include/exclude state, completion, and list regeneration.
+- Mark the list stale after a confirmed plan changes and explain the change before regeneration.
+- Prove cross-family isolation and the complete Plan-to-Shop journey in a browser without live AI or retailer calls.
+
+M4 completion evidence recorded 16 July 2026:
+
+- Confirmed plans generate one idempotent family-scoped list. Compatible quantities are scaled to planned servings, kilograms and litres are normalised to base units, and every generated row retains its recipe ingredient and planned-meal sources.
+- List revisions snapshot recipe, custom-meal, manual, staple, price, and product-match state after every meaningful mutation. Independent check-offs merge safely while conflicting document edits retain optimistic revision guards.
+- Custom meals remain unresolved rather than guessed until a household member records explicit ingredients. Those rows retain their planned-meal source, survive safe regeneration, and block completion while unresolved.
+- Coles and Woolworths catalogue records, retailer product packs, remembered brand/pack/substitution preferences, and per-item product matches remain separate from culinary ingredients. Saved preferences are returned to later matching surfaces.
+- Household default budgets and per-plan overrides produce an effective budget. Projected totals explicitly report unmatched items, and immutable order and order-line snapshots retain estimated and actual totals at the completed list revision.
+- Confirmed plan changes accumulate a structured stale diff from the source revision to the current revision. Stale lists are read-only and cannot be completed or matched until the household reviews and regenerates them.
+- Every M4 team-owned model has policy coverage and current-team route binding where applicable. A second family member can update the shared list, while action and HTTP regressions deny cross-family budget, match, order, list, item, and resolution access.
+- Nine focused M4 feature tests pass with 147 assertions. Three Shopping browser journeys pass with 20 assertions across the complete Plan-to-Shop-to-order path, explicit custom-meal resolution, and a 390 × 844 viewport. The post-audit complete suite passes 133 backend tests with 745 assertions at 86.7% application coverage and 21 browser journeys with 155 assertions.
+- Pint, PHPStan, TypeScript, ESLint, Prettier, the production Vite build, fresh/rollback/reapply SQLite migrations, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings.
+- The adversarial exit audit fixed nested-form submission, rapid check-off revision conflicts, reusable-action validation gaps, missing per-model policies, preference reuse, partial-total labelling, stale-diff typing, and catalogue-history mutation risks before M4 was closed.
+- The post-completion audit moved stale-list protection into locked domain actions, made conflicting document and meal-move revisions mandatory while preserving merge-safe check-offs, added portable uniqueness keys for household defaults and product preferences, and completed policy coverage for meal slots, list revisions, and item sources.
+
+## M5 — Cooking and feedback loop
 
 Status: `[ ]`
 
@@ -167,23 +236,6 @@ Exit evidence:
 
 - A cook can go from the Today screen to completing and rating a meal without reading the planning conversation.
 - The next recommendation can explain how prior feedback affected it.
-
-## M5 — Shopping lists and budgets
-
-Status: `[ ]`
-
-- [ ] Aggregate recipe requirements and normalise units.
-- [ ] Implement structured `ShoppingListItem` records and list revisions.
-- [ ] Support manual staples, pantry exclusions, include/exclude state, and annotations.
-- [ ] Build a fast document-like shopping-list editor backed by structured rows.
-- [ ] Implement retailers, retail products, product preferences, and product matches.
-- [ ] Implement plan and household budget defaults and overrides.
-- [ ] Store estimated and actual order totals as historical snapshots.
-- [ ] Mark shopping lists stale and show diffs when a confirmed plan changes.
-
-Exit evidence:
-
-- A family can generate, edit, share, and complete a trustworthy list whose quantities remain traceable to meals or manual requests.
 
 ## M6 — Coles computer-use handoff
 

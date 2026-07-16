@@ -43,6 +43,23 @@ Distinguish:
 - planned items from ordered products;
 - background activity from actions awaiting approval.
 
+### Feedback stays lightweight
+
+Assistant responses expose quiet thumbs-up/down controls after the response is
+complete. A reaction is saved immediately; optional reason tags and written
+context appear only after the person chooses to add detail. Do not interrupt a
+conversation with modal feedback requests.
+
+Ask for broader experience feedback only at meaningful boundaries such as
+planning confirmation, shopping review, and cooking completion. Checkpoint
+feedback is dismissible, does not block the next stage, and is not presented as
+an automatic change to Chef's memory or model.
+
+At a completed boundary, show the next-stage handoff before its optional
+feedback checkpoint. The handoff remains visible after refresh and provides one
+clear action into the next available surface; saving or skipping feedback must
+not be the action that advances the workflow.
+
 ### One product across input modes
 
 Typing, dictation, and native voice operate the same plan. Voice must not create a separate navigation model or hidden state.
@@ -136,6 +153,7 @@ Permission prompts appear only at the moment of use and explain the benefit, sco
 - Changes caused by conversation animate subtly in the inspector so the connection is legible.
 - Unresolved decisions are explicit and actionable.
 - A stale shopping list shows a compact change summary rather than a generic warning.
+- Filling the final slot reveals one calm review-and-confirm action and explains that shopping follows; do not leave the household to ask what happens next.
 
 Avoid gamified progress, excessive recommendation carousels, or a dense project-management board.
 
@@ -151,6 +169,11 @@ The list should feel as fast as a lightweight document while remaining structure
 - group by aisle, source meal, or status;
 - reveal product and substitution detail on demand;
 - keep estimated and actual totals visually distinct.
+
+These are progressive capabilities rather than permission to invent missing
+catalogue data. M4 shows source meals and state inline in a stable generated
+order. Aisle grouping, rejected-product history, and retailer-informed
+reordering wait until the retailer catalogue and reconciliation work in M6.
 
 Automation status should read like a calm activity log:
 

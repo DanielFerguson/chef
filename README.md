@@ -8,11 +8,13 @@ Chef is not intended to be another recipe catalogue with an AI chat box attached
 
 ## Status
 
-Milestone 2 and its M2.1 hardening gate are complete. The Laravel 13 web
-application under [`web/`](web/) now supports authenticated family tenancy, a
-durable conversational first plan, household people and attributed truth,
-reviewable meal proposals, direct plan controls, invitations, and responsive
-browser-tested workflows.
+Milestones 0 through 4 are complete. The Laravel 13 web application under
+[`web/`](web/) now supports authenticated family tenancy, a durable
+conversational first plan, household people and attributed truth, versioned
+recipes, complete arbitrary-span plans, direct plan controls, private testing
+feedback, and a responsive Plan-to-Shop workflow with traceable lists, custom
+meal resolution, retailer product preferences, budgets, stale diffs, and
+historical order snapshots. Cooking and feedback is the active next milestone.
 
 The intended stack is:
 
@@ -232,14 +234,14 @@ Chef should:
 - subtract confirmed pantry stock;
 - keep household staples alongside recipe-derived items;
 - distinguish an ingredient requirement from a retailer product;
-- remember preferred brands, pack sizes, acceptable substitutes, and rejected products;
+- remember preferred brands, pack sizes, and acceptable substitutes;
 - estimate the order and compare it with the weekly budget;
 - preserve actual order prices for historical reporting;
 - prepare an online trolley through a retailer integration or computer use.
 
 Computer use is a retailer adapter, not the source of truth. Chef owns the intended shopping list and records what was ultimately ordered. Browser automation may prepare a trolley, but checkout and payment always remain an explicit human action.
 
-**Supporting UI:** Shopping list grouped by aisle and meal, budget summary, product matches, substitutions, pantry exclusions, and order-review state.
+**Supporting UI:** A source-attributed shopping list, budget summary, product matches, substitution preferences, pantry exclusions, and order-review state. Retailer-backed aisle grouping and rejected-product history arrive with catalogue discovery and reconciliation in the retailer-handoff milestone.
 
 **Exit condition:** The shopping list is completed in store or reconciled with a reviewed retailer order.
 
@@ -515,8 +517,8 @@ The first useful slice should support one family team, multiple collaborating us
 1. **Foundation** — Laravel, Inertia, React, shadcn/ui, SQLite, authentication, tenancy, quality gates, and the application shell.
 2. **Conversational onboarding** — The first real meal plan, household people, explicit safety constraints, preferences, invitations, proposals, and an editable learning summary.
 3. **Recipes and complete planning** — Recipe versions, imports, richer meal occasions, calendar and list views, revisions, and explainable recommendations.
-4. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
-5. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
+4. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
+5. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
 6. **Retailer handoff** — Chrome extension, Responses API computer use, Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
 7. **Native voice** — Realtime WebRTC input and output over the same durable conversations and domain actions.
 8. **MCP** — Read tools first, then reviewed planning, shopping, and feedback writes for external hosts.
@@ -556,4 +558,5 @@ Supporting documents:
 - [Milestones to public version 1](docs/MILESTONES.md)
 - [Product and interface style](docs/STYLE.md)
 - [Brand identity and production assets](docs/BRAND.md)
+- [Commercial and marketing strategy](docs/COMMERCIAL-STRATEGY.md)
 - [Agent and contributor instructions](AGENTS.md)
