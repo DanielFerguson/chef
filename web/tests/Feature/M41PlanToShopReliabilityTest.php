@@ -28,6 +28,7 @@ use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
+use App\Enums\ShoppingListItemCategory;
 use App\Jobs\FinishPreparingShoppingListJob;
 use App\Jobs\MaterializePlannedMealRecipeJob;
 use App\Models\MealSlot;
@@ -492,6 +493,7 @@ it('updates the structured shopping list through the same durable conversation',
 
     expect($list->items()->where('normalized_name', 'milk')->sole()->quantity)->toBe(3.0)
         ->and($list->items()->where('normalized_name', 'milk')->sole()->source_kind->value)->toBe('staple')
+        ->and($list->items()->where('normalized_name', 'milk')->sole()->category)->toBe(ShoppingListItemCategory::DairyAndEggs)
         ->and($chicken->refresh()->in_pantry)->toBeTrue()
         ->and($workspace['plan']->budget->amount)->toBe(180.0)
         ->and($conversation->messages()->reorder()->where('role', 'user')->latest('id')->firstOrFail()->content)->toContain('three litres of milk')

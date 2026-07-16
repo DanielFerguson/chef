@@ -4,6 +4,7 @@ namespace App\Actions\Shopping;
 
 use App\Actions\MealPlans\RecordMealPlanMilestone;
 use App\Enums\MealPlanMilestoneKind;
+use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListItemSourceKind;
 use App\Enums\ShoppingListStatus;
 use App\Models\MealPlan;
@@ -123,11 +124,17 @@ class GenerateShoppingList
                 }
             }
 
+            $existingRecipeCategories = $shoppingList->items()
+                ->where('source_kind', ShoppingListItemSourceKind::Recipe)
+                ->get(['normalized_name', 'unit', 'category'])
+                ->mapWithKeys(fn ($item) => [
+                    $item->normalized_name.'|'.($item->unit ?? '') => $item->getRawOriginal('category'),
+                ]);
             $shoppingList->items()->where('source_kind', ShoppingListItemSourceKind::Recipe)->delete();
             ksort($requirements);
             $position = 1;
 
-            foreach ($requirements as $requirement) {
+            foreach ($requirements as $key => $requirement) {
                 $sources = $requirement['sources'];
                 unset($requirement['sources'], $requirement['quantity_known']);
                 $item = $shoppingList->items()->create([
@@ -135,6 +142,8 @@ class GenerateShoppingList
                     'team_id' => $mealPlan->team_id,
                     'created_by_user_id' => $user->id,
                     'source_kind' => ShoppingListItemSourceKind::Recipe,
+                    'category' => $existingRecipeCategories->get($key)
+                        ?? ShoppingListItemCategory::classify($requirement['name']),
                     'included' => true,
                     'position' => $position++,
                 ]);

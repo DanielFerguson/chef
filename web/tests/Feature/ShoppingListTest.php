@@ -20,6 +20,7 @@ use App\Actions\Teams\CreateTeamForUser;
 use App\Enums\MealSlotKind;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
+use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListStatus;
 use App\Models\PlannedMeal;
 use App\Models\Retailer;
@@ -78,6 +79,7 @@ it('generates an idempotent traceable list from scaled recipe requirements', fun
     $coriander = $list->items->firstWhere('normalized_name', 'coriander');
 
     expect($chicken->quantity)->toBe(1500.0)
+        ->and($chicken->category)->toBe(ShoppingListItemCategory::MeatAndSeafood)
         ->and($chicken->unit)->toBe('g')
         ->and($chicken->sources)->toHaveCount(2)
         ->and($chicken->sources->pluck('planned_meal_id')->sort()->values()->all())->toBe([
@@ -85,9 +87,63 @@ it('generates an idempotent traceable list from scaled recipe requirements', fun
             $workspace['secondMeal']->id,
         ])
         ->and($milk->quantity)->toBe(3000.0)
+        ->and($milk->category)->toBe(ShoppingListItemCategory::Pantry)
         ->and($milk->unit)->toBe('ml')
         ->and($coriander->quantity)->toBeNull()
+        ->and($coriander->category)->toBe(ShoppingListItemCategory::FruitAndVeg)
         ->and($coriander->optional)->toBeTrue();
+});
+
+it('persists automatic shopping categories and allows household corrections', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    $soap = app(AddShoppingListItem::class)->handle(
+        $list,
+        $workspace['user'],
+        'Hand soap',
+        1,
+        'refill',
+        null,
+        false,
+        1,
+    );
+
+    expect($soap->category)->toBe(ShoppingListItemCategory::Household);
+
+    app(UpdateShoppingListItem::class)->handle($soap, $workspace['user'], [
+        'category' => ShoppingListItemCategory::Other->value,
+    ], 2);
+    expect($soap->refresh()->category)->toBe(ShoppingListItemCategory::Other);
+
+    app(UpdateShoppingListItem::class)->handle($soap, $workspace['user'], [
+        'name' => 'SodaStream Pepsi mix',
+    ], 3);
+
+    $snapshotItem = collect($list->refresh()->revisions()->latest('revision')->firstOrFail()->snapshot['items'])
+        ->firstWhere('id', $soap->id);
+
+    expect($soap->refresh()->category)->toBe(ShoppingListItemCategory::Drinks)
+        ->and($snapshotItem['category'])->toBe(ShoppingListItemCategory::Drinks->value);
+
+    expect(fn () => app(UpdateShoppingListItem::class)->handle($soap, $workspace['user'], [
+        'category' => 'not_a_category',
+    ], 4))->toThrow(ValidationException::class, 'valid shopping category');
+
+    $chicken = $list->items()->where('normalized_name', 'chicken breast')->sole();
+    app(UpdateShoppingListItem::class)->handle($chicken, $workspace['user'], [
+        'category' => ShoppingListItemCategory::Other->value,
+    ], 4);
+    app(UpdatePlannedMeal::class)->handle(
+        $workspace['firstMeal'],
+        $workspace['user'],
+        4,
+        PlannedMealStatus::Planned,
+        'Use the corrected shopping aisle.',
+    );
+    app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+
+    expect($list->items()->where('normalized_name', 'chicken breast')->sole()->category)
+        ->toBe(ShoppingListItemCategory::Other);
 });
 
 it('combines equivalent singular and plural shopping units', function () {
@@ -510,6 +566,10 @@ it('serves a structured shopping workspace and generates through the http bounda
             ->where('workspace.plan.id', $workspace['plan']->id)
             ->where('workspace.shopping_list.revision', 1)
             ->has('workspace.shopping_list.items', 3)
+            ->where('workspace.shopping_list.items.0.category', 'meat_seafood')
+            ->has('workspace.shopping_categories', 9)
+            ->where('workspace.shopping_categories.0.value', 'fruit_veg')
+            ->where('workspace.shopping_categories.0.label', 'Fruit & Veg')
             ->where('workspace.shopping_list.items.0.sources.0.planned_meal.title', 'Satay chicken')
             ->has('workspace.missing_meals', 0)
             ->has('workspace.retailers', 2)

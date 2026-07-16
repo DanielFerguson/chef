@@ -3,6 +3,7 @@
 namespace App\Ai\Tools;
 
 use App\Actions\Shopping\UpdateShoppingListItem;
+use App\Enums\ShoppingListItemCategory;
 use App\Models\MealPlan;
 use App\Models\ShoppingListItem;
 use App\Models\User;
@@ -22,7 +23,7 @@ class UpdatePlanShoppingItem implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Update one prepared shopping-list item, including quantity, unit, note, pantry, inclusion, or checked state. Inspect the list first.';
+        return 'Update one prepared shopping-list item, including its grocery category, quantity, unit, note, pantry, inclusion, or checked state. Inspect the list first.';
     }
 
     public function handle(Request $request): Stringable|string
@@ -38,7 +39,7 @@ class UpdatePlanShoppingItem implements Tool
             ->findOrFail($request->integer('item_id'));
         $changes = [];
 
-        foreach (['name', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked'] as $field) {
+        foreach (['name', 'category', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked'] as $field) {
             if (! $request->has($field)) {
                 continue;
             }
@@ -74,6 +75,7 @@ class UpdatePlanShoppingItem implements Tool
         return [
             'item_id' => $schema->integer()->description('Exact item identifier from InspectPlanShoppingList.')->required(),
             'name' => $schema->string()->description('Corrected item name.'),
+            'category' => $schema->string()->enum(ShoppingListItemCategory::class)->description('Correct grocery category.'),
             'quantity' => $schema->number()->min(0)->description('Corrected quantity.'),
             'unit' => $schema->string()->description('Corrected unit.'),
             'note' => $schema->string()->description('Corrected note.'),

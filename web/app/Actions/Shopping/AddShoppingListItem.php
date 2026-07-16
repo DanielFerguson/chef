@@ -2,6 +2,7 @@
 
 namespace App\Actions\Shopping;
 
+use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListItemSourceKind;
 use App\Enums\ShoppingListStatus;
 use App\Models\ShoppingList;
@@ -31,6 +32,7 @@ class AddShoppingListItem
                 'team_id' => $shoppingList->team_id,
                 'created_by_user_id' => $user->id,
                 'source_kind' => $staple ? ShoppingListItemSourceKind::Staple : ShoppingListItemSourceKind::Manual,
+                'category' => ShoppingListItemCategory::classify($name),
                 'name' => Str::squish($name),
                 'normalized_name' => Str::of($name)->squish()->lower()->toString(),
                 'quantity' => $quantity,

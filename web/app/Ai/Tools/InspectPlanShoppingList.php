@@ -48,6 +48,7 @@ class InspectPlanShoppingList implements Tool
                 'items' => $mealPlan->shoppingList->items->map(fn (ShoppingListItem $item) => [
                     'id' => $item->id,
                     'name' => $item->name,
+                    'category' => $item->category->value,
                     'quantity' => $item->quantity,
                     'unit' => $item->unit,
                     'note' => $item->note,

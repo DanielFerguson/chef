@@ -2,6 +2,7 @@
 
 namespace App\Actions\Shopping;
 
+use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListStatus;
 use App\Models\ShoppingListItem;
 use App\Models\User;
@@ -38,6 +39,24 @@ class UpdateShoppingListItem
             if (isset($changes['name'])) {
                 $changes['name'] = Str::squish($changes['name']);
                 $changes['normalized_name'] = Str::of($changes['name'])->lower()->toString();
+
+                if (! array_key_exists('category', $changes)) {
+                    $changes['category'] = ShoppingListItemCategory::classify($changes['name']);
+                }
+            }
+
+            if (isset($changes['category'])) {
+                $category = $changes['category'] instanceof ShoppingListItemCategory
+                    ? $changes['category']
+                    : ShoppingListItemCategory::tryFrom((string) $changes['category']);
+
+                if ($category === null) {
+                    throw ValidationException::withMessages([
+                        'category' => 'Choose a valid shopping category.',
+                    ]);
+                }
+
+                $changes['category'] = $category;
             }
 
             if (array_key_exists('unit', $changes)) {

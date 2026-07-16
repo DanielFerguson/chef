@@ -4,6 +4,7 @@ namespace App\Actions\Shopping;
 
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
+use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListItemSourceKind;
 use App\Enums\ShoppingListStatus;
 use App\Models\PlannedMeal;
@@ -69,6 +70,7 @@ class ResolvePlannedMealIngredients
                     'team_id' => $shoppingList->team_id,
                     'created_by_user_id' => $user->id,
                     'source_kind' => ShoppingListItemSourceKind::PlannedMeal,
+                    'category' => ShoppingListItemCategory::classify($ingredient['name']),
                     'name' => $ingredient['name'],
                     'normalized_name' => Str::lower($ingredient['name']),
                     'quantity' => $ingredient['quantity'],

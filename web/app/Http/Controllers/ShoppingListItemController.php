@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Actions\Shopping\AddShoppingListItem;
 use App\Actions\Shopping\DeleteShoppingListItem;
 use App\Actions\Shopping\UpdateShoppingListItem;
+use App\Enums\ShoppingListItemCategory;
 use App\Models\ShoppingList;
 use App\Models\ShoppingListItem;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ShoppingListItemController extends Controller
 {
@@ -40,6 +42,7 @@ class ShoppingListItemController extends Controller
     {
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:160'],
+            'category' => ['sometimes', 'required', Rule::enum(ShoppingListItemCategory::class)],
             'quantity' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:999999'],
             'unit' => ['sometimes', 'nullable', 'string', 'max:40'],
             'note' => ['sometimes', 'nullable', 'string', 'max:1000'],

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\PlannedMealRecipePreparationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
+use App\Enums\ShoppingListItemCategory;
 use App\Models\Budget;
 use App\Models\MealPlan;
 use App\Models\Retailer;
@@ -101,6 +102,13 @@ class ShoppingListController extends Controller
                     'unresolved' => $missingMeals->count(),
                 ],
                 'conversation' => $mealPlan->conversations->firstOrFail(),
+                'shopping_categories' => collect(ShoppingListItemCategory::cases())
+                    ->sortBy(fn (ShoppingListItemCategory $category) => $category->position())
+                    ->map(fn (ShoppingListItemCategory $category) => [
+                        'value' => $category->value,
+                        'label' => $category->label(),
+                    ])
+                    ->values(),
                 'retailers' => Retailer::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'slug']),
                 'product_preferences' => $mealPlan->team->productPreferences()
                     ->with('retailer:id,name,slug')
