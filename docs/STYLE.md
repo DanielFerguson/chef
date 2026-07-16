@@ -193,9 +193,24 @@ The desktop rail becomes a drawer. The inspector becomes a full-height sheet. Co
 
 ## Visual language
 
+### Brand identity
+
+Chef uses the locked **Shared Table** identity: a paprika table between sage and
+oat chairs on a white canvas. The mark expresses the product's central promise—a
+household conversation becoming a shared, durable plan—without relying on chef
+hats, utensils, or decorative AI imagery.
+
+The production palette, typography, mark rules, asset inventory, and token
+mapping are defined in [`BRAND.md`](BRAND.md). That document is the source of
+truth for brand execution; this document remains the source of truth for product
+interaction and interface style.
+
 ### Colour
 
-Use a restrained neutral base with one warm culinary accent. Colour communicates state before decoration.
+Use white as the dominant canvas, quiet neutral grays for structure, and paprika
+as the primary culinary accent. Sage and oat support the identity sparingly.
+Colour communicates state before decoration. Avoid beige page washes: oat is an
+accent, not the application background.
 
 Initial semantic roles:
 

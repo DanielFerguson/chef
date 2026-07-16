@@ -552,4 +552,5 @@ Supporting documents:
 - [Implementation guide](docs/IMPLEMENTATION.md)
 - [Milestones to public version 1](docs/MILESTONES.md)
 - [Product and interface style](docs/STYLE.md)
+- [Brand identity and production assets](docs/BRAND.md)
 - [Agent and contributor instructions](AGENTS.md)

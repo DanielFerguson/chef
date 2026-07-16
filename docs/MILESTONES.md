@@ -53,6 +53,7 @@ Status: `[x]`
 - [x] Scaffold Laravel 13 with the React/Inertia starter kit.
 - [x] Configure TypeScript, Tailwind, shadcn/ui, Pest, formatting, and static analysis.
 - [x] Establish the Chef application shell and responsive navigation.
+- [x] Establish the Shared Table brand assets, typography, and design tokens.
 - [x] Implement authentication.
 - [x] Implement `Team`, `TeamMembership`, `TeamInvitation`, `Person`, and `UserPersonLink`.
 - [x] Implement active-team selection and team-scoped route bindings.

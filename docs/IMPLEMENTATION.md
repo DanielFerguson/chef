@@ -198,6 +198,15 @@ application with its own Composer and npm manifests. Do not create empty client
 directories. Future native and marketing surfaces consume Chef's reviewed
 interfaces; they do not become parallel sources of domain truth.
 
+### Brand assets and tokens
+
+The locked Shared Table identity is specified in `docs/BRAND.md`. Production SVG
+masters and installable-app icons live under `web/public/brand` and `web/public`,
+while active Tailwind/shadcn semantic tokens live in
+`web/resources/css/app.css`. Feature components should consume semantic token
+names instead of embedding palette hex values. Native and marketing clients
+translate the same named roles into their platform formats.
+
 Use action classes for meaningful domain mutations. HTTP controllers, AI tools, queued jobs, console commands, and MCP tools should call the same actions rather than duplicating business logic.
 
 ## Laravel AI SDK boundary

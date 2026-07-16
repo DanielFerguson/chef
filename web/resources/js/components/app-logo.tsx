@@ -6,8 +6,8 @@ export default function AppLogo() {
             <div className="flex aspect-square size-8 items-center justify-center rounded-lg border bg-white">
                 <AppLogoIcon className="size-6" />
             </div>
-            <div className="ml-1 grid flex-1 text-left text-sm">
-                <span className="font-editorial mb-0.5 truncate text-base leading-tight font-medium">
+            <div className="ml-1 flex h-8 min-w-0 flex-1 items-center text-left">
+                <span className="truncate font-editorial text-[1.0625rem] leading-none font-medium">
                     Chef
                 </span>
             </div>

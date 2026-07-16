@@ -1,9 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import {
-    CalendarDays,
-    MessagesSquare,
-    ShoppingBasket,
-} from 'lucide-react';
+import { CalendarDays, MessagesSquare, ShoppingBasket } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
 import { dashboard, login, register } from '@/routes';
@@ -37,7 +33,7 @@ export default function Welcome() {
                 <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
                     <Link
                         href="/"
-                        className="font-editorial flex items-center gap-2.5 text-lg font-medium"
+                        className="flex items-center gap-2.5 font-editorial text-lg font-medium"
                     >
                         <span className="flex size-8 items-center justify-center rounded-lg border bg-white">
                             <AppLogoIcon className="size-6" />
