@@ -126,20 +126,30 @@ M2.1 acceptance evidence recorded 16 July 2026:
 
 ## M3 — Recipes and complete planning workspace
 
-Status: `[ ]`
+Status: `[x]`
 
-- [ ] Implement recipes, versions, ingredients, steps, equipment, and preparation notices.
-- [ ] Support recipe creation and a minimal import workflow.
-- [ ] Support arbitrary date spans and breakfast, lunch, dinner, snack, and custom slots.
-- [ ] Support leftovers, eating out, takeaway, skipped meals, and open slots.
-- [ ] Build plan calendar and list views with drag-and-drop scheduling.
-- [ ] Add participant and serving overrides per slot.
-- [ ] Add plan milestones, revision tracking, and stale-derived-data detection.
-- [ ] Explain recommendations using current constraints, recency, cost, and effort.
+- [x] Implement recipes, versions, ingredients, steps, equipment, and preparation notices.
+- [x] Support recipe creation and a minimal import workflow.
+- [x] Support arbitrary date spans and breakfast, lunch, dinner, snack, and custom slots.
+- [x] Support leftovers, eating out, takeaway, skipped meals, and open slots.
+- [x] Build plan calendar and list views with drag-and-drop scheduling.
+- [x] Add participant and serving overrides per slot.
+- [x] Add plan milestones, revision tracking, and stale-derived-data detection.
+- [x] Explain recommendations using current constraints, recency, cost, and effort.
 
 Exit evidence:
 
 - A family can create and revise a complete one- or two-week plan without losing the recipe version or participant context attached to each slot.
+
+M3 acceptance evidence recorded 16 July 2026:
+
+- Recipes retain immutable versions with ingredient snapshots, ordered steps, equipment, preparation notices, servings, timings, and provenance; planned meals use a restrictive foreign key to the exact version selected.
+- Recipe creation, deterministic text import, recipe inspection, and replay-safe AI recipe creation all invoke the same authorised Laravel actions. Repeated tool calls do not duplicate recipes or plan revisions.
+- Conversation, calendar, and list views operate on the same structured plan. The calendar exposes drag scheduling, and every move also has a keyboard- and screen-reader-accessible select control.
+- A focused exit-evidence test creates and confirms 28 lunches and dinners across fourteen days, then revises the plan without changing any stored recipe version or per-person serving context.
+- Adversarial tests cover cross-family route binding and policies for every M3 tenant-owned root record, stale-write rollback, non-recipe relationship cleanup, version deletion protection, milestone staleness, and arbitrary meal states.
+- Four M3 browser journeys cover recipe import and reading, recipe selection and confirmation, rescheduling with version retention, and the complete planning workspace at 390 × 844. Together with M2, all nine browser journeys pass without JavaScript errors.
+- The final gate passes 104 backend tests and 454 assertions at 89.2% application coverage. Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, migration fresh/rollback/reapply, and both dependency audits pass; React Doctor reports 100/100 with no findings.
 
 ## M4 — Cooking and feedback loop
 

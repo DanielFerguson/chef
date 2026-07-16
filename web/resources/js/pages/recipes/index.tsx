@@ -11,8 +11,8 @@ const starterRecipe = {
     servings: 2,
     prep_minutes: 15,
     cook_minutes: 30,
-    ingredients: [{ name: '', quantity: '', unit: '' }],
-    steps: [{ instruction: '', timer_minutes: '' }],
+    ingredients: [{ id: 'ingredient-1', name: '', quantity: '', unit: '' }],
+    steps: [{ id: 'step-1', instruction: '', timer_minutes: '' }],
     equipment: [] as string[],
     notices: [] as {
         kind: string;
@@ -89,7 +89,7 @@ function CreateRecipeForm() {
                 <legend className="text-sm font-medium">Ingredients</legend>
                 {form.data.ingredients.map((ingredient, index) => (
                     <div
-                        key={index}
+                        key={ingredient.id}
                         className="grid grid-cols-[1fr_5rem_5rem] gap-2"
                     >
                         <Input
@@ -144,7 +144,12 @@ function CreateRecipeForm() {
                     onClick={() =>
                         form.setData('ingredients', [
                             ...form.data.ingredients,
-                            { name: '', quantity: '', unit: '' },
+                            {
+                                id: crypto.randomUUID(),
+                                name: '',
+                                quantity: '',
+                                unit: '',
+                            },
                         ])
                     }
                 >
@@ -155,7 +160,7 @@ function CreateRecipeForm() {
                 <legend className="text-sm font-medium">Steps</legend>
                 {form.data.steps.map((step, index) => (
                     <textarea
-                        key={index}
+                        key={step.id}
                         aria-label={`Step ${index + 1}`}
                         className="min-h-16 w-full rounded-md border bg-background px-3 py-2 text-sm"
                         placeholder={`${index + 1}. What happens next?`}
@@ -178,7 +183,11 @@ function CreateRecipeForm() {
                     onClick={() =>
                         form.setData('steps', [
                             ...form.data.steps,
-                            { instruction: '', timer_minutes: '' },
+                            {
+                                id: crypto.randomUUID(),
+                                instruction: '',
+                                timer_minutes: '',
+                            },
                         ])
                     }
                 >

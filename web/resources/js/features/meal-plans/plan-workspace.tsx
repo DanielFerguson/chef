@@ -6,7 +6,7 @@ import {
     GripVertical,
     UsersRound,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import PlannedMealMoveController from '@/actions/App/Http/Controllers/PlannedMealMoveController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -279,6 +279,16 @@ function OpenMealEditor({
     slot: MealSlot;
 }) {
     const [type, setType] = useState('recipe');
+    const sourceMeals = workspace.plan.slots.reduce<PlannedMeal[]>(
+        (meals, item) => {
+            if (item.planned_meal) {
+                meals.push(item.planned_meal);
+            }
+
+            return meals;
+        },
+        [],
+    );
     const form = useForm({
         type: 'recipe',
         recipe_version_id: (workspace.recipes[0]?.latest_version?.id ?? '') as
@@ -355,16 +365,11 @@ function OpenMealEditor({
                         }
                     >
                         <option value="">Choose the original meal</option>
-                        {workspace.plan.slots
-                            .filter((item) => item.planned_meal)
-                            .map((item) => (
-                                <option
-                                    key={item.planned_meal?.id}
-                                    value={item.planned_meal?.id}
-                                >
-                                    {item.planned_meal?.title}
-                                </option>
-                            ))}
+                        {sourceMeals.map((meal) => (
+                            <option key={meal.id} value={meal.id}>
+                                {meal.title}
+                            </option>
+                        ))}
                     </select>
                 ) : (
                     <Input
@@ -494,10 +499,7 @@ export function PlanWorkspace({
     const emptySlots = workspace.plan.slots.filter(
         (slot) => slot.planned_meal === null,
     );
-    const dates = useMemo(
-        () => planDates(workspace.plan.starts_on, workspace.plan.ends_on),
-        [workspace.plan.starts_on, workspace.plan.ends_on],
-    );
+    const dates = planDates(workspace.plan.starts_on, workspace.plan.ends_on);
 
     if (view === 'list') {
         return (

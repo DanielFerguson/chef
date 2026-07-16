@@ -98,9 +98,11 @@ Fine-grained custom roles are outside the first version unless real usage demons
 - `MealSlot` represents a dated meal occasion.
 - `MealSlotParticipant` records who is eating and optionally their serving requirement.
 - `PlannedMeal` records the selected recipe, servings, status, and notes.
+- `MealPlanRevision` records each meaningful structured change and supports optimistic revision checks.
+- `MealPlanMilestone` records progress without forcing plans through one rigid linear state.
 - A plan stores milestones such as planning confirmed, shopping list generated, shopping completed, cooking started, and review completed rather than relying on one rigid state enum.
 
-Changing a confirmed plan after its shopping list is generated must mark that list revision as stale and explain the difference.
+Changing a confirmed plan marks its derived data stale with a human-readable reason. M5 will attach that signal to concrete shopping-list revisions and diffs.
 
 ### Preferences and safety
 
@@ -122,11 +124,21 @@ supplying a boolean tool argument.
 
 ### Recipes
 
-Recipes are versioned. A `PlannedMeal` points to the exact `RecipeVersion` used when the meal was planned so later edits do not rewrite history.
+Recipes are versioned. A `PlannedMeal` points to the exact `RecipeVersion` used when the meal was planned so later edits do not rewrite history. A selected version cannot be deleted while a plan retains it.
+
+The implemented recipe records are:
+
+- `Recipe` for the family-owned identity and current display metadata;
+- `RecipeVersion` for an immutable cooking snapshot;
+- `Ingredient` for the family-normalised culinary concept;
+- `RecipeIngredient` for the versioned name, quantity, unit, preparation, optional state, and order;
+- `RecipeStep`, `RecipeEquipment`, and `RecipePreparationNotice` for ordered cooking detail.
+
+Direct forms, deterministic text import, and Chef tools all use `CreateRecipe`, `CreateRecipeVersion`, and `SelectPlannedMeal`. AI-created recipes carry a message-derived idempotency key so a replay cannot create duplicates. Recipe import does not fetch its source URL in M3; the URL is provenance only.
 
 Ingredients and retailer products remain separate:
 
-- `IngredientRequirement` expresses the culinary need;
+- `RecipeIngredient` expresses the versioned culinary need in M3; M5 may derive normalised shopping requirements from it;
 - `RetailProduct` expresses a retailer-specific product and pack;
 - `ProductMatch` records how a requirement was satisfied for a particular list or order.
 
