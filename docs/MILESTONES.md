@@ -91,6 +91,18 @@ Status: `[x]`
 - [x] Allow an invited second member to make an attributed plan change.
 - [x] Add deterministic agent fakes and an end-to-end browser test.
 
+### M2.1 — Adversarial hardening gate
+
+- [x] Create non-account household people through an authorised conversational tool and retain the source message.
+- [x] Link invitations to existing people without losing their household history.
+- [x] Retain user-authored message provenance for every conversational safety constraint.
+- [x] Make message turns, assistant replies, and retryable tool writes idempotent with database concurrency backstops.
+- [x] Guard proposal decisions with locked, one-way state transitions.
+- [x] Protect every M2 team-owned mutation with policies and active-team route binding.
+- [x] Refactor the planning workspace into focused typed feature components that reset across plan navigation.
+- [x] Cover retry, replay, failure, invitation, provenance, direct controls, navigation, and responsive behaviour.
+- [x] Run production browser journeys in CI and enforce a measured coverage floor.
+
 Exit evidence — first a-ha moment:
 
 > A new user can describe their family and next few days in natural language, receive a relevant plan, adjust it conversationally or visually, invite another person, and return later to the same durable workspace.
@@ -102,6 +114,15 @@ Acceptance evidence recorded 16 July 2026:
 - The planning workspace streams typed responses, exposes dated slots and selected meals, and keeps safety rules, stated preferences, working defaults, and labelled inferences separately editable.
 - Browser tests pass the first-plan tool-and-accept journey at desktop size and the durable workspace at 390 × 844, with no JavaScript errors.
 - ESLint, Prettier, TypeScript, PHPStan, Pint, and the production Vite build pass. React Doctor reports 100/100 with no issues.
+
+M2.1 acceptance evidence recorded 16 July 2026:
+
+- Conversational people, preferences, constraints, slots, and proposals retain their user-message source and are safe to replay; safety tools cannot assert their own confirmation.
+- Completed turns replay one durable assistant response, active turns reject duplicate claims, and failed turns retry without duplicating structured side effects.
+- Policy and route-binding tests cover every M2 mutation across family boundaries; proposal accept and reject transitions cannot be replayed or reversed.
+- Five browser journeys cover the first-plan a-ha moment, plan navigation without state leakage, person-linked invitation context, visible safety provenance, direct proposal controls, and a 390 × 844 layout.
+- CI runs backend coverage, frontend checks and production build, plus the real browser suite as independent required jobs.
+- The final M2.1 gate passes 88 tests and 344 assertions at 88.7% application coverage; every team-owned policy is covered, React Doctor reports 100/100 with no findings, and both dependency audits report zero known vulnerabilities.
 
 ## M3 — Recipes and complete planning workspace
 

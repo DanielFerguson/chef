@@ -8,9 +8,11 @@ Chef is not intended to be another recipe catalogue with an AI chat box attached
 
 ## Status
 
-Milestone 1 is complete. The Laravel 13 web application is scaffolded under
-[`web/`](web/) with authentication, the initial family-tenancy model, and the
-responsive Chef workspace shell.
+Milestone 2 and its M2.1 hardening gate are complete. The Laravel 13 web
+application under [`web/`](web/) now supports authenticated family tenancy, a
+durable conversational first plan, household people and attributed truth,
+reviewable meal proposals, direct plan controls, invitations, and responsive
+browser-tested workflows.
 
 The intended stack is:
 
@@ -21,7 +23,8 @@ The intended stack is:
 - Tailwind CSS
 - shadcn/ui
 - Pest
-- OpenAI Responses API for planning and computer-use agents
+- Laravel AI SDK with the OpenAI provider for ordinary planning agents
+- A Chef-owned OpenAI Responses API client for native computer-use agents
 - OpenAI Realtime API for native voice conversation
 - A permissioned Chef Chrome extension for local browser execution
 - An MCP server exposing Chef's household, planning, recipe, shopping, and feedback capabilities
@@ -509,15 +512,15 @@ The first useful slice should support one family team, multiple collaborating us
 
 ## Proposed delivery sequence
 
-1. **Foundation** — Scaffold Laravel, Inertia, React, shadcn/ui, SQLite, authentication, quality gates, and the application shell.
-2. **Conversational onboarding** — The first real meal plan, household members, safety constraints, preferences, shopping defaults, and an editable learning summary.
-3. **Recipes and planning** — Recipe versions, arbitrary meal plans, meal slots, the conversational workspace, and the planner inspector.
-4. **OpenAI-native conversation** — Responses API tool orchestration, streamed typed interaction, Realtime voice, and durable conversation events.
-5. **Cooking mode** — Tonight view, preparation notices, steps, and meal outcomes.
-6. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
-7. **Retailer handoff** — Chrome extension, automation gateway, Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
+1. **Foundation** — Laravel, Inertia, React, shadcn/ui, SQLite, authentication, tenancy, quality gates, and the application shell.
+2. **Conversational onboarding** — The first real meal plan, household people, explicit safety constraints, preferences, invitations, proposals, and an editable learning summary.
+3. **Recipes and complete planning** — Recipe versions, imports, richer meal occasions, calendar and list views, revisions, and explainable recommendations.
+4. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
+5. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
+6. **Retailer handoff** — Chrome extension, Responses API computer use, Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
+7. **Native voice** — Realtime WebRTC input and output over the same durable conversations and domain actions.
 8. **MCP** — Read tools first, then reviewed planning, shopping, and feedback writes for external hosts.
-9. **Recommendation loop** — Explainable suggestions informed by recency, feedback, cost, effort, waste, and individual preferences.
+9. **Public launch** — Operational, privacy, accessibility, security, recovery, and support gates for version 1.
 
 ## Product questions to resolve during discovery
 

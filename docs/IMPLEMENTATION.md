@@ -4,12 +4,19 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestone 2 is complete. The Laravel 13 React/Inertia application in `web/`
+Milestone 2 and its M2.1 hardening gate are complete. The Laravel 13
+React/Inertia application in `web/`
 now provides the first end-to-end Chef slice: authenticated family tenancy,
 durable arbitrary-span plans and conversations, streamed Laravel AI SDK
 responses, authorised planning tools, reviewable meal proposals, an editable
 provenance-aware household inspector, invitations, and responsive browser
 coverage without live OpenAI calls in the test suite.
+
+M2.1 makes this slice safe to extend: user-authored messages are the durable
+source for conversational people, preferences, and safety constraints;
+invitations can link an account to an existing `Person`; model tool writes and
+conversation turns have database-backed idempotency; proposal decisions use
+guarded one-way transitions; and every team-owned mutation is policy protected.
 
 The next implementation target is the complete planning workspace in milestone
 3: versioned recipes and imports, richer meal occasions and outcomes, calendar
@@ -106,7 +113,12 @@ Preferences belong to people unless explicitly team-wide. Store:
 - confidence for inferred preferences;
 - optional context such as breakfast-only or preparation method.
 
-Allergies and other safety constraints are never inferred. They require an explicit user-authored statement and remain visibly distinct from dislikes.
+Allergies and other safety constraints are never inferred. They require an
+explicit user-authored statement and remain visibly distinct from dislikes.
+Conversational constraints retain a `confirmation_message_id`, and the
+inspector shows that human-verifiable source. Direct structured edits record an
+equivalent explicit confirmation event; an agent cannot self-certify safety by
+supplying a boolean tool argument.
 
 ### Recipes
 
@@ -127,6 +139,12 @@ Freeze a shopping-list revision before starting retailer automation. Record actu
 ### Conversations
 
 Chef owns `Conversation` and `Message`. A conversation normally belongs to a `MealPlan`, but onboarding may create both together.
+
+User turns are keyed by `(conversation_id, client_message_id)`. A turn records
+pending, processing, completed, or failed response state, and its assistant
+message points back through a unique `in_reply_to_message_id`. Replaying a
+completed client turn returns the durable response; a stale or failed turn may
+be retried; an active turn cannot be claimed twice.
 
 Messages may reference structured artifacts such as:
 
@@ -225,6 +243,7 @@ The milestone 2 agent tools are deliberately narrow:
 
 - `InspectTeamContext`
 - `InspectMealPlan`
+- `CreateHouseholdPerson`
 - `UpdatePlanDateSpan`
 - `CreatePlanMealSlot`
 - `CreateMealProposal`
@@ -245,9 +264,19 @@ Wrap the SDK behind a Chef-owned boundary so the pre-1.0 dependency can evolve:
 ```php
 interface ChefConversationEngine
 {
-    public function respond(Conversation $conversation, string $message): mixed;
+    public function respondTo(Conversation $conversation, Message $message): AssistantReply;
+
+    /** @return iterable<AssistantStreamChunk> */
+    public function streamResponse(Conversation $conversation, Message $message): iterable;
 }
 ```
+
+Retryable tool writes derive a stable database-unique idempotency key from the
+current user message and the semantic operation. This covers meal slots, meal
+proposals, preferences, and constraints. Person creation uses a unique
+message-and-name identity, while moves and date updates are naturally
+idempotent. Application lookups remain useful for fast replay, but uniqueness
+constraints are the concurrency backstop.
 
 ## Voice boundary
 
