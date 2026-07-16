@@ -45,4 +45,28 @@ class Team extends Model
     {
         return $this->hasMany(TeamInvitation::class);
     }
+
+    /** @return HasMany<MealPlan, $this> */
+    public function mealPlans(): HasMany
+    {
+        return $this->hasMany(MealPlan::class);
+    }
+
+    /** @return HasMany<Conversation, $this> */
+    public function conversations(): HasMany
+    {
+        return $this->hasMany(Conversation::class);
+    }
+
+    /** @return HasMany<Preference, $this> */
+    public function preferences(): HasMany
+    {
+        return $this->hasMany(Preference::class);
+    }
+
+    /** @return HasMany<Constraint, $this> */
+    public function constraints(): HasMany
+    {
+        return $this->hasMany(Constraint::class);
+    }
 }

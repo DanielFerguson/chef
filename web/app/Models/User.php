@@ -65,6 +65,18 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(UserPersonLink::class);
     }
 
+    /** @return HasMany<MealPlan, $this> */
+    public function createdMealPlans(): HasMany
+    {
+        return $this->hasMany(MealPlan::class, 'created_by_user_id');
+    }
+
+    /** @return HasMany<Message, $this> */
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
     /**
      * Get the attributes that should be cast.
      *

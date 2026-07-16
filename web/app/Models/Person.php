@@ -8,12 +8,17 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 
 /**
  * @property int $id
  * @property int $team_id
  * @property string $name
+ * @property-read Collection<int, Preference> $preferences
+ * @property-read Collection<int, Constraint> $constraints
  */
 #[Fillable(['team_id', 'name'])]
 class Person extends Model
@@ -31,6 +36,26 @@ class Person extends Model
     public function userLink(): HasOne
     {
         return $this->hasOne(UserPersonLink::class);
+    }
+
+    /** @return BelongsToMany<MealSlot, $this> */
+    public function mealSlots(): BelongsToMany
+    {
+        return $this->belongsToMany(MealSlot::class, 'meal_slot_participants')
+            ->withPivot('servings')
+            ->withTimestamps();
+    }
+
+    /** @return HasMany<Preference, $this> */
+    public function preferences(): HasMany
+    {
+        return $this->hasMany(Preference::class);
+    }
+
+    /** @return HasMany<Constraint, $this> */
+    public function constraints(): HasMany
+    {
+        return $this->hasMany(Constraint::class);
     }
 
     /**

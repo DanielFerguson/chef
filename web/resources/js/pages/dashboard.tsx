@@ -1,14 +1,7 @@
-import { Head, usePage } from '@inertiajs/react';
-import {
-    ArrowUp,
-    CalendarDays,
-    Mic,
-    Paperclip,
-    Plus,
-    UsersRound,
-} from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { CalendarDays, Plus, UsersRound } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -49,9 +42,9 @@ export default function Dashboard({ household }: { household: Household }) {
                                 Welcome to Chef, {auth.user.name.split(' ')[0]}
                             </h1>
                             <p className="mt-3 max-w-lg text-sm leading-6 text-pretty text-muted-foreground sm:text-base">
-                                This is where a conversation will become your
-                                family’s weekly plan. The planning agent arrives
-                                in the next milestone.
+                                Start with an ordinary conversation. Chef will
+                                turn the people, dates, preferences, and meals
+                                you describe into a shared plan you can edit.
                             </p>
                             <div className="mt-8 grid w-full max-w-lg gap-3 text-left sm:grid-cols-2">
                                 <div className="rounded-xl border bg-card p-4">
@@ -77,39 +70,20 @@ export default function Dashboard({ household }: { household: Household }) {
                             </div>
                         </div>
 
-                        <div className="rounded-2xl border bg-card p-3 shadow-sm">
-                            <textarea
-                                disabled
-                                aria-label="Message Chef"
-                                placeholder="Tell Chef what the week looks like…"
-                                className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-                            />
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        disabled
-                                    >
-                                        <Paperclip />
-                                        <span className="sr-only">Attach</span>
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        disabled
-                                    >
-                                        <Mic />
-                                        <span className="sr-only">
-                                            Use voice
-                                        </span>
-                                    </Button>
-                                </div>
-                                <Button size="icon" disabled>
-                                    <ArrowUp />
-                                    <span className="sr-only">Send</span>
-                                </Button>
-                            </div>
+                        <div className="flex items-center justify-between gap-4 rounded-2xl border bg-card p-4 shadow-sm">
+                            <p className="text-sm text-muted-foreground">
+                                Chef will begin with the next seven days. You
+                                can change the date span in the conversation.
+                            </p>
+                            <Button asChild className="shrink-0">
+                                <Link
+                                    href="/meal-plans"
+                                    method="post"
+                                    as="button"
+                                >
+                                    <Plus /> Start a plan
+                                </Link>
+                            </Button>
                         </div>
                     </div>
                 </main>

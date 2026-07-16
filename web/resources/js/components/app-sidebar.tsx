@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     CalendarDays,
     CirclePlus,
@@ -32,6 +32,8 @@ const mainNavItems: NavItem[] = [
 ];
 
 export function AppSidebar() {
+    const { recentMealPlans } = usePage().props;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -51,12 +53,18 @@ export function AppSidebar() {
                     <SidebarMenu>
                         <SidebarMenuItem>
                             <SidebarMenuButton
-                                disabled
-                                tooltip="Available with conversational planning"
+                                asChild
+                                tooltip="Start a new meal plan"
                                 className="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground disabled:opacity-70"
                             >
-                                <CirclePlus />
-                                <span>New meal plan</span>
+                                <Link
+                                    href="/meal-plans"
+                                    method="post"
+                                    as="button"
+                                >
+                                    <CirclePlus />
+                                    <span>New meal plan</span>
+                                </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     </SidebarMenu>
@@ -89,9 +97,26 @@ export function AppSidebar() {
                         <Utensils className="size-3.5" />
                         Plans
                     </div>
-                    <p className="text-xs leading-5 text-muted-foreground/80">
-                        Your meal plans will live here.
-                    </p>
+                    {recentMealPlans.length === 0 ? (
+                        <p className="text-xs leading-5 text-muted-foreground/80">
+                            Your meal plans will live here.
+                        </p>
+                    ) : (
+                        <nav
+                            className="space-y-0.5"
+                            aria-label="Recent meal plans"
+                        >
+                            {recentMealPlans.map((plan) => (
+                                <Link
+                                    key={plan.id}
+                                    href={`/meal-plans/${plan.id}`}
+                                    className="block truncate rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent"
+                                >
+                                    {plan.title}
+                                </Link>
+                            ))}
+                        </nav>
+                    )}
                 </div>
             </SidebarContent>
 

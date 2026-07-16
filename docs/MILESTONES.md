@@ -76,23 +76,31 @@ Acceptance evidence recorded 16 July 2026:
 
 ## M2 — First-plan conversational onboarding
 
-Status: `[ ]`
+Status: `[x]`
 
-- [ ] Implement `MealPlan`, `MealSlot`, participant, conversation, message, preference, and constraint models.
-- [ ] Install and wrap the Laravel AI SDK behind `ChefConversationEngine`.
-- [ ] Implement the initial `ChefAgent` and read/write domain tools.
-- [ ] Stream typed assistant responses into the conversation.
-- [ ] Build conversational onboarding without a separate wizard.
-- [ ] Build the live plan and household inspector.
-- [ ] Support structured meal proposals and direct accept, reject, replace, and move actions.
-- [ ] Show an editable summary separating safety rules, stated preferences, defaults, and inferences.
-- [ ] Persist and resume the first plan and conversation.
-- [ ] Allow an invited second member to make an attributed plan change.
-- [ ] Add deterministic agent fakes and an end-to-end browser test.
+- [x] Implement `MealPlan`, `MealSlot`, participant, conversation, message, preference, and constraint models.
+- [x] Install and wrap the Laravel AI SDK behind `ChefConversationEngine`.
+- [x] Implement the initial `ChefAgent` and read/write domain tools.
+- [x] Stream typed assistant responses into the conversation.
+- [x] Build conversational onboarding without a separate wizard.
+- [x] Build the live plan and household inspector.
+- [x] Support structured meal proposals and direct accept, reject, replace, and move actions.
+- [x] Show an editable summary separating safety rules, stated preferences, defaults, and inferences.
+- [x] Persist and resume the first plan and conversation.
+- [x] Allow an invited second member to make an attributed plan change.
+- [x] Add deterministic agent fakes and an end-to-end browser test.
 
 Exit evidence — first a-ha moment:
 
 > A new user can describe their family and next few days in natural language, receive a relevant plan, adjust it conversationally or visually, invite another person, and return later to the same durable workspace.
+
+Acceptance evidence recorded 16 July 2026:
+
+- The complete Composer gate passes 61 tests and 237 assertions, including family-scoped route binding, durable conversation resumption, invitation acceptance, attributed second-member changes, and proposal accept, reject, replace, and move actions.
+- A deterministic Laravel AI SDK tool-call loop turns a typed request into a message-linked meal proposal without a live OpenAI request; the proposal remains reviewable until a person accepts it.
+- The planning workspace streams typed responses, exposes dated slots and selected meals, and keeps safety rules, stated preferences, working defaults, and labelled inferences separately editable.
+- Browser tests pass the first-plan tool-and-accept journey at desktop size and the durable workspace at 390 × 844, with no JavaScript errors.
+- ESLint, Prettier, TypeScript, PHPStan, Pint, and the production Vite build pass. React Doctor reports 100/100 with no issues.
 
 ## M3 — Recipes and complete planning workspace
 

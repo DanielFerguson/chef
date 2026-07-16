@@ -2,10 +2,21 @@
 @import '@fontsource/source-sans-3/500.css';
 @import '@fontsource/source-sans-3/600.css';
 @import '@fontsource/newsreader/500.css';
+@import '@fontsource-variable/geist';
 
 @import 'tailwindcss';
+@import './typeset.css';
 
 @import 'tw-animate-css';
+
+.typeset-docs {
+    --typeset-font-body: var(--font-geist);
+    --typeset-font-heading: var(--font-geist);
+    --typeset-font-mono: var(--font-geist);
+    --typeset-size: 15px;
+    --typeset-leading: 1.75;
+    --typeset-flow: 1.25em;
+}
 
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -73,6 +84,8 @@
 }
 
 :root {
+    --font-geist: 'Geist Variable', sans-serif;
+
     --brand-ink: #24231f;
     --brand-paprika: #c94f32;
     --brand-sage: #6f806a;

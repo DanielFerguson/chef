@@ -47,6 +47,13 @@ class HandleInertiaRequests extends Middleware
                     ->orderBy('name')
                     ->get(['teams.id', 'teams.name']) ?? [],
             ],
+            'recentMealPlans' => fn () => $user?->currentTeam?->mealPlans()
+                ->latest('updated_at')
+                ->limit(8)
+                ->get(['id', 'title', 'starts_on', 'ends_on']) ?? [],
+            'flash' => [
+                'invitationUrl' => fn () => $request->session()->get('invitation_url'),
+            ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

@@ -4,11 +4,17 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestone 1 is complete. The Laravel 13 React/Inertia application lives in
-`web/` with authentication, family tenancy, local fixtures, the initial Chef
-workspace shell, and CI quality gates.
+Milestone 2 is complete. The Laravel 13 React/Inertia application in `web/`
+now provides the first end-to-end Chef slice: authenticated family tenancy,
+durable arbitrary-span plans and conversations, streamed Laravel AI SDK
+responses, authorised planning tools, reviewable meal proposals, an editable
+provenance-aware household inspector, invitations, and responsive browser
+coverage without live OpenAI calls in the test suite.
 
-The first implementation target is a thin, end-to-end vertical slice in which a new household signs up, creates its family team through conversation, answers only the questions needed for safe recommendations, receives a useful first meal plan, edits it in the supporting UI, and returns to it later.
+The next implementation target is the complete planning workspace in milestone
+3: versioned recipes and imports, richer meal occasions and outcomes, calendar
+and list views, serving overrides, revision tracking, and explainable
+recommendations.
 
 ## Technical stack
 
@@ -206,18 +212,20 @@ Use the Laravel AI SDK for Chef's normal server-side agent experience:
 - queued agent work;
 - agent middleware, events, observability, and tests.
 
-Initial agent tools should be narrow:
+The milestone 2 agent tools are deliberately narrow:
 
 - `InspectTeamContext`
 - `InspectMealPlan`
-- `SearchRecipes`
-- `SuggestMeals`
-- `ScheduleMeal`
-- `MoveMeal`
-- `RemoveMeal`
-- `GenerateShoppingList`
-- `RecordPreference`
-- `StartCartPreparation`
+- `UpdatePlanDateSpan`
+- `CreatePlanMealSlot`
+- `CreateMealProposal`
+- `MoveSelectedMeal`
+- `RecordHouseholdPreference`
+- `RecordSafetyConstraint`
+
+Recipe search, meal removal, shopping-list generation, and cart preparation are
+added by their owning milestones rather than exposed before the underlying
+domain actions exist.
 
 Each tool delegates to an authorised domain action and returns stable identifiers plus concise structured results.
 
