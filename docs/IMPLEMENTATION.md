@@ -170,7 +170,11 @@ M4 uses one `ShoppingList` per confirmed `MealPlan`.
 behind every generated quantity, while `ShoppingListRevision` stores a durable
 snapshot after each mutation. Compatible units are normalised before
 aggregation and quantities are scaled from recipe servings to planned
-servings. Manual and staple rows have no invented recipe source. Under M4.1,
+servings. Every item also retains a grocery category. Chef assigns the category
+deterministically for generated and manual rows, the household can correct it,
+category changes remain part of the list revision history, and regeneration
+preserves corrections for matching recipe requirements. Manual and staple rows
+have no invented recipe source. Under M4.1,
 ordinary cookable meals selected from Chef proposals or named by the household
 must be materialised as versioned recipes before Plan review finishes. Explicit
 takeaway, eating-out, open, and linked-leftover states remain non-recipe meals.

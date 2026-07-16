@@ -174,7 +174,10 @@ ingredient entry is a recovery path, not the default experience.
 - drag to reorder where meaningful;
 - tick to complete;
 - annotate inline;
-- group by aisle, source meal, or status;
+- default to calm grocery-aisle sections such as Fruit & Veg, Meat & Seafood,
+  Dairy & Eggs, Bakery, Pantry, Frozen, Drinks, and Household; let the household
+  correct a misplaced item from its context menu;
+- allow alternate grouping by source meal or status when it becomes useful;
 - reveal product and substitution detail on demand;
 - keep estimated and actual totals visually distinct.
 

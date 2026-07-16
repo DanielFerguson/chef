@@ -264,6 +264,14 @@ M4.1 acceptance evidence recorded 16 July 2026:
 - The final Composer gate passes 145 backend tests and 826 assertions at 86.1% application coverage. All 21 browser journeys pass with 166 assertions, including the natural-language Plan-to-Shop flow and 390 × 844 Shopping coverage.
 - Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, SQLite fresh/rollback/reapply, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings, and the live desktop/narrow inspection reports no browser warnings or errors.
 
+Shopping grouping follow-up evidence recorded 16 July 2026:
+
+- Shopping items now retain one editable grocery category in structured state and revision snapshots. Generated recipe requirements, legacy rows, manual extras, recovery ingredients, HTTP edits, and Chef shopping tools all use the same category contract; regeneration preserves household corrections for matching requirements.
+- The Shopping workspace renders category sections in a stable grocery order and exposes a `Move to` correction inside each item's existing context menu. Category labels and ordering come from the Laravel enum rather than a second client-side source of truth.
+- The existing local meal plan 1 was migrated without regeneration or row loss: all 33 items were backfilled across six populated sections. Rollback and reapply retained all 33 rows and reproduced the same categorisation.
+- The complete Composer gate passes 156 backend tests and 855 assertions at 86.6% application coverage. All 21 browser journeys pass with 171 assertions, including grouped Shopping coverage at desktop and 390 × 844.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, npm audit, Composer audit, and the category migration rollback/reapply pass. React Doctor reports 100/100 with no findings.
+
 ## M5 — Cooking and feedback loop
 
 Status: `[ ]`
