@@ -381,6 +381,7 @@ function OpenMealEditor({
                     />
                 )}
                 <Button
+                    data-testid={`select-meal-${slot.id}`}
                     size="sm"
                     disabled={
                         form.processing ||
@@ -410,6 +411,8 @@ function SlotCard({
 
     return (
         <article
+            data-testid={`meal-slot-${slot.id}`}
+            data-open={slot.planned_meal ? 'false' : 'true'}
             draggable={Boolean(slot.planned_meal)}
             onDragStart={(event) => {
                 if (slot.planned_meal) {
