@@ -2,14 +2,18 @@
 
 namespace App\Actions\Planning;
 
+use App\Actions\MealPlans\RecordMealPlanRevision;
 use App\Models\MealSlot;
 use App\Models\PlannedMeal;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class MovePlannedMeal
 {
+    public function __construct(private readonly RecordMealPlanRevision $recordRevision) {}
+
     public function handle(PlannedMeal $plannedMeal, MealSlot $target, User $user): PlannedMeal
     {
         if (! $user->memberships()->where('team_id', $plannedMeal->team_id)->exists()
@@ -26,7 +30,15 @@ class MovePlannedMeal
             throw ValidationException::withMessages(['meal_slot_id' => 'Replace the existing meal before moving into this slot.']);
         }
 
-        $plannedMeal->update(['meal_slot_id' => $target->id]);
+        DB::transaction(function () use ($plannedMeal, $target, $user): void {
+            $fromSlotId = $plannedMeal->meal_slot_id;
+            $plannedMeal->update(['meal_slot_id' => $target->id]);
+            $this->recordRevision->handle($plannedMeal->mealPlan, $user, 'Moved '.$plannedMeal->title.' to '.$target->date->toDateString().'.', [
+                'planned_meal_id' => $plannedMeal->id,
+                'from_meal_slot_id' => $fromSlotId,
+                'to_meal_slot_id' => $target->id,
+            ]);
+        });
 
         return $plannedMeal;
     }

@@ -2,6 +2,7 @@
 
 namespace App\Actions\Planning;
 
+use App\Actions\MealPlans\RecordMealPlanRevision;
 use App\Enums\MealProposalStatus;
 use App\Models\MealProposal;
 use App\Models\PlannedMeal;
@@ -12,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class AcceptMealProposal
 {
+    public function __construct(private readonly RecordMealPlanRevision $recordRevision) {}
+
     public function handle(MealProposal $proposal, User $user): PlannedMeal
     {
         if (! $user->memberships()->where('team_id', $proposal->team_id)->exists()) {
@@ -65,6 +68,12 @@ class AcceptMealProposal
                 'status' => MealProposalStatus::Accepted,
                 'decided_by_user_id' => $user->id,
                 'decided_at' => now(),
+            ]);
+
+            $this->recordRevision->handle($proposal->mealPlan, $user, 'Selected '.$proposal->title.'.', [
+                'meal_slot_id' => $proposal->meal_slot_id,
+                'planned_meal_id' => $plannedMeal->id,
+                'meal_proposal_id' => $proposal->id,
             ]);
 
             return $plannedMeal;

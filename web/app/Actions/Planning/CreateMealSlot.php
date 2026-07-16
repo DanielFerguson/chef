@@ -2,6 +2,7 @@
 
 namespace App\Actions\Planning;
 
+use App\Actions\MealPlans\RecordMealPlanRevision;
 use App\Enums\MealSlotKind;
 use App\Models\MealPlan;
 use App\Models\MealSlot;
@@ -15,6 +16,8 @@ use Illuminate\Validation\ValidationException;
 
 class CreateMealSlot
 {
+    public function __construct(private readonly RecordMealPlanRevision $recordRevision) {}
+
     /** @param iterable<Person> $participants */
     public function handle(
         MealPlan $mealPlan,
@@ -46,7 +49,7 @@ class CreateMealSlot
             throw new AuthorizationException('That message does not belong to this meal plan.');
         }
 
-        return DB::transaction(function () use ($mealPlan, $date, $kind, $label, $people, $sourceMessage): MealSlot {
+        return DB::transaction(function () use ($mealPlan, $user, $date, $kind, $label, $people, $sourceMessage): MealSlot {
             MealPlan::query()->whereKey($mealPlan)->lockForUpdate()->firstOrFail();
 
             $idempotencyKey = $sourceMessage === null ? null : hash('sha256', implode('|', [
@@ -83,6 +86,12 @@ class CreateMealSlot
             $slot->participants()->sync($people->mapWithKeys(fn (Person $person) => [
                 $person->id => ['servings' => 1],
             ])->all());
+
+            $this->recordRevision->handle($mealPlan, $user, 'Added '.$kind->value.' on '.$date->toDateString().'.', [
+                'meal_slot_id' => $slot->id,
+                'date' => $date->toDateString(),
+                'kind' => $kind->value,
+            ]);
 
             return $slot->load('participants');
         });

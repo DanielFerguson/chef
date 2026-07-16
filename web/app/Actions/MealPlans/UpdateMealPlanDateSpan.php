@@ -6,10 +6,13 @@ use App\Models\MealPlan;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class UpdateMealPlanDateSpan
 {
+    public function __construct(private readonly RecordMealPlanRevision $recordRevision) {}
+
     public function handle(MealPlan $mealPlan, User $user, CarbonInterface $startsOn, CarbonInterface $endsOn): MealPlan
     {
         if (! $user->can('update', $mealPlan)) {
@@ -26,7 +29,13 @@ class UpdateMealPlanDateSpan
             throw ValidationException::withMessages(['date_span' => 'Move or remove meals outside the new date span first.']);
         }
 
-        $mealPlan->update(['starts_on' => $startsOn, 'ends_on' => $endsOn]);
+        DB::transaction(function () use ($mealPlan, $user, $startsOn, $endsOn): void {
+            $mealPlan->update(['starts_on' => $startsOn, 'ends_on' => $endsOn]);
+            $this->recordRevision->handle($mealPlan, $user, 'Changed the plan date range.', [
+                'starts_on' => $startsOn->toDateString(),
+                'ends_on' => $endsOn->toDateString(),
+            ]);
+        });
 
         return $mealPlan;
     }

@@ -52,6 +52,12 @@ class Team extends Model
         return $this->hasMany(MealPlan::class);
     }
 
+    /** @return HasMany<Recipe, $this> */
+    public function recipes(): HasMany
+    {
+        return $this->hasMany(Recipe::class);
+    }
+
     /** @return HasMany<Conversation, $this> */
     public function conversations(): HasMany
     {

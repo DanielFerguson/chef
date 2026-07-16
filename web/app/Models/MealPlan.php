@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $ends_on
  * @property Carbon|null $planning_confirmed_at
  */
-#[Fillable(['team_id', 'created_by_user_id', 'title', 'starts_on', 'ends_on', 'planning_confirmed_at'])]
+#[Fillable(['team_id', 'created_by_user_id', 'title', 'starts_on', 'ends_on', 'revision', 'planning_confirmed_at', 'derived_data_stale_at', 'derived_data_stale_reason'])]
 class MealPlan extends Model
 {
     /** @use HasFactory<MealPlanFactory> */
@@ -64,6 +64,18 @@ class MealPlan extends Model
         return $this->hasMany(PlannedMeal::class);
     }
 
+    /** @return HasMany<MealPlanRevision, $this> */
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(MealPlanRevision::class)->orderByDesc('revision');
+    }
+
+    /** @return HasMany<MealPlanMilestone, $this> */
+    public function milestones(): HasMany
+    {
+        return $this->hasMany(MealPlanMilestone::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -71,6 +83,7 @@ class MealPlan extends Model
             'starts_on' => 'date:Y-m-d',
             'ends_on' => 'date:Y-m-d',
             'planning_confirmed_at' => 'datetime',
+            'derived_data_stale_at' => 'datetime',
         ];
     }
 }

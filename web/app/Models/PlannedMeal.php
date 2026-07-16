@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\PlannedMealStatus;
+use App\Enums\PlannedMealType;
 use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $estimated_minutes
  * @property float|null $estimated_cost
  */
-#[Fillable(['team_id', 'meal_plan_id', 'meal_slot_id', 'meal_proposal_id', 'selected_by_user_id', 'title', 'summary', 'estimated_minutes', 'estimated_cost'])]
+#[Fillable(['team_id', 'meal_plan_id', 'meal_slot_id', 'meal_proposal_id', 'recipe_version_id', 'source_planned_meal_id', 'selected_by_user_id', 'type', 'status', 'servings', 'title', 'summary', 'notes', 'estimated_minutes', 'estimated_cost', 'recommendation_explanation'])]
 class PlannedMeal extends Model
 {
     use ResolvesWithinCurrentTeam;
@@ -42,9 +44,27 @@ class PlannedMeal extends Model
         return $this->belongsTo(MealProposal::class, 'meal_proposal_id');
     }
 
+    /** @return BelongsTo<RecipeVersion, $this> */
+    public function recipeVersion(): BelongsTo
+    {
+        return $this->belongsTo(RecipeVersion::class);
+    }
+
+    /** @return BelongsTo<self, $this> */
+    public function sourcePlannedMeal(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_planned_meal_id');
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['estimated_cost' => 'float'];
+        return [
+            'type' => PlannedMealType::class,
+            'status' => PlannedMealStatus::class,
+            'servings' => 'float',
+            'estimated_cost' => 'float',
+            'recommendation_explanation' => 'array',
+        ];
     }
 }
