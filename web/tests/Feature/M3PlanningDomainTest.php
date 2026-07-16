@@ -361,3 +361,123 @@ it('lets Chef inspect create and select recipes through replay-safe SDK tools', 
         ->and($workspace['plan']->refresh()->revision)->toBe($revisionBeforeSelection + 1)
         ->and($conversation->messages()->reorder()->latest('id')->firstOrFail()->content)->toBe('The recipe is saved and dinner is selected.');
 });
+
+it('rolls back a meal edit when its expected plan revision is stale', function () {
+    $workspace = m3PlanningWorkspace();
+    $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    $planned = app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Custom, title: 'Original dinner');
+    $staleRevision = $workspace['plan']->refresh()->revision;
+    app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today()->addDay(), MealSlotKind::Lunch, $workspace['team']->people);
+
+    expect(fn () => app(UpdatePlannedMeal::class)->handle(
+        $planned,
+        $workspace['user'],
+        9,
+        PlannedMealStatus::Skipped,
+        'This must roll back.',
+        $staleRevision,
+    ))->toThrow(ValidationException::class)
+        ->and($planned->fresh()->servings)->toBe(1.0)
+        ->and($planned->fresh()->status)->toBe(PlannedMealStatus::Planned)
+        ->and($planned->fresh()->notes)->toBeNull();
+});
+
+it('clears recipe-only relationships when a slot changes to another meal type', function () {
+    $workspace = m3PlanningWorkspace();
+    $recipe = m3CreateRecipe($workspace);
+    $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    $planned = app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Recipe, $recipe->latestVersion);
+
+    $changed = app(SelectPlannedMeal::class)->handle(
+        $slot,
+        $workspace['user'],
+        PlannedMealType::Open,
+        $recipe->latestVersion,
+    );
+
+    expect($changed->is($planned))->toBeTrue()
+        ->and($changed->recipe_version_id)->toBeNull()
+        ->and($changed->source_planned_meal_id)->toBeNull()
+        ->and($changed->title)->toBe('Open');
+});
+
+it('revises a complete fourteen-day plan without losing recipe versions or participant context', function () {
+    $workspace = m3PlanningWorkspace();
+    $tahlia = $workspace['team']->people()->create(['name' => 'Tahlia', 'created_by_user_id' => $workspace['user']->id]);
+    $recipe = m3CreateRecipe($workspace);
+    $versionOne = $recipe->latestVersion;
+    $slots = collect();
+
+    foreach (range(0, 13) as $day) {
+        foreach ([MealSlotKind::Lunch, MealSlotKind::Dinner] as $kind) {
+            $slot = app(CreateMealSlot::class)->handle(
+                $workspace['plan'],
+                $workspace['user'],
+                today()->addDays($day),
+                $kind,
+                $workspace['team']->people,
+            );
+            $type = match (($day + ($kind === MealSlotKind::Dinner ? 1 : 0)) % 4) {
+                0 => PlannedMealType::Recipe,
+                1 => PlannedMealType::Custom,
+                2 => PlannedMealType::Takeaway,
+                default => PlannedMealType::Open,
+            };
+            app(SelectPlannedMeal::class)->handle(
+                $slot,
+                $workspace['user'],
+                $type,
+                $type === PlannedMealType::Recipe ? $versionOne : null,
+                $type === PlannedMealType::Custom ? 'Packed lunch' : null,
+            );
+            $slots->push($slot);
+        }
+    }
+
+    app(CreateRecipeVersion::class)->handle(
+        $recipe,
+        $workspace['user'],
+        'Satay chicken revised',
+        null,
+        4,
+        10,
+        20,
+        [['name' => 'Chicken thigh']],
+        [['instruction' => 'Cook the revised recipe.']],
+    );
+    $revisedSlot = $slots->last();
+    app(UpdateMealSlotParticipants::class)->handle($revisedSlot, $workspace['user'], [
+        $workspace['team']->people()->oldest('id')->firstOrFail()->id => 1.5,
+        $tahlia->id => 0.5,
+    ]);
+    app(RecordMealPlanMilestone::class)->handle($workspace['plan'], $workspace['user'], MealPlanMilestoneKind::PlanningConfirmed);
+
+    expect($workspace['plan']->plannedMeals()->count())->toBe(28)
+        ->and($workspace['plan']->plannedMeals()->whereNotNull('recipe_version_id')->pluck('recipe_version_id')->unique()->all())->toBe([$versionOne->id])
+        ->and((float) $revisedSlot->fresh()->participants->firstWhere('id', $tahlia->id)->pivot->servings)->toBe(0.5)
+        ->and($workspace['plan']->refresh()->planning_confirmed_at)->not->toBeNull()
+        ->and($workspace['plan']->revision)->toBeGreaterThan(50);
+});
+
+it('applies family policies to every M3 team-owned resource', function () {
+    $workspace = m3PlanningWorkspace();
+    $recipe = m3CreateRecipe($workspace);
+    $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Recipe, $recipe->latestVersion);
+    $milestone = app(RecordMealPlanMilestone::class)->handle($workspace['plan'], $workspace['user'], MealPlanMilestoneKind::PlanningConfirmed);
+    $revision = $workspace['plan']->revisions()->firstOrFail();
+    $ingredient = $recipe->latestVersion->ingredients->firstOrFail()->ingredient;
+    $outsider = User::factory()->create();
+    app(CreateTeamForUser::class)->handle($outsider, 'Policy outsider');
+
+    expect($workspace['user']->can('view', $recipe))->toBeTrue()
+        ->and($workspace['user']->can('view', $recipe->latestVersion))->toBeTrue()
+        ->and($workspace['user']->can('view', $ingredient))->toBeTrue()
+        ->and($workspace['user']->can('view', $revision))->toBeTrue()
+        ->and($workspace['user']->can('view', $milestone))->toBeTrue()
+        ->and($outsider->can('view', $recipe))->toBeFalse()
+        ->and($outsider->can('view', $recipe->latestVersion))->toBeFalse()
+        ->and($outsider->can('view', $ingredient))->toBeFalse()
+        ->and($outsider->can('view', $revision))->toBeFalse()
+        ->and($outsider->can('view', $milestone))->toBeFalse();
+});

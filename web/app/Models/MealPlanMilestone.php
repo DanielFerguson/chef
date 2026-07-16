@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MealPlanMilestoneKind;
+use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['team_id', 'meal_plan_id', 'user_id', 'kind', 'plan_revision', 'achieved_at'])]
 class MealPlanMilestone extends Model
 {
+    use ResolvesWithinCurrentTeam;
+
     /** @return BelongsTo<MealPlan, $this> */
     public function mealPlan(): BelongsTo
     {

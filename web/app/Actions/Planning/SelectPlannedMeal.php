@@ -34,6 +34,14 @@ class SelectPlannedMeal
             throw ValidationException::withMessages(['source_planned_meal_id' => 'Choose the meal these leftovers come from.']);
         }
 
+        if ($type !== PlannedMealType::Recipe) {
+            $recipeVersion = null;
+        }
+
+        if ($type !== PlannedMealType::Leftovers) {
+            $sourcePlannedMeal = null;
+        }
+
         return DB::transaction(function () use ($slot, $user, $type, $recipeVersion, $title, $summary, $servings, $estimatedMinutes, $estimatedCost, $sourcePlannedMeal, $expectedRevision): PlannedMeal {
             $plan = $slot->mealPlan;
             $resolvedTitle = match ($type) {
