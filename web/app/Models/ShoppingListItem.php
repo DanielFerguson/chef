@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/** @property ShoppingListItemSourceKind $source_kind */
 #[Fillable(['team_id', 'shopping_list_id', 'ingredient_id', 'created_by_user_id', 'source_kind', 'name', 'normalized_name', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked', 'optional', 'estimated_price', 'position'])]
 class ShoppingListItem extends Model
 {

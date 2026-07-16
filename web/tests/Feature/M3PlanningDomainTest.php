@@ -470,8 +470,15 @@ it('revises a complete fourteen-day plan without losing recipe versions or parti
     ]);
     app(RecordMealPlanMilestone::class)->handle($workspace['plan'], $workspace['user'], MealPlanMilestoneKind::PlanningConfirmed);
 
+    $cookableMeals = $workspace['plan']->plannedMeals()->whereIn('type', [
+        PlannedMealType::Recipe->value,
+        PlannedMealType::Custom->value,
+    ])->get();
+
     expect($workspace['plan']->plannedMeals()->count())->toBe(28)
-        ->and($workspace['plan']->plannedMeals()->whereNotNull('recipe_version_id')->pluck('recipe_version_id')->unique()->all())->toBe([$versionOne->id])
+        ->and($cookableMeals)->not->toBeEmpty()
+        ->and($cookableMeals->every(fn ($meal) => $meal->recipe_version_id !== null))->toBeTrue()
+        ->and($workspace['plan']->plannedMeals()->where('recipe_version_id', $versionOne->id)->exists())->toBeTrue()
         ->and((float) $revisedSlot->fresh()->participants->firstWhere('id', $tahlia->id)->pivot->servings)->toBe(0.5)
         ->and($workspace['plan']->refresh()->planning_confirmed_at)->not->toBeNull()
         ->and($workspace['plan']->revision)->toBeGreaterThan(50);

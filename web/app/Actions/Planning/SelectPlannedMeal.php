@@ -3,6 +3,8 @@
 namespace App\Actions\Planning;
 
 use App\Actions\MealPlans\RecordMealPlanRevision;
+use App\Actions\Recipes\PreparePlannedMealRecipe;
+use App\Enums\PlannedMealRecipePreparationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Models\MealSlot;
@@ -18,6 +20,7 @@ class SelectPlannedMeal
     public function __construct(
         private readonly RecordMealPlanRevision $recordRevision,
         private readonly BuildRecommendationExplanation $buildExplanation,
+        private readonly PreparePlannedMealRecipe $prepareRecipe,
     ) {}
 
     public function handle(MealSlot $slot, User $user, PlannedMealType $type, ?RecipeVersion $recipeVersion = null, ?string $title = null, ?string $summary = null, ?float $servings = null, ?int $estimatedMinutes = null, ?float $estimatedCost = null, ?PlannedMeal $sourcePlannedMeal = null, ?int $expectedRevision = null): PlannedMeal
@@ -42,7 +45,7 @@ class SelectPlannedMeal
             $sourcePlannedMeal = null;
         }
 
-        return DB::transaction(function () use ($slot, $user, $type, $recipeVersion, $title, $summary, $servings, $estimatedMinutes, $estimatedCost, $sourcePlannedMeal, $expectedRevision): PlannedMeal {
+        $plannedMeal = DB::transaction(function () use ($slot, $user, $type, $recipeVersion, $title, $summary, $servings, $estimatedMinutes, $estimatedCost, $sourcePlannedMeal, $expectedRevision): PlannedMeal {
             $plan = $slot->mealPlan;
             $resolvedTitle = match ($type) {
                 PlannedMealType::Recipe => $recipeVersion->title,
@@ -89,5 +92,24 @@ class SelectPlannedMeal
 
             return $plannedMeal->load('recipeVersion');
         });
+
+        if ($plannedMeal->type === PlannedMealType::Custom && $plannedMeal->recipe_version_id === null) {
+            $this->prepareRecipe->handle($plannedMeal, $user);
+        } else {
+            $plannedMeal->recipePreparation()
+                ->whereIn('status', [
+                    PlannedMealRecipePreparationStatus::Pending->value,
+                    PlannedMealRecipePreparationStatus::Processing->value,
+                    PlannedMealRecipePreparationStatus::Failed->value,
+                ])
+                ->update([
+                    'status' => PlannedMealRecipePreparationStatus::Cancelled,
+                    'failure_code' => null,
+                    'failure_message' => null,
+                    'completed_at' => now(),
+                ]);
+        }
+
+        return $plannedMeal->refresh()->load(['recipeVersion', 'recipePreparation']);
     }
 }

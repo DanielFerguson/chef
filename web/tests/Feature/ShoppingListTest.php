@@ -2,6 +2,7 @@
 
 use App\Actions\MealPlans\ConfirmMealPlan;
 use App\Actions\MealPlans\StartMealPlan;
+use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Planning\UpdatePlannedMeal;
@@ -20,6 +21,7 @@ use App\Enums\MealSlotKind;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\ShoppingListStatus;
+use App\Models\PlannedMeal;
 use App\Models\Retailer;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -34,7 +36,7 @@ function shoppingListWorkspace(): array
 {
     $user = User::factory()->create();
     $team = app(CreateTeamForUser::class)->handle($user, 'Shopping family');
-    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDay());
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
     $recipe = app(CreateRecipe::class)->handle(
         $team,
         $user,
@@ -86,6 +88,50 @@ it('generates an idempotent traceable list from scaled recipe requirements', fun
         ->and($milk->unit)->toBe('ml')
         ->and($coriander->quantity)->toBeNull()
         ->and($coriander->optional)->toBeTrue();
+});
+
+it('combines equivalent singular and plural shopping units', function () {
+    $workspace = shoppingListWorkspace();
+    $secondRecipe = app(CreateRecipe::class)->handle(
+        $workspace['team'],
+        $workspace['user'],
+        'Rice side',
+        null,
+        2,
+        null,
+        null,
+        [['name' => 'Jasmine rice', 'quantity' => 1, 'unit' => 'cup']],
+        [['instruction' => 'Cook the rice.']],
+    );
+    $thirdSlot = app(CreateMealSlot::class)->handle(
+        $workspace['plan']->refresh(),
+        $workspace['user'],
+        today()->addDays(2),
+        MealSlotKind::Dinner,
+        $workspace['team']->people,
+    );
+    app(SelectPlannedMeal::class)->handle(
+        $thirdSlot,
+        $workspace['user'],
+        PlannedMealType::Recipe,
+        $secondRecipe->latestVersion,
+        servings: 2,
+    );
+    $secondRecipe->latestVersion->ingredients()->create([
+        'name' => 'Jasmine rice',
+        'quantity' => 1.5,
+        'unit' => 'cups',
+        'optional' => false,
+        'position' => 2,
+    ]);
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $rice = $list->items()->where('normalized_name', 'jasmine rice')->get();
+
+    expect($rice)->toHaveCount(1)
+        ->and($rice->first()->unit)->toBe('cup')
+        ->and($rice->first()->quantity)->toBe(2.5);
 });
 
 it('supports manual editing pantry exclusions completion and revision history', function () {
@@ -242,6 +288,7 @@ it('enforces shopping invariants inside reusable domain actions', function () {
 
 it('resolves custom meal ingredients explicitly and keeps their meal traceability', function () {
     $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
     $slot = app(CreateMealSlot::class)->handle(
         $workspace['plan']->refresh(),
         $workspace['user'],
@@ -249,17 +296,22 @@ it('resolves custom meal ingredients explicitly and keeps their meal traceabilit
         MealSlotKind::Lunch,
         $workspace['team']->people,
     );
-    $customMeal = app(SelectPlannedMeal::class)->handle(
-        $slot,
-        $workspace['user'],
-        PlannedMealType::Custom,
-        title: 'Pulled pork rolls',
-        servings: 2,
-    );
-    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-
-    expect(fn () => app(CompleteShoppingList::class)->handle($list, $workspace['user'], $list->revision))
-        ->toThrow(ValidationException::class, 'Add ingredients for every planned meal');
+    $customMeal = PlannedMeal::query()->create([
+        'team_id' => $workspace['team']->id,
+        'meal_plan_id' => $workspace['plan']->id,
+        'meal_slot_id' => $slot->id,
+        'selected_by_user_id' => $workspace['user']->id,
+        'type' => PlannedMealType::Custom,
+        'status' => PlannedMealStatus::Planned,
+        'servings' => 2,
+        'title' => 'Pulled pork rolls',
+    ]);
+    $list->refresh()->update([
+        'source_plan_revision' => $workspace['plan']->refresh()->revision,
+        'stale_at' => null,
+        'stale_reason' => null,
+        'stale_diff' => null,
+    ]);
 
     app(ResolvePlannedMealIngredients::class)->handle($list, $customMeal, $workspace['user'], [
         ['name' => 'Bread rolls', 'quantity' => 4, 'unit' => 'each'],
@@ -268,6 +320,7 @@ it('resolves custom meal ingredients explicitly and keeps their meal traceabilit
 
     $rolls = $list->items()->where('normalized_name', 'bread rolls')->sole();
     $resolution = $list->mealResolutions()->where('planned_meal_id', $customMeal->id)->sole();
+    $readiness = app(AssessMealPlanReadiness::class)->handle($workspace['plan']->refresh());
     $outsider = User::factory()->create();
     app(CreateTeamForUser::class)->handle($outsider, 'Resolution outsider');
     expect($resolution)->not->toBeNull()
@@ -276,7 +329,10 @@ it('resolves custom meal ingredients explicitly and keeps their meal traceabilit
         ->and($rolls->getRawOriginal('source_kind'))->toBe('planned_meal')
         ->and($rolls->sources)->toHaveCount(1)
         ->and($rolls->sources->first()->planned_meal_id)->toBe($customMeal->id)
-        ->and($list->refresh()->revision)->toBe(2);
+        ->and($list->refresh()->revision)->toBe(2)
+        ->and($readiness['recipes_unresolved'])->toBe(0)
+        ->and($readiness['recipes_failed'])->toBe(0)
+        ->and($readiness['next_action'])->toBe('begin_shopping');
 
     app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     expect($list->items()->where('normalized_name', 'bread rolls')->exists())->toBeTrue();

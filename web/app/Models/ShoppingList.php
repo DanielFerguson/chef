@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property array{from_plan_revision: int, to_plan_revision?: int, changes: array<int, array<string, mixed>>}|null $stale_diff
+ * @property ShoppingListStatus $status
  */
 #[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'revision', 'source_plan_revision', 'status', 'completed_at', 'stale_at', 'stale_reason', 'stale_diff'])]
 class ShoppingList extends Model

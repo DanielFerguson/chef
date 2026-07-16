@@ -3,7 +3,10 @@
 namespace App\Actions\Planning;
 
 use App\Actions\MealPlans\RecordMealPlanRevision;
+use App\Actions\Recipes\PreparePlannedMealRecipe;
 use App\Enums\MealProposalStatus;
+use App\Enums\PlannedMealStatus;
+use App\Enums\PlannedMealType;
 use App\Models\MealProposal;
 use App\Models\PlannedMeal;
 use App\Models\User;
@@ -13,7 +16,10 @@ use Illuminate\Validation\ValidationException;
 
 class AcceptMealProposal
 {
-    public function __construct(private readonly RecordMealPlanRevision $recordRevision) {}
+    public function __construct(
+        private readonly RecordMealPlanRevision $recordRevision,
+        private readonly PreparePlannedMealRecipe $prepareRecipe,
+    ) {}
 
     public function handle(MealProposal $proposal, User $user): PlannedMeal
     {
@@ -25,7 +31,7 @@ class AcceptMealProposal
             throw ValidationException::withMessages(['meal_slot_id' => 'Choose a meal slot before accepting this proposal.']);
         }
 
-        return DB::transaction(function () use ($proposal, $user): PlannedMeal {
+        $plannedMeal = DB::transaction(function () use ($proposal, $user): PlannedMeal {
             $proposal = MealProposal::query()->lockForUpdate()->findOrFail($proposal->id);
 
             if ($proposal->status !== MealProposalStatus::Pending) {
@@ -58,6 +64,9 @@ class AcceptMealProposal
                 'meal_slot_id' => $proposal->meal_slot_id,
                 'meal_proposal_id' => $proposal->id,
                 'selected_by_user_id' => $user->id,
+                'type' => PlannedMealType::Custom,
+                'status' => PlannedMealStatus::Planned,
+                'servings' => max(1, (float) $proposal->mealSlot->participants()->sum('meal_slot_participants.servings')),
                 'title' => $proposal->title,
                 'summary' => $proposal->summary,
                 'estimated_minutes' => $proposal->estimated_minutes,
@@ -78,5 +87,9 @@ class AcceptMealProposal
 
             return $plannedMeal;
         });
+
+        $this->prepareRecipe->handle($plannedMeal, $user);
+
+        return $plannedMeal->refresh()->load(['recipeVersion', 'recipePreparation']);
     }
 }

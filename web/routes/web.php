@@ -6,6 +6,7 @@ use App\Http\Controllers\ConversationMessageStreamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\MealPlanMilestoneController;
+use App\Http\Controllers\MealPlanRecipePreparationController;
 use App\Http\Controllers\MealProposalDecisionController;
 use App\Http\Controllers\MealSlotController;
 use App\Http\Controllers\MealSlotParticipantController;
@@ -40,6 +41,7 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::get('shopping', [ShoppingListController::class, 'index'])->name('shopping.index');
     Route::get('meal-plans/{mealPlan}/shopping', [ShoppingListController::class, 'show'])->name('meal-plans.shopping.show');
     Route::post('meal-plans/{mealPlan}/shopping-list', ShoppingListGenerationController::class)->name('meal-plans.shopping-list.generate');
+    Route::post('meal-plans/{mealPlan}/recipes/prepare', MealPlanRecipePreparationController::class)->name('meal-plans.recipes.prepare');
     Route::post('shopping-lists/{shoppingList}/items', [ShoppingListItemController::class, 'store'])->name('shopping-lists.items.store');
     Route::put('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'update'])->name('shopping-list-items.update');
     Route::delete('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'destroy'])->name('shopping-list-items.destroy');

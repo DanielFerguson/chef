@@ -4,6 +4,7 @@ use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Ai\LaravelAiConversationEngine;
+use App\Ai\Tools\AddPlanShoppingItem;
 use App\Ai\Tools\ConfirmPlan;
 use App\Ai\Tools\CorrectHouseholdPreference;
 use App\Ai\Tools\CreateFamilyRecipe;
@@ -11,13 +12,17 @@ use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
 use App\Ai\Tools\CreatePlanMealSlot;
 use App\Ai\Tools\InspectMealPlan;
+use App\Ai\Tools\InspectPlanShoppingList;
 use App\Ai\Tools\InspectRecipes;
 use App\Ai\Tools\InspectTeamContext;
 use App\Ai\Tools\MoveSelectedMeal;
+use App\Ai\Tools\PreparePlanShoppingList;
 use App\Ai\Tools\RecordHouseholdPreference;
 use App\Ai\Tools\RecordSafetyConstraint;
 use App\Ai\Tools\SelectPlanMeal;
+use App\Ai\Tools\SetPlanShoppingBudget;
 use App\Ai\Tools\UpdatePlanDateSpan;
+use App\Ai\Tools\UpdatePlanShoppingItem;
 use App\Enums\MessageRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -83,6 +88,7 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
     expect($tools->map(fn (object $tool) => $tool::class)->all())->toBe([
         InspectTeamContext::class,
         InspectMealPlan::class,
+        InspectPlanShoppingList::class,
         InspectRecipes::class,
         CreateHouseholdPerson::class,
         UpdatePlanDateSpan::class,
@@ -90,6 +96,10 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
         CreateMealProposal::class,
         CreateFamilyRecipe::class,
         SelectPlanMeal::class,
+        PreparePlanShoppingList::class,
+        AddPlanShoppingItem::class,
+        UpdatePlanShoppingItem::class,
+        SetPlanShoppingBudget::class,
         MoveSelectedMeal::class,
         RecordHouseholdPreference::class,
         CorrectHouseholdPreference::class,

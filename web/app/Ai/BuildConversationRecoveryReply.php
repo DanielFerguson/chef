@@ -12,7 +12,7 @@ class BuildConversationRecoveryReply
 {
     public function __construct(private readonly AssessMealPlanReadiness $assessReadiness) {}
 
-    public function handle(Conversation $conversation, Message $message, ?int $initialPlanRevision): string
+    public function handle(Conversation $conversation, Message $message, ?int $initialPlanRevision, ?int $initialShoppingRevision = null): string
     {
         $parts = [];
         $plan = $conversation->mealPlan?->refresh();
@@ -25,6 +25,19 @@ class BuildConversationRecoveryReply
 
             if ($changes->isNotEmpty()) {
                 $parts[] = "Done — I completed these plan changes:\n".$changes->map(fn (string $summary) => '- '.$summary)->join("\n");
+            }
+        }
+
+        $shoppingList = $plan?->shoppingList?->refresh();
+
+        if ($shoppingList !== null && $initialShoppingRevision !== null) {
+            $shoppingChanges = $shoppingList->revisions()
+                ->where('revision', '>', $initialShoppingRevision)
+                ->oldest('revision')
+                ->pluck('summary');
+
+            if ($shoppingChanges->isNotEmpty()) {
+                $parts[] = "Done — I updated the shopping list:\n".$shoppingChanges->map(fn (string $summary) => '- '.$summary)->join("\n");
             }
         }
 
@@ -54,12 +67,18 @@ class BuildConversationRecoveryReply
         if ($plan !== null) {
             $readiness = $this->assessReadiness->handle($plan);
 
-            if ($readiness['ready_for_confirmation']) {
+            if ($readiness['recipes_failed'] > 0) {
+                $parts[] = $readiness['recipes_failed'].' '.($readiness['recipes_failed'] === 1 ? 'recipe needs' : 'recipes need').' another preparation attempt before the plan is ready.';
+            } elseif ($readiness['recipes_preparing'] > 0) {
+                $parts[] = 'Chef is preparing '.$readiness['recipes_preparing'].' '.($readiness['recipes_preparing'] === 1 ? 'recipe' : 'recipes').'. You can keep planning while that finishes.';
+            } elseif ($readiness['ready_for_confirmation']) {
                 $parts[] = "All {$readiness['total_slots']} meal slots are filled. Would you like to review and confirm the plan? Once confirmed, the next step is the shopping list.";
             } elseif ($readiness['open_slots'] > 0) {
                 $parts[] = $readiness['open_slots'].' meal '.($readiness['open_slots'] === 1 ? 'slot still needs' : 'slots still need').' a choice. Tell me which option to place next.';
+            } elseif ($readiness['confirmed'] && $shoppingList !== null) {
+                $parts[] = 'The plan is confirmed and its shopping list is ready to review.';
             } elseif ($readiness['confirmed']) {
-                $parts[] = 'The plan is confirmed. The next step is to build and review the shopping list.';
+                $parts[] = 'The plan is confirmed. The next step is to prepare and review the shopping list.';
             }
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\PlannedMealRecipePreparationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Models\Budget;
@@ -31,12 +32,16 @@ class ShoppingListController extends Controller
     {
         $this->authorize('view', $mealPlan);
         $mealPlan->load([
+            'conversations.messages.author:id,name',
+            'conversations.messages.feedback' => fn ($query) => $query->whereBelongsTo($request->user()),
+            'conversations.feedback' => fn ($query) => $query->whereBelongsTo($request->user())->whereNull('message_id'),
             'shoppingList.items.sources.plannedMeal.mealSlot',
             'shoppingList.items.productMatch.retailProduct.retailer',
             'shoppingList.revisions' => fn ($query) => $query->limit(10),
             'shoppingList.mealResolutions',
             'shoppingList.orders.retailer',
             'plannedMeals.mealSlot',
+            'plannedMeals.recipePreparation',
             'plannedMeals.recipeVersion:id,team_id,recipe_id,title,servings',
         ]);
         $shoppingList = $mealPlan->shoppingList;
@@ -52,7 +57,19 @@ class ShoppingListController extends Controller
                 'title' => $meal->title,
                 'date' => $meal->mealSlot->date->toDateString(),
                 'kind' => $meal->mealSlot->kind->value,
+                'preparation_id' => $meal->recipePreparation?->id,
+                'preparation_status' => $meal->recipePreparation?->status->value ?? 'not_started',
+                'failure_message' => $meal->recipePreparation?->failure_message,
             ]);
+        $cookableMeals = $mealPlan->plannedMeals
+            ->filter(fn ($meal) => $meal->getRawOriginal('status') === PlannedMealStatus::Planned->value
+                && in_array($meal->getRawOriginal('type'), [PlannedMealType::Recipe->value, PlannedMealType::Custom->value], true));
+        $recipesReady = $cookableMeals->whereNotNull('recipe_version_id')->count();
+        $recipesPreparing = $missingMeals->whereIn('preparation_status', [
+            PlannedMealRecipePreparationStatus::Pending->value,
+            PlannedMealRecipePreparationStatus::Processing->value,
+        ])->count();
+        $recipesFailed = $missingMeals->where('preparation_status', PlannedMealRecipePreparationStatus::Failed->value)->count();
         $householdBudget = $mealPlan->team->budgets()->whereNull('meal_plan_id')->latest()->first();
         $planBudget = Budget::query()->where('team_id', $mealPlan->team_id)->where('meal_plan_id', $mealPlan->id)->first();
         $projectedTotal = $shoppingList?->items
@@ -76,6 +93,14 @@ class ShoppingListController extends Controller
                 ],
                 'shopping_list' => $shoppingList,
                 'missing_meals' => $missingMeals,
+                'recipe_preparation' => [
+                    'required' => $cookableMeals->count(),
+                    'ready' => $recipesReady,
+                    'preparing' => $recipesPreparing,
+                    'failed' => $recipesFailed,
+                    'unresolved' => $missingMeals->count(),
+                ],
+                'conversation' => $mealPlan->conversations->firstOrFail(),
                 'retailers' => Retailer::query()->where('active', true)->orderBy('name')->get(['id', 'name', 'slug']),
                 'product_preferences' => $mealPlan->team->productPreferences()
                     ->with('retailer:id,name,slug')

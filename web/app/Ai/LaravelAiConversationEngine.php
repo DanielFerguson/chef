@@ -18,9 +18,10 @@ class LaravelAiConversationEngine implements ChefConversationEngine
     {
         $actor = $message->author()->firstOrFail();
         $initialPlanRevision = $conversation->mealPlan?->revision;
+        $initialShoppingRevision = $conversation->mealPlan?->shoppingList?->revision;
         $response = (new ChefAgent($conversation, $message->id, $actor, $message))->prompt($message->content);
         $content = trim($response->text) === ''
-            ? $this->buildRecoveryReply->handle($conversation, $message, $initialPlanRevision)
+            ? $this->buildRecoveryReply->handle($conversation, $message, $initialPlanRevision, $initialShoppingRevision)
             : $response->text;
 
         return new AssistantReply(
@@ -34,6 +35,7 @@ class LaravelAiConversationEngine implements ChefConversationEngine
     {
         $actor = $message->author()->firstOrFail();
         $initialPlanRevision = $conversation->mealPlan?->revision;
+        $initialShoppingRevision = $conversation->mealPlan?->shoppingList?->revision;
         $response = (new ChefAgent($conversation, $message->id, $actor, $message))->stream($message->content);
         $content = '';
 
@@ -47,7 +49,7 @@ class LaravelAiConversationEngine implements ChefConversationEngine
         if (trim($content) === '') {
             yield new AssistantStreamChunk(
                 type: 'delta',
-                delta: $this->buildRecoveryReply->handle($conversation, $message, $initialPlanRevision),
+                delta: $this->buildRecoveryReply->handle($conversation, $message, $initialPlanRevision, $initialShoppingRevision),
             );
         }
 

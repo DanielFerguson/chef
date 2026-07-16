@@ -33,6 +33,20 @@ class GenerateShoppingList
             ]);
         }
 
+        $resolvedMealIds = $mealPlan->shoppingList?->mealResolutions()->pluck('planned_meal_id') ?? collect();
+        $unresolvedCookableMeals = $mealPlan->plannedMeals()
+            ->where('status', 'planned')
+            ->where('type', 'custom')
+            ->whereNull('recipe_version_id')
+            ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
+            ->count();
+
+        if ($unresolvedCookableMeals > 0) {
+            throw ValidationException::withMessages([
+                'recipes' => $unresolvedCookableMeals.' cookable '.($unresolvedCookableMeals === 1 ? 'meal still needs' : 'meals still need').' a prepared recipe.',
+            ]);
+        }
+
         return DB::transaction(function () use ($mealPlan, $user): ShoppingList {
             $mealPlan = MealPlan::query()->lockForUpdate()->findOrFail($mealPlan->id);
             $shoppingList = ShoppingList::query()->firstOrCreate(
@@ -176,6 +190,7 @@ class GenerateShoppingList
             'litre', 'litres', 'liter', 'liters', 'l' => 'l',
             'tablespoon', 'tablespoons', 'tbsp' => 'tbsp',
             'teaspoon', 'teaspoons', 'tsp' => 'tsp',
+            'cup', 'cups' => 'cup',
             'piece', 'pieces', 'each' => 'each',
             default => $normalised,
         };

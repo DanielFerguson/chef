@@ -8,6 +8,7 @@ use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
@@ -20,6 +21,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $summary
  * @property int|null $estimated_minutes
  * @property float|null $estimated_cost
+ * @property PlannedMealType $type
+ * @property PlannedMealStatus $status
  */
 #[Fillable(['team_id', 'meal_plan_id', 'meal_slot_id', 'meal_proposal_id', 'recipe_version_id', 'source_planned_meal_id', 'selected_by_user_id', 'type', 'status', 'servings', 'title', 'summary', 'notes', 'estimated_minutes', 'estimated_cost', 'recommendation_explanation'])]
 class PlannedMeal extends Model
@@ -54,6 +57,12 @@ class PlannedMeal extends Model
     public function sourcePlannedMeal(): BelongsTo
     {
         return $this->belongsTo(self::class, 'source_planned_meal_id');
+    }
+
+    /** @return HasOne<PlannedMealRecipePreparation, $this> */
+    public function recipePreparation(): HasOne
+    {
+        return $this->hasOne(PlannedMealRecipePreparation::class);
     }
 
     /** @return array<string, string> */

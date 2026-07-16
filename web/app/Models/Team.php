@@ -58,6 +58,12 @@ class Team extends Model
         return $this->hasMany(Recipe::class);
     }
 
+    /** @return HasMany<PlannedMealRecipePreparation, $this> */
+    public function recipePreparations(): HasMany
+    {
+        return $this->hasMany(PlannedMealRecipePreparation::class);
+    }
+
     /** @return HasMany<ShoppingList, $this> */
     public function shoppingLists(): HasMany
     {

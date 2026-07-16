@@ -15,6 +15,11 @@ use App\Actions\Planning\MovePlannedMeal;
 use App\Actions\Planning\ProposeMeal;
 use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Recipes\CreateRecipe;
+use App\Actions\Shopping\AddShoppingListItem;
+use App\Actions\Shopping\PrepareMealPlanShoppingList;
+use App\Actions\Shopping\SetShoppingBudget;
+use App\Actions\Shopping\UpdateShoppingListItem;
+use App\Ai\Tools\AddPlanShoppingItem;
 use App\Ai\Tools\ConfirmPlan;
 use App\Ai\Tools\CorrectHouseholdPreference;
 use App\Ai\Tools\CreateFamilyRecipe;
@@ -22,13 +27,17 @@ use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
 use App\Ai\Tools\CreatePlanMealSlot;
 use App\Ai\Tools\InspectMealPlan;
+use App\Ai\Tools\InspectPlanShoppingList;
 use App\Ai\Tools\InspectRecipes;
 use App\Ai\Tools\InspectTeamContext;
 use App\Ai\Tools\MoveSelectedMeal;
+use App\Ai\Tools\PreparePlanShoppingList;
 use App\Ai\Tools\RecordHouseholdPreference;
 use App\Ai\Tools\RecordSafetyConstraint;
 use App\Ai\Tools\SelectPlanMeal;
+use App\Ai\Tools\SetPlanShoppingBudget;
 use App\Ai\Tools\UpdatePlanDateSpan;
+use App\Ai\Tools\UpdatePlanShoppingItem;
 use App\Models\Conversation;
 use App\Models\Message as ChefMessage;
 use App\Models\User;
@@ -109,6 +118,15 @@ class ChefAgent implements Agent, Conversational, HasTools
         - Filling the final slot is not consent to confirm. Call ConfirmPlan only after the user explicitly agrees.
         - After confirmation, acknowledge it and offer to begin the shopping-list step. Never end a completed planning turn with only “the week is fully filled”.
 
+        Recipe and shopping rules:
+        - A selected ordinary cookable meal needs a prepared recipe. Recipe preparation happens automatically; report plan_progress instead of asking the household to type ingredients.
+        - If recipes are still preparing, say so clearly and let the household continue. If preparation failed, offer a retry rather than silently omitting the meal.
+        - When the household asks to begin shopping, call PreparePlanShoppingList. Do not merely describe a possible list in prose.
+        - Inspect the shopping list before editing it. Use exact item identifiers and the current list revision.
+        - Pantry, quantity, inclusion, check-off, household-extra, and budget requests must update structured list state through their tools before you say they are done.
+        - Budget is optional. Guide the household to review generated ingredients and pantry state before implying that a budget is required.
+        - Keep the conversation moving by stating what changed and offering the next useful shopping decision.
+
         Current structured household knowledge:
         {$householdKnowledge}
         INSTRUCTIONS;
@@ -137,6 +155,7 @@ class ChefAgent implements Agent, Conversational, HasTools
         return [
             new InspectTeamContext($team),
             new InspectMealPlan($mealPlan, app(AssessMealPlanReadiness::class)),
+            new InspectPlanShoppingList($mealPlan, app(AssessMealPlanReadiness::class)),
             new InspectRecipes($team),
             new CreateHouseholdPerson($team, $this->actor, $this->currentMessage, app(CreateHouseholdPersonAction::class)),
             new UpdatePlanDateSpan($mealPlan, $this->actor, app(UpdateMealPlanDateSpan::class)),
@@ -144,6 +163,10 @@ class ChefAgent implements Agent, Conversational, HasTools
             new CreateMealProposal($mealPlan, $this->actor, $this->currentMessage, app(ProposeMeal::class)),
             new CreateFamilyRecipe($team, $this->actor, $this->currentMessage, app(CreateRecipe::class)),
             new SelectPlanMeal($mealPlan, $this->actor, app(SelectPlannedMeal::class), app(AssessMealPlanReadiness::class)),
+            new PreparePlanShoppingList($mealPlan, $this->actor, app(PrepareMealPlanShoppingList::class), app(AssessMealPlanReadiness::class)),
+            new AddPlanShoppingItem($mealPlan, $this->actor, app(AddShoppingListItem::class)),
+            new UpdatePlanShoppingItem($mealPlan, $this->actor, app(UpdateShoppingListItem::class)),
+            new SetPlanShoppingBudget($mealPlan, $this->actor, app(SetShoppingBudget::class)),
             new MoveSelectedMeal($mealPlan, $this->actor, app(MovePlannedMeal::class)),
             new RecordHouseholdPreference($team, $this->actor, $this->currentMessage, app(RecordPreference::class), app(ValidatePreferenceEvidence::class)),
             new CorrectHouseholdPreference($team, $this->actor, $this->currentMessage, app(CorrectPreference::class)),

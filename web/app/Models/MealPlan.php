@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
@@ -63,6 +64,12 @@ class MealPlan extends Model
     public function plannedMeals(): HasMany
     {
         return $this->hasMany(PlannedMeal::class);
+    }
+
+    /** @return HasManyThrough<PlannedMealRecipePreparation, PlannedMeal, $this> */
+    public function recipePreparations(): HasManyThrough
+    {
+        return $this->hasManyThrough(PlannedMealRecipePreparation::class, PlannedMeal::class);
     }
 
     /** @return HasMany<MealPlanRevision, $this> */

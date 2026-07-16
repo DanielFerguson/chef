@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Ai\Contracts\ChefConversationEngine;
+use App\Ai\Contracts\RecipeDrafter;
 use App\Ai\LaravelAiConversationEngine;
+use App\Ai\LaravelAiRecipeDrafter;
+use App\Ai\Testing\DeterministicRecipeDrafter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +21,12 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(ChefConversationEngine::class, LaravelAiConversationEngine::class);
+        $this->app->bind(
+            RecipeDrafter::class,
+            $this->app->environment('testing')
+                ? DeterministicRecipeDrafter::class
+                : LaravelAiRecipeDrafter::class,
+        );
     }
 
     /**
