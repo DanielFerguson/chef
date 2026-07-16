@@ -1,0 +1,54 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\ShoppingListItemSourceKind;
+use App\Models\Concerns\ResolvesWithinCurrentTeam;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+
+#[Fillable(['team_id', 'shopping_list_id', 'ingredient_id', 'created_by_user_id', 'source_kind', 'name', 'normalized_name', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked', 'optional', 'estimated_price', 'position'])]
+class ShoppingListItem extends Model
+{
+    use ResolvesWithinCurrentTeam;
+
+    /** @return BelongsTo<ShoppingList, $this> */
+    public function shoppingList(): BelongsTo
+    {
+        return $this->belongsTo(ShoppingList::class);
+    }
+
+    /** @return BelongsTo<Ingredient, $this> */
+    public function ingredient(): BelongsTo
+    {
+        return $this->belongsTo(Ingredient::class);
+    }
+
+    /** @return HasMany<ShoppingListItemSource, $this> */
+    public function sources(): HasMany
+    {
+        return $this->hasMany(ShoppingListItemSource::class);
+    }
+
+    /** @return HasOne<ProductMatch, $this> */
+    public function productMatch(): HasOne
+    {
+        return $this->hasOne(ProductMatch::class);
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'source_kind' => ShoppingListItemSourceKind::class,
+            'quantity' => 'float',
+            'included' => 'boolean',
+            'in_pantry' => 'boolean',
+            'checked' => 'boolean',
+            'optional' => 'boolean',
+            'estimated_price' => 'float',
+        ];
+    }
+}

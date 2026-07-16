@@ -144,7 +144,7 @@ it('keeps proposals reviewable and supports accept replace reject and move', fun
     expect($selected->title)->toBe('Butter chicken')
         ->and($firstProposal->refresh()->status)->toBe(MealProposalStatus::Replaced);
 
-    app(MovePlannedMeal::class)->handle($selected, $secondSlot, $user);
+    app(MovePlannedMeal::class)->handle($selected, $secondSlot, $user, $plan->refresh()->revision);
     expect($selected->refresh()->meal_slot_id)->toBe($secondSlot->id);
 
     $rejected = app(ProposeMeal::class)->handle($plan, $user, 'Mushroom pasta', $firstSlot);

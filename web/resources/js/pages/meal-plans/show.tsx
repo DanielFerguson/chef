@@ -21,12 +21,12 @@ export default function MealPlanShow({
             <Head title={workspace.plan.title} />
             <div
                 key={workspace.plan.id}
-                className="flex min-h-0 flex-1 flex-col bg-background lg:flex-row"
+                className="flex min-h-0 flex-1 flex-col bg-background lg:h-[calc(100svh-5rem)] lg:flex-none lg:flex-row lg:overflow-hidden"
             >
-                <div className="flex min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:overflow-hidden">
                     <nav
                         aria-label="Meal plan view"
-                        className="flex items-center gap-1 border-b px-4 py-2 sm:px-7"
+                        className="flex shrink-0 items-center gap-1 border-b px-4 py-2 sm:px-7"
                     >
                         <Button
                             size="sm"

@@ -1,24 +1,50 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import {
+    BookOpen,
+    CalendarDays,
     Check,
     ChevronDown,
-    CircleAlert,
+    Clock3,
+    CircleDollarSign,
+    Ellipsis,
     GripVertical,
+    Pencil,
+    Plus,
     UsersRound,
 } from 'lucide-react';
 import { useState } from 'react';
 import PlannedMealMoveController from '@/actions/App/Http/Controllers/PlannedMealMoveController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { formatDay } from './format-day';
 import type { MealPlanWorkspace, MealSlot, PlannedMeal } from './types';
 
-function moveMeal(meal: PlannedMeal, target: MealSlot) {
+function moveMeal(
+    meal: PlannedMeal,
+    target: MealSlot,
+    expectedRevision: number,
+) {
     router.put(
         PlannedMealMoveController.url(meal.id),
-        { meal_slot_id: target.id },
+        { meal_slot_id: target.id, expected_revision: expectedRevision },
         { preserveScroll: true },
     );
 }
@@ -55,6 +81,19 @@ function MealExplanation({ meal }: { meal: PlannedMeal }) {
     );
 }
 
+function isGuestCounter(name: string) {
+    return ['guest', 'guests', 'dinner guest', 'dinner guests'].includes(
+        name.trim().toLocaleLowerCase(),
+    );
+}
+
+function slotServingCount(slot: MealSlot) {
+    return slot.participants.reduce(
+        (total, participant) => total + (participant.pivot?.servings ?? 0),
+        0,
+    );
+}
+
 function ParticipantEditor({
     workspace,
     slot,
@@ -71,6 +110,18 @@ function ParticipantEditor({
         })),
         expected_revision: workspace.plan.revision,
     });
+    const selectedCount = form.data.participants.filter(
+        (participant) => participant.servings > 0,
+    ).length;
+
+    const setServings = (index: number, servings: number) => {
+        const participants = [...form.data.participants];
+        participants[index] = {
+            ...participants[index],
+            servings,
+        };
+        form.setData('participants', participants);
+    };
 
     return (
         <details className="mt-3 border-t pt-3">
@@ -93,36 +144,84 @@ function ParticipantEditor({
                     });
                 }}
             >
-                {workspace.household.people.map((person, index) => (
-                    <label
-                        key={person.id}
-                        className="flex items-center justify-between gap-3 text-xs"
+                {workspace.household.people.map((person, index) => {
+                    const inputId = `slot-${slot.id}-person-${person.id}`;
+
+                    if (isGuestCounter(person.name)) {
+                        return (
+                            <div
+                                key={person.id}
+                                data-participant-row
+                                className="grid min-h-8 grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 text-xs"
+                            >
+                                <Label
+                                    htmlFor={inputId}
+                                    className="font-normal"
+                                >
+                                    {person.name}
+                                </Label>
+                                <Input
+                                    id={inputId}
+                                    data-participant-control
+                                    className="h-8 w-full"
+                                    aria-label={`${person.name} servings`}
+                                    type="number"
+                                    inputMode="numeric"
+                                    min="0"
+                                    max="999"
+                                    step="1"
+                                    value={
+                                        form.data.participants[index].servings
+                                    }
+                                    onChange={(event) =>
+                                        setServings(
+                                            index,
+                                            Number(event.target.value),
+                                        )
+                                    }
+                                />
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div
+                            key={person.id}
+                            data-participant-row
+                            className="grid min-h-8 grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 text-xs"
+                        >
+                            <Label htmlFor={inputId} className="font-normal">
+                                {person.name}
+                            </Label>
+                            <Checkbox
+                                id={inputId}
+                                data-participant-control
+                                className="justify-self-end"
+                                aria-label={`${person.name} is eating`}
+                                checked={
+                                    form.data.participants[index].servings > 0
+                                }
+                                onCheckedChange={(checked) =>
+                                    setServings(index, checked ? 1 : 0)
+                                }
+                            />
+                        </div>
+                    );
+                })}
+                {form.errors.participants && (
+                    <p className="text-xs text-destructive">
+                        {form.errors.participants}
+                    </p>
+                )}
+                <div className="flex justify-end pt-1">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={form.processing || selectedCount === 0}
                     >
-                        <span>{person.name}</span>
-                        <Input
-                            className="h-8 w-20"
-                            aria-label={`${person.name} servings`}
-                            type="number"
-                            min="0"
-                            max="999"
-                            step="0.25"
-                            value={form.data.participants[index].servings}
-                            onChange={(event) => {
-                                const participants = [
-                                    ...form.data.participants,
-                                ];
-                                participants[index] = {
-                                    ...participants[index],
-                                    servings: Number(event.target.value),
-                                };
-                                form.setData('participants', participants);
-                            }}
-                        />
-                    </label>
-                ))}
-                <Button size="sm" variant="outline" disabled={form.processing}>
-                    Save servings
-                </Button>
+                        Save participants
+                    </Button>
+                </div>
             </form>
         </details>
     );
@@ -133,11 +232,17 @@ function SelectedMealEditor({
     slot,
     meal,
     emptySlots,
+    showDragHandle = true,
+    showMealControls = true,
+    onMove,
 }: {
     workspace: MealPlanWorkspace;
     slot: MealSlot;
     meal: PlannedMeal;
     emptySlots: MealSlot[];
+    showDragHandle?: boolean;
+    showMealControls?: boolean;
+    onMove?: () => void;
 }) {
     const form = useForm({
         servings: meal.servings,
@@ -149,10 +254,12 @@ function SelectedMealEditor({
     return (
         <div>
             <div className="flex items-start gap-2">
-                <GripVertical className="mt-0.5 hidden size-4 shrink-0 text-muted-foreground sm:block" />
+                {showDragHandle && (
+                    <GripVertical className="mt-0.5 hidden size-4 shrink-0 text-muted-foreground sm:block" />
+                )}
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{meal.title}</p>
+                        <p className="leading-5 font-medium">{meal.title}</p>
                         {meal.status === 'skipped' && (
                             <Badge variant="secondary">Skipped</Badge>
                         )}
@@ -167,6 +274,25 @@ function SelectedMealEditor({
                             {meal.summary}
                         </p>
                     )}
+                    {(meal.estimated_minutes || meal.estimated_cost) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                            {meal.estimated_minutes && (
+                                <span className="flex items-center gap-1">
+                                    <Clock3 className="size-3" />
+                                    {meal.estimated_minutes} min
+                                </span>
+                            )}
+                            {meal.estimated_cost && (
+                                <span
+                                    className="flex items-center gap-1"
+                                    data-numeric="tabular"
+                                >
+                                    <CircleDollarSign className="size-3" />
+                                    ~${meal.estimated_cost.toFixed(2)}
+                                </span>
+                            )}
+                        </div>
+                    )}
                     {meal.recipe_version && (
                         <Link
                             href={`/recipes/${meal.recipe_version.recipe_id}`}
@@ -178,65 +304,68 @@ function SelectedMealEditor({
                     <MealExplanation meal={meal} />
                 </div>
             </div>
-            <details className="mt-3 border-t pt-3">
-                <summary className="cursor-pointer list-none text-xs text-muted-foreground">
-                    Edit meal
-                </summary>
-                <form
-                    className="mt-3 grid gap-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        form.put(`/planned-meals/${meal.id}`, {
-                            preserveScroll: true,
-                        });
-                    }}
-                >
-                    <div className="grid grid-cols-2 gap-2">
+            {showMealControls && (
+                <details className="mt-3 border-t pt-3">
+                    <summary className="cursor-pointer list-none text-xs text-muted-foreground">
+                        Edit meal
+                    </summary>
+                    <form
+                        className="mt-3 grid gap-2"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            form.put(`/planned-meals/${meal.id}`, {
+                                preserveScroll: true,
+                            });
+                        }}
+                    >
+                        <div className="grid grid-cols-2 gap-2">
+                            <Input
+                                aria-label="Meal servings"
+                                type="number"
+                                min="0.25"
+                                step="0.25"
+                                value={form.data.servings}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'servings',
+                                        Number(event.target.value),
+                                    )
+                                }
+                            />
+                            <select
+                                aria-label="Meal status"
+                                className="rounded-md border bg-background px-2 text-xs"
+                                value={form.data.status}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'status',
+                                        event.target.value as
+                                            'planned' | 'skipped',
+                                    )
+                                }
+                            >
+                                <option value="planned">Planned</option>
+                                <option value="skipped">Skipped</option>
+                            </select>
+                        </div>
                         <Input
-                            aria-label="Meal servings"
-                            type="number"
-                            min="0.25"
-                            step="0.25"
-                            value={form.data.servings}
+                            aria-label="Meal notes"
+                            placeholder="Notes"
+                            value={form.data.notes}
                             onChange={(event) =>
-                                form.setData(
-                                    'servings',
-                                    Number(event.target.value),
-                                )
+                                form.setData('notes', event.target.value)
                             }
                         />
-                        <select
-                            aria-label="Meal status"
-                            className="rounded-md border bg-background px-2 text-xs"
-                            value={form.data.status}
-                            onChange={(event) =>
-                                form.setData(
-                                    'status',
-                                    event.target.value as 'planned' | 'skipped',
-                                )
-                            }
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={form.processing}
                         >
-                            <option value="planned">Planned</option>
-                            <option value="skipped">Skipped</option>
-                        </select>
-                    </div>
-                    <Input
-                        aria-label="Meal notes"
-                        placeholder="Notes"
-                        value={form.data.notes}
-                        onChange={(event) =>
-                            form.setData('notes', event.target.value)
-                        }
-                    />
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={form.processing}
-                    >
-                        Save meal
-                    </Button>
-                </form>
-            </details>
+                            Save meal
+                        </Button>
+                    </form>
+                </details>
+            )}
             {emptySlots.length > 0 && (
                 <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                     Move to
@@ -251,7 +380,8 @@ function SelectedMealEditor({
                             );
 
                             if (target) {
-                                moveMeal(meal, target);
+                                onMove?.();
+                                moveMeal(meal, target, workspace.plan.revision);
                             }
                         }}
                     >
@@ -295,7 +425,7 @@ function OpenMealEditor({
             number | '',
         source_planned_meal_id: '' as number | '',
         title: '',
-        servings: Math.max(1, slot.participants.length),
+        servings: Math.max(1, slotServingCount(slot)),
         expected_revision: workspace.plan.revision,
     });
 
@@ -405,12 +535,10 @@ function SlotCard({
     workspace,
     slot,
     emptySlots,
-    compact = false,
 }: {
     workspace: MealPlanWorkspace;
     slot: MealSlot;
     emptySlots: MealSlot[];
-    compact?: boolean;
 }) {
     const [over, setOver] = useState(false);
 
@@ -445,13 +573,12 @@ function SlotCard({
                     .find((item) => item?.id === mealId);
 
                 if (meal && !slot.planned_meal) {
-                    moveMeal(meal, slot);
+                    moveMeal(meal, slot, workspace.plan.revision);
                 }
             }}
             className={cn(
                 'rounded-lg border bg-background p-3 transition-colors',
                 over && 'border-primary bg-primary/5',
-                compact && 'p-2.5',
             )}
         >
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -459,7 +586,7 @@ function SlotCard({
                     {slot.label ?? slot.kind}
                 </p>
                 <span className="text-[11px] text-muted-foreground">
-                    {slot.participants.length} eating
+                    {slotServingCount(slot)} eating
                 </span>
             </div>
             {slot.planned_meal ? (
@@ -468,11 +595,170 @@ function SlotCard({
                     slot={slot}
                     meal={slot.planned_meal}
                     emptySlots={emptySlots}
+                    showMealControls={false}
                 />
             ) : (
                 <OpenMealEditor workspace={workspace} slot={slot} />
             )}
         </article>
+    );
+}
+
+function CalendarSlotCard({
+    workspace,
+    slot,
+    emptySlots,
+}: {
+    workspace: MealPlanWorkspace;
+    slot: MealSlot;
+    emptySlots: MealSlot[];
+}) {
+    const [over, setOver] = useState(false);
+    const [detailsOpen, setDetailsOpen] = useState(false);
+    const meal = slot.planned_meal;
+    const label = slot.label ?? slot.kind;
+    const displayLabel = label.charAt(0).toUpperCase() + label.slice(1);
+
+    return (
+        <>
+            <article
+                data-testid={`meal-slot-${slot.id}`}
+                data-open={meal ? 'false' : 'true'}
+                draggable={Boolean(meal)}
+                onDragStart={(event) => {
+                    if (meal) {
+                        event.dataTransfer.setData(
+                            'text/chef-planned-meal',
+                            String(meal.id),
+                        );
+                    }
+                }}
+                onDragOver={(event) => {
+                    if (!meal) {
+                        event.preventDefault();
+                        setOver(true);
+                    }
+                }}
+                onDragLeave={() => setOver(false)}
+                onDrop={(event) => {
+                    event.preventDefault();
+                    setOver(false);
+                    const mealId = Number(
+                        event.dataTransfer.getData('text/chef-planned-meal'),
+                    );
+                    const droppedMeal = workspace.plan.slots
+                        .map((item) => item.planned_meal)
+                        .find((item) => item?.id === mealId);
+
+                    if (droppedMeal && !meal) {
+                        moveMeal(droppedMeal, slot, workspace.plan.revision);
+                    }
+                }}
+                className={cn(
+                    'rounded-xl bg-background px-3 py-2.5 shadow-xs ring-1 ring-border/40 transition-[background-color,box-shadow]',
+                    over && 'bg-primary/5 ring-primary',
+                )}
+            >
+                <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium tracking-wide text-muted-foreground">
+                            {displayLabel}
+                        </p>
+                        {meal ? (
+                            <>
+                                <p className="mt-1 line-clamp-2 text-sm leading-5 font-medium">
+                                    {meal.title}
+                                </p>
+                                <p
+                                    className="mt-1.5 truncate text-[11px] text-muted-foreground"
+                                    data-numeric="tabular"
+                                >
+                                    {slotServingCount(slot)}{' '}
+                                    {slotServingCount(slot) === 1
+                                        ? 'person'
+                                        : 'people'}
+                                    {meal.estimated_minutes
+                                        ? ` · ${meal.estimated_minutes} min`
+                                        : ''}
+                                    {meal.estimated_cost
+                                        ? ` · ~$${meal.estimated_cost.toFixed(2)}`
+                                        : ''}
+                                </p>
+                            </>
+                        ) : (
+                            <button
+                                type="button"
+                                className="mt-1 text-sm font-medium text-primary hover:underline"
+                                onClick={() => setDetailsOpen(true)}
+                            >
+                                Choose a meal
+                            </button>
+                        )}
+                    </div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="-mt-1 -mr-1 size-7 shrink-0"
+                                aria-label={`Open actions for ${displayLabel} on ${formatDay(slot.date)}`}
+                            >
+                                <Ellipsis />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                                onSelect={() => setDetailsOpen(true)}
+                            >
+                                {meal ? <Pencil /> : <Plus />}
+                                {meal
+                                    ? 'Meal details and actions'
+                                    : 'Choose a meal'}
+                            </DropdownMenuItem>
+                            {meal?.recipe_version && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem asChild>
+                                        <Link
+                                            href={`/recipes/${meal.recipe_version.recipe_id}`}
+                                        >
+                                            <BookOpen /> Open recipe
+                                        </Link>
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </article>
+            <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+                <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {meal ? 'Meal details' : `Choose ${displayLabel}`}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {formatDay(slot.date)} · {displayLabel} ·{' '}
+                            {slotServingCount(slot)}{' '}
+                            {slotServingCount(slot) === 1 ? 'person' : 'people'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {meal ? (
+                        <SelectedMealEditor
+                            workspace={workspace}
+                            slot={slot}
+                            meal={meal}
+                            emptySlots={emptySlots}
+                            showDragHandle={false}
+                            onMove={() => setDetailsOpen(false)}
+                        />
+                    ) : (
+                        <OpenMealEditor workspace={workspace} slot={slot} />
+                    )}
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
 
@@ -500,6 +786,9 @@ export function PlanWorkspace({
         (slot) => slot.planned_meal === null,
     );
     const dates = planDates(workspace.plan.starts_on, workspace.plan.ends_on);
+    const plannedSlotCount = workspace.plan.slots.filter(
+        (slot) => slot.planned_meal !== null,
+    ).length;
 
     if (view === 'list') {
         return (
@@ -544,9 +833,23 @@ export function PlanWorkspace({
     }
 
     return (
-        <main className="min-w-0 flex-1 overflow-auto">
-            <div className="min-w-[52rem] p-5 xl:min-w-0">
-                <div className="grid grid-cols-7 gap-2">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-muted/10">
+            <div className="p-4 sm:p-5">
+                <header className="mb-5">
+                    <div>
+                        <h2 className="flex items-center gap-2 text-sm font-semibold">
+                            <CalendarDays className="size-4" /> Meal calendar
+                        </h2>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {plannedSlotCount} planned · {emptySlots.length}{' '}
+                            open
+                        </p>
+                    </div>
+                </header>
+                <div
+                    data-testid="calendar-grid"
+                    className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] items-start gap-3"
+                >
                     {dates.map((date) => {
                         const slots = workspace.plan.slots.filter(
                             (slot) => slot.date.slice(0, 10) === date,
@@ -555,24 +858,26 @@ export function PlanWorkspace({
                         return (
                             <section
                                 key={date}
-                                className="min-h-48 rounded-xl border bg-muted/15 p-2"
+                                data-testid="calendar-day"
+                                className="min-w-0"
                             >
-                                <h2 className="mb-2 px-1 text-xs font-semibold">
-                                    {formatDay(date)}
-                                </h2>
+                                <div className="mb-2 px-1">
+                                    <h3 className="text-sm font-semibold">
+                                        {formatDay(date)}
+                                    </h3>
+                                </div>
                                 <div className="space-y-2">
                                     {slots.map((slot) => (
-                                        <SlotCard
+                                        <CalendarSlotCard
                                             key={slot.id}
                                             workspace={workspace}
                                             slot={slot}
                                             emptySlots={emptySlots}
-                                            compact
                                         />
                                     ))}
                                     {slots.length === 0 && (
-                                        <p className="px-1 py-4 text-center text-[11px] text-muted-foreground">
-                                            No meals
+                                        <p className="rounded-xl bg-background/60 px-3 py-6 text-center text-xs text-muted-foreground">
+                                            No meal slots
                                         </p>
                                     )}
                                 </div>
@@ -580,10 +885,6 @@ export function PlanWorkspace({
                         );
                     })}
                 </div>
-                <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                    <CircleAlert className="size-3.5" /> Drag a selected meal to
-                    an open slot, or use its Move to menu.
-                </p>
             </div>
         </main>
     );

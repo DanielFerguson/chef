@@ -61,7 +61,7 @@ class Person extends Model
     /** @return HasMany<Preference, $this> */
     public function preferences(): HasMany
     {
-        return $this->hasMany(Preference::class);
+        return $this->hasMany(Preference::class)->whereNull('superseded_at');
     }
 
     /** @return HasMany<Constraint, $this> */

@@ -22,4 +22,9 @@ class MealPlanPolicy
     {
         return $this->view($user, $mealPlan);
     }
+
+    public function delete(User $user, MealPlan $mealPlan): bool
+    {
+        return $user->can('update', $mealPlan->team);
+    }
 }

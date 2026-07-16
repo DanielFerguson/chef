@@ -1,10 +1,15 @@
 import type { Auth } from '@/types/auth';
 
-type RecentMealPlan = {
+export type RecentMealPlan = {
     id: number;
     title: string;
     starts_on: string;
     ends_on: string;
+    revision: number;
+    can: {
+        update: boolean;
+        delete: boolean;
+    };
 };
 
 declare module 'react' {

@@ -50,4 +50,10 @@ class Conversation extends Model
     {
         return $this->hasMany(Message::class)->orderBy('id');
     }
+
+    /** @return HasMany<ConversationFeedback, $this> */
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(ConversationFeedback::class);
+    }
 }

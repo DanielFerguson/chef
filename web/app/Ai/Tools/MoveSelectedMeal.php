@@ -34,7 +34,12 @@ class MoveSelectedMeal implements Tool
             ->where('meal_plan_id', $this->mealPlan->id)
             ->findOrFail($request->integer('target_meal_slot_id'));
 
-        return $this->movePlannedMeal->handle($meal, $target, $this->actor)->toJson(JSON_PRETTY_PRINT);
+        return $this->movePlannedMeal->handle(
+            $meal,
+            $target,
+            $this->actor,
+            $this->mealPlan->fresh()->revision,
+        )->toJson(JSON_PRETTY_PRINT);
     }
 
     public function schema(JsonSchema $schema): array

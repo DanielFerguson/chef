@@ -12,13 +12,19 @@ use Laravel\Ai\Streaming\Events\TextDelta;
 
 class LaravelAiConversationEngine implements ChefConversationEngine
 {
+    public function __construct(private readonly BuildConversationRecoveryReply $buildRecoveryReply) {}
+
     public function respondTo(Conversation $conversation, Message $message): AssistantReply
     {
         $actor = $message->author()->firstOrFail();
+        $initialPlanRevision = $conversation->mealPlan?->revision;
         $response = (new ChefAgent($conversation, $message->id, $actor, $message))->prompt($message->content);
+        $content = trim($response->text) === ''
+            ? $this->buildRecoveryReply->handle($conversation, $message, $initialPlanRevision)
+            : $response->text;
 
         return new AssistantReply(
-            content: $response->text,
+            content: $content,
             metadata: ['invocation_id' => $response->invocationId],
         );
     }
@@ -27,12 +33,22 @@ class LaravelAiConversationEngine implements ChefConversationEngine
     public function streamResponse(Conversation $conversation, Message $message): iterable
     {
         $actor = $message->author()->firstOrFail();
+        $initialPlanRevision = $conversation->mealPlan?->revision;
         $response = (new ChefAgent($conversation, $message->id, $actor, $message))->stream($message->content);
+        $content = '';
 
         foreach ($response as $event) {
             if ($event instanceof TextDelta) {
+                $content .= $event->delta;
                 yield new AssistantStreamChunk(type: 'delta', delta: $event->delta);
             }
+        }
+
+        if (trim($content) === '') {
+            yield new AssistantStreamChunk(
+                type: 'delta',
+                delta: $this->buildRecoveryReply->handle($conversation, $message, $initialPlanRevision),
+            );
         }
 
         yield new AssistantStreamChunk(

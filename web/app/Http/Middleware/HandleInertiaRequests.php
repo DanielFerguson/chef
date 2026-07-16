@@ -50,7 +50,18 @@ class HandleInertiaRequests extends Middleware
             'recentMealPlans' => fn () => $user?->currentTeam?->mealPlans()
                 ->latest('updated_at')
                 ->limit(8)
-                ->get(['id', 'title', 'starts_on', 'ends_on']) ?? [],
+                ->get(['id', 'team_id', 'title', 'starts_on', 'ends_on', 'revision'])
+                ->map(fn ($mealPlan) => [
+                    'id' => $mealPlan->id,
+                    'title' => $mealPlan->title,
+                    'starts_on' => $mealPlan->starts_on->toDateString(),
+                    'ends_on' => $mealPlan->ends_on->toDateString(),
+                    'revision' => $mealPlan->revision,
+                    'can' => [
+                        'update' => $user->can('update', $mealPlan),
+                        'delete' => $user->can('delete', $mealPlan),
+                    ],
+                ]) ?? [],
             'flash' => [
                 'invitationUrl' => fn () => $request->session()->get('invitation_url'),
             ],

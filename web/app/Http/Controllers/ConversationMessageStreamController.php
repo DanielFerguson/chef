@@ -10,6 +10,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -85,6 +86,10 @@ class ConversationMessageStreamController extends Controller
                         ob_flush();
                     }
                     flush();
+                }
+
+                if (trim($content) === '') {
+                    throw new RuntimeException('Chef completed without a visible response.');
                 }
 
                 $assistant = $conversation->messages()->firstOrCreate([

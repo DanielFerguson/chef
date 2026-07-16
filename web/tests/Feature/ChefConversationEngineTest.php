@@ -4,6 +4,8 @@ use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Ai\LaravelAiConversationEngine;
+use App\Ai\Tools\ConfirmPlan;
+use App\Ai\Tools\CorrectHouseholdPreference;
 use App\Ai\Tools\CreateFamilyRecipe;
 use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
@@ -90,6 +92,8 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
         SelectPlanMeal::class,
         MoveSelectedMeal::class,
         RecordHouseholdPreference::class,
+        CorrectHouseholdPreference::class,
+        ConfirmPlan::class,
         RecordSafetyConstraint::class,
     ]);
 });

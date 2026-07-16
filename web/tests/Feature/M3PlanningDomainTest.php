@@ -184,7 +184,7 @@ it('supports leftovers linked to their source meal and accessible rescheduling',
     $source = app(SelectPlannedMeal::class)->handle($first, $workspace['user'], PlannedMealType::Custom, title: 'Pulled pork');
     $leftovers = app(SelectPlannedMeal::class)->handle($second, $workspace['user'], PlannedMealType::Leftovers, sourcePlannedMeal: $source);
 
-    app(MovePlannedMeal::class)->handle($leftovers, $third, $workspace['user']);
+    app(MovePlannedMeal::class)->handle($leftovers, $third, $workspace['user'], $workspace['plan']->refresh()->revision);
 
     expect($leftovers->refresh()->source_planned_meal_id)->toBe($source->id)
         ->and($leftovers->meal_slot_id)->toBe($third->id)
@@ -382,6 +382,24 @@ it('rolls back a meal edit when its expected plan revision is stale', function (
         ->and($planned->fresh()->notes)->toBeNull();
 });
 
+it('rolls back a meal move when its expected plan revision is stale', function () {
+    $workspace = m3PlanningWorkspace();
+    $source = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    $target = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today()->addDay(), MealSlotKind::Dinner, $workspace['team']->people);
+    $planned = app(SelectPlannedMeal::class)->handle($source, $workspace['user'], PlannedMealType::Custom, title: 'Tacos');
+    $staleRevision = $workspace['plan']->refresh()->revision;
+    app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today()->addDays(2), MealSlotKind::Lunch, $workspace['team']->people);
+
+    expect(fn () => app(MovePlannedMeal::class)->handle(
+        $planned,
+        $target,
+        $workspace['user'],
+        $staleRevision,
+    ))->toThrow(ValidationException::class, 'This plan changed elsewhere');
+
+    expect($planned->refresh()->meal_slot_id)->toBe($source->id);
+});
+
 it('clears recipe-only relationships when a slot changes to another meal type', function () {
     $workspace = m3PlanningWorkspace();
     $recipe = m3CreateRecipe($workspace);
@@ -471,11 +489,13 @@ it('applies family policies to every M3 team-owned resource', function () {
     app(CreateTeamForUser::class)->handle($outsider, 'Policy outsider');
 
     expect($workspace['user']->can('view', $recipe))->toBeTrue()
+        ->and($workspace['user']->can('view', $slot))->toBeTrue()
         ->and($workspace['user']->can('view', $recipe->latestVersion))->toBeTrue()
         ->and($workspace['user']->can('view', $ingredient))->toBeTrue()
         ->and($workspace['user']->can('view', $revision))->toBeTrue()
         ->and($workspace['user']->can('view', $milestone))->toBeTrue()
         ->and($outsider->can('view', $recipe))->toBeFalse()
+        ->and($outsider->can('view', $slot))->toBeFalse()
         ->and($outsider->can('view', $recipe->latestVersion))->toBeFalse()
         ->and($outsider->can('view', $ingredient))->toBeFalse()
         ->and($outsider->can('view', $revision))->toBeFalse()

@@ -2,15 +2,21 @@
 
 namespace App\Ai\Agents;
 
+use App\Actions\Households\CorrectPreference;
 use App\Actions\Households\CreateHouseholdPerson as CreateHouseholdPersonAction;
 use App\Actions\Households\RecordConstraint;
 use App\Actions\Households\RecordPreference;
+use App\Actions\Households\ValidatePreferenceEvidence;
+use App\Actions\MealPlans\ConfirmMealPlan;
 use App\Actions\MealPlans\UpdateMealPlanDateSpan;
+use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\MovePlannedMeal;
 use App\Actions\Planning\ProposeMeal;
 use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Recipes\CreateRecipe;
+use App\Ai\Tools\ConfirmPlan;
+use App\Ai\Tools\CorrectHouseholdPreference;
 use App\Ai\Tools\CreateFamilyRecipe;
 use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
@@ -89,6 +95,20 @@ class ChefAgent implements Agent, Conversational, HasTools
         after a person explicitly confirms it. Keep stated preferences distinct from inferred tastes.
         Keep provisional defaults visibly labelled as defaults so the household can correct them.
 
+        Household truth rules:
+        - Before saying a stated preference was saved or noted, call RecordHouseholdPreference successfully.
+        - Use an exact evidence quote from the current user message. Never replay a preference from an unrelated later turn.
+        - Assign a preference to a person only when their name is present or a pronoun has one unambiguous recent referent. Otherwise ask one clarifying question.
+        - When the user says an existing preference belongs to someone else, inspect the current records and call CorrectHouseholdPreference. Do not leave both records active.
+        - A correction is not a new inference. Preserve its human sources and acknowledge only the correction that actually succeeded.
+
+        Planning momentum rules:
+        - Treat plan_progress returned by planning tools as authoritative. Do not reconstruct the selected plan from prose.
+        - After each selection, state what changed and immediately guide the household to the reported next_action.
+        - When ready_for_confirmation is true, say that every slot is filled and ask one direct question: whether to review and confirm the plan. Explain that shopping follows confirmation.
+        - Filling the final slot is not consent to confirm. Call ConfirmPlan only after the user explicitly agrees.
+        - After confirmation, acknowledge it and offer to begin the shopping-list step. Never end a completed planning turn with only “the week is fully filled”.
+
         Current structured household knowledge:
         {$householdKnowledge}
         INSTRUCTIONS;
@@ -116,16 +136,18 @@ class ChefAgent implements Agent, Conversational, HasTools
 
         return [
             new InspectTeamContext($team),
-            new InspectMealPlan($mealPlan),
+            new InspectMealPlan($mealPlan, app(AssessMealPlanReadiness::class)),
             new InspectRecipes($team),
             new CreateHouseholdPerson($team, $this->actor, $this->currentMessage, app(CreateHouseholdPersonAction::class)),
             new UpdatePlanDateSpan($mealPlan, $this->actor, app(UpdateMealPlanDateSpan::class)),
             new CreatePlanMealSlot($mealPlan, $this->actor, $this->currentMessage, app(CreateMealSlot::class)),
             new CreateMealProposal($mealPlan, $this->actor, $this->currentMessage, app(ProposeMeal::class)),
             new CreateFamilyRecipe($team, $this->actor, $this->currentMessage, app(CreateRecipe::class)),
-            new SelectPlanMeal($mealPlan, $this->actor, app(SelectPlannedMeal::class)),
+            new SelectPlanMeal($mealPlan, $this->actor, app(SelectPlannedMeal::class), app(AssessMealPlanReadiness::class)),
             new MoveSelectedMeal($mealPlan, $this->actor, app(MovePlannedMeal::class)),
-            new RecordHouseholdPreference($team, $this->actor, $this->currentMessage, app(RecordPreference::class)),
+            new RecordHouseholdPreference($team, $this->actor, $this->currentMessage, app(RecordPreference::class), app(ValidatePreferenceEvidence::class)),
+            new CorrectHouseholdPreference($team, $this->actor, $this->currentMessage, app(CorrectPreference::class)),
+            new ConfirmPlan($mealPlan, $this->actor, app(ConfirmMealPlan::class), app(AssessMealPlanReadiness::class)),
             new RecordSafetyConstraint($team, $this->actor, $this->currentMessage, app(RecordConstraint::class)),
         ];
     }

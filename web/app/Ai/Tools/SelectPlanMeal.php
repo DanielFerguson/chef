@@ -2,6 +2,7 @@
 
 namespace App\Ai\Tools;
 
+use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\SelectPlannedMeal;
 use App\Enums\PlannedMealType;
 use App\Models\MealPlan;
@@ -20,6 +21,7 @@ class SelectPlanMeal implements Tool
         private readonly MealPlan $mealPlan,
         private readonly User $actor,
         private readonly SelectPlannedMeal $selectMeal,
+        private readonly AssessMealPlanReadiness $assessReadiness,
     ) {}
 
     public function description(): Stringable|string
@@ -41,7 +43,7 @@ class SelectPlanMeal implements Tool
         $servings = $request->float('servings');
         $estimatedMinutes = $request->integer('estimated_minutes');
 
-        return $this->selectMeal->handle(
+        $plannedMeal = $this->selectMeal->handle(
             $slot,
             $this->actor,
             PlannedMealType::from($request->string('type')->toString()),
@@ -52,7 +54,12 @@ class SelectPlanMeal implements Tool
             $estimatedMinutes > 0 ? $estimatedMinutes : null,
             $request->float('estimated_cost') ?: null,
             $sourceMeal,
-        )->toJson(JSON_PRETTY_PRINT);
+        );
+
+        return json_encode([
+            'planned_meal' => $plannedMeal,
+            'plan_progress' => $this->assessReadiness->handle($this->mealPlan->refresh()),
+        ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
     }
 
     public function schema(JsonSchema $schema): array

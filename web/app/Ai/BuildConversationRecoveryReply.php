@@ -1,0 +1,68 @@
+<?php
+
+namespace App\Ai;
+
+use App\Actions\Planning\AssessMealPlanReadiness;
+use App\Models\Conversation;
+use App\Models\Message;
+use App\Models\Preference;
+use RuntimeException;
+
+class BuildConversationRecoveryReply
+{
+    public function __construct(private readonly AssessMealPlanReadiness $assessReadiness) {}
+
+    public function handle(Conversation $conversation, Message $message, ?int $initialPlanRevision): string
+    {
+        $parts = [];
+        $plan = $conversation->mealPlan?->refresh();
+
+        if ($plan !== null && $initialPlanRevision !== null) {
+            $changes = $plan->revisions()
+                ->where('revision', '>', $initialPlanRevision)
+                ->oldest('revision')
+                ->pluck('summary');
+
+            if ($changes->isNotEmpty()) {
+                $parts[] = "Done — I completed these plan changes:\n".$changes->map(fn (string $summary) => '- '.$summary)->join("\n");
+            }
+        }
+
+        $preferences = Preference::query()
+            ->active()
+            ->with('person')
+            ->where('team_id', $conversation->team_id)
+            ->where(function ($query) use ($message): void {
+                $query->where('source_message_id', $message->id)
+                    ->orWhere('correction_message_id', $message->id);
+            })
+            ->get();
+
+        if ($preferences->isNotEmpty()) {
+            $truth = $preferences->map(function (Preference $preference): string {
+                $owner = $preference->person_id === null ? 'The family' : $preference->person->name;
+
+                return $owner.' '.($preference->sentiment->value === 'dislike' ? 'avoids ' : 'likes ').$preference->subject;
+            });
+            $parts[] = "I also updated the household information:\n".$truth->map(fn (string $item) => '- '.$item)->join("\n");
+        }
+
+        if ($parts === []) {
+            throw new RuntimeException('Chef completed without a response or a verifiable structured change.');
+        }
+
+        if ($plan !== null) {
+            $readiness = $this->assessReadiness->handle($plan);
+
+            if ($readiness['ready_for_confirmation']) {
+                $parts[] = "All {$readiness['total_slots']} meal slots are filled. Would you like to review and confirm the plan? Once confirmed, the next step is the shopping list.";
+            } elseif ($readiness['open_slots'] > 0) {
+                $parts[] = $readiness['open_slots'].' meal '.($readiness['open_slots'] === 1 ? 'slot still needs' : 'slots still need').' a choice. Tell me which option to place next.';
+            } elseif ($readiness['confirmed']) {
+                $parts[] = 'The plan is confirmed. The next step is to build and review the shopping list.';
+            }
+        }
+
+        return implode("\n\n", $parts);
+    }
+}

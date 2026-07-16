@@ -8,6 +8,15 @@ export type Message = {
     role: 'user' | 'assistant';
     content: string;
     author?: UserSummary | null;
+    feedback?: ConversationFeedback[];
+};
+
+export type ConversationFeedback = {
+    id: number;
+    context: 'assistant_message' | 'planning_confirmed';
+    rating: 'helpful' | 'unhelpful';
+    reasons: string[] | null;
+    comment: string | null;
 };
 
 export type Preference = {
@@ -119,6 +128,7 @@ export type MealPlanWorkspace = {
     conversation: {
         id: number;
         messages: Message[];
+        feedback: ConversationFeedback[];
     };
     household: {
         id: number;
@@ -138,6 +148,22 @@ export type MealPlanWorkspace = {
             summary: string | null;
         };
     }[];
+    readiness: {
+        total_slots: number;
+        filled_slots: number;
+        open_slots: number;
+        pending_proposals: number;
+        slots_without_participants: number;
+        ready_for_confirmation: boolean;
+        confirmed: boolean;
+        next_action:
+            | 'fill_open_slots'
+            | 'resolve_proposals'
+            | 'confirm_participants'
+            | 'review_and_confirm'
+            | 'begin_shopping'
+            | 'continue_planning';
+    };
 };
 
 export type StreamEvent = {

@@ -11,7 +11,6 @@ import {
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { TeamSwitcher } from '@/components/team-switcher';
 import {
     Sidebar,
     SidebarContent,
@@ -21,6 +20,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { PlanRailItem } from '@/features/meal-plans/plan-rail-item';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
@@ -88,9 +88,11 @@ export function AppSidebar() {
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                         <SidebarMenuItem>
-                            <SidebarMenuButton disabled tooltip="Shopping">
-                                <ShoppingBasket />
-                                <span>Shopping</span>
+                            <SidebarMenuButton asChild tooltip="Shopping">
+                                <Link href="/shopping">
+                                    <ShoppingBasket />
+                                    <span>Shopping</span>
+                                </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                         <SidebarMenuItem>
@@ -116,13 +118,7 @@ export function AppSidebar() {
                             aria-label="Recent meal plans"
                         >
                             {recentMealPlans.map((plan) => (
-                                <Link
-                                    key={plan.id}
-                                    href={`/meal-plans/${plan.id}`}
-                                    className="block truncate rounded-md px-2 py-1.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent"
-                                >
-                                    {plan.title}
-                                </Link>
+                                <PlanRailItem key={plan.id} plan={plan} />
                             ))}
                         </nav>
                     )}
@@ -130,7 +126,6 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <TeamSwitcher />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

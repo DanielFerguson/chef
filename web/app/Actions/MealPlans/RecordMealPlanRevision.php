@@ -22,7 +22,7 @@ class RecordMealPlanRevision
             $locked = MealPlan::query()->lockForUpdate()->findOrFail($mealPlan->id);
 
             if ($expectedRevision !== null && $locked->revision !== $expectedRevision) {
-                throw ValidationException::withMessages(['revision' => 'This plan changed elsewhere. Refresh it before making that change.']);
+                throw ValidationException::withMessages(['expected_revision' => 'This plan changed elsewhere. Refresh it before making that change.']);
             }
 
             $nextRevision = $locked->revision + 1;
@@ -34,6 +34,31 @@ class RecordMealPlanRevision
             }
 
             $locked->update($updates);
+
+            if ($locked->planning_confirmed_at !== null) {
+                $shoppingList = $locked->shoppingList;
+
+                if ($shoppingList !== null) {
+                    $storedDiff = $shoppingList->stale_diff;
+                    $storedChanges = $storedDiff === null ? [] : $storedDiff['changes'];
+                    $staleDiff = [
+                        'from_plan_revision' => $storedDiff === null
+                            ? $shoppingList->source_plan_revision
+                            : $storedDiff['from_plan_revision'],
+                        'to_plan_revision' => $nextRevision,
+                        'changes' => [...$storedChanges, [
+                            'revision' => $nextRevision,
+                            'summary' => $summary,
+                            'details' => $changes,
+                        ]],
+                    ];
+                    $shoppingList->update([
+                        'stale_at' => now(),
+                        'stale_reason' => $summary,
+                        'stale_diff' => $staleDiff,
+                    ]);
+                }
+            }
 
             return $locked->revisions()->create([
                 'team_id' => $locked->team_id,

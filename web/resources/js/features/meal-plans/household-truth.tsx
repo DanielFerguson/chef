@@ -14,6 +14,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { Constraint, MealPlanWorkspace, Preference } from './types';
 
+function groupByOwner<T extends { person_id: number | null }>(items: T[]) {
+    const groups = new Map<number | null, T[]>();
+
+    items.forEach((item) => {
+        const ownerItems = groups.get(item.person_id);
+
+        if (ownerItems) {
+            ownerItems.push(item);
+        } else {
+            groups.set(item.person_id, [item]);
+        }
+    });
+
+    return groups;
+}
+
 function TruthGroup({
     title,
     empty,
@@ -25,7 +41,9 @@ function TruthGroup({
 }) {
     return (
         <div>
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
+            <h3 className="text-xs font-medium text-muted-foreground">
+                {title}
+            </h3>
             {children.length > 0 ? (
                 <ul>{children}</ul>
             ) : (
@@ -35,13 +53,37 @@ function TruthGroup({
     );
 }
 
-function EditablePreference({
-    preference,
+function TruthOwnerGroup({
     owner,
+    category,
+    children,
 }: {
-    preference: Preference;
     owner: string;
+    category: string;
+    children: React.ReactNode[];
 }) {
+    return (
+        <li className="py-1 first:pt-1 last:pb-0" data-truth-owner={owner}>
+            <h4 className="text-xs font-medium text-foreground">{owner}</h4>
+            <ul className="mt-0.5" aria-label={`${owner} ${category}`}>
+                {children}
+            </ul>
+        </li>
+    );
+}
+
+function TruthActions({ children }: { children: React.ReactNode }) {
+    return (
+        <div
+            data-truth-actions
+            className="ml-auto flex shrink-0 items-center rounded-md bg-background/95 pl-1 opacity-100 transition-opacity md:[@media(hover:hover)]:pointer-events-none md:[@media(hover:hover)]:absolute md:[@media(hover:hover)]:right-0 md:[@media(hover:hover)]:opacity-0 md:[@media(hover:hover)]:group-focus-within:pointer-events-auto md:[@media(hover:hover)]:group-focus-within:opacity-100 md:[@media(hover:hover)]:group-hover:pointer-events-auto md:[@media(hover:hover)]:group-hover:opacity-100"
+        >
+            {children}
+        </div>
+    );
+}
+
+function EditablePreference({ preference }: { preference: Preference }) {
     const [draft, setDraft] = useState<string | null>(null);
 
     const save = () => {
@@ -64,16 +106,24 @@ function EditablePreference({
     };
 
     return (
-        <li className="flex items-center gap-2 py-1.5 text-sm">
+        <li className="group relative flex min-h-7 items-center gap-2 py-0.5 text-sm">
+            <span aria-hidden="true" className="text-muted-foreground">
+                •
+            </span>
             {draft !== null ? (
                 <>
                     <Input
                         value={draft}
                         onChange={(event) => setDraft(event.target.value)}
-                        className="h-8"
+                        className="h-7"
                         aria-label="Preference"
                     />
-                    <Button size="icon" variant="ghost" onClick={save}>
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-7"
+                        onClick={save}
+                    >
                         <Check />
                         <span className="sr-only">Save preference</span>
                     </Button>
@@ -81,49 +131,48 @@ function EditablePreference({
             ) : (
                 <>
                     <span className="min-w-0 flex-1 truncate">
-                        <span className="text-muted-foreground">{owner}: </span>
                         {preference.sentiment === 'dislike'
                             ? 'Avoid '
                             : 'Likes '}
                         {preference.subject}
                     </span>
-                    <Badge variant="outline" className="font-normal">
-                        {preference.provenance}
-                    </Badge>
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setDraft(preference.subject)}
-                    >
-                        <Pencil />
-                        <span className="sr-only">Edit preference</span>
-                    </Button>
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() =>
-                            router.delete(
-                                destroyPreference.url(preference.id),
-                                { preserveScroll: true },
-                            )
-                        }
-                    >
-                        <Trash2 />
-                        <span className="sr-only">Delete preference</span>
-                    </Button>
+                    {preference.provenance === 'feedback' && (
+                        <Badge variant="outline" className="font-normal">
+                            feedback
+                        </Badge>
+                    )}
+                    <TruthActions>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            onClick={() => setDraft(preference.subject)}
+                        >
+                            <Pencil />
+                            <span className="sr-only">Edit preference</span>
+                        </Button>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            onClick={() =>
+                                router.delete(
+                                    destroyPreference.url(preference.id),
+                                    { preserveScroll: true },
+                                )
+                            }
+                        >
+                            <Trash2 />
+                            <span className="sr-only">Delete preference</span>
+                        </Button>
+                    </TruthActions>
                 </>
             )}
         </li>
     );
 }
 
-function EditableConstraint({
-    constraint,
-    owner,
-}: {
-    constraint: Constraint;
-    owner: string;
-}) {
+function EditableConstraint({ constraint }: { constraint: Constraint }) {
     const [draft, setDraft] = useState<string | null>(null);
     const source = constraint.confirmation_message;
 
@@ -148,18 +197,23 @@ function EditableConstraint({
     };
 
     return (
-        <li className="py-1.5 text-sm">
-            <div className="flex items-center gap-2">
+        <li className="py-1 text-sm">
+            <div className="group relative flex min-h-7 items-center gap-2">
                 <ShieldCheck className="size-4 shrink-0 text-primary" />
                 {draft !== null ? (
                     <>
                         <Input
                             value={draft}
                             onChange={(event) => setDraft(event.target.value)}
-                            className="h-8"
+                            className="h-7"
                             aria-label="Safety rule"
                         />
-                        <Button size="icon" variant="ghost" onClick={save}>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7"
+                            onClick={save}
+                        >
                             <Check />
                             <span className="sr-only">Save constraint</span>
                         </Button>
@@ -167,35 +221,38 @@ function EditableConstraint({
                 ) : (
                     <>
                         <span className="min-w-0 flex-1 truncate">
-                            <span className="text-muted-foreground">
-                                {owner}:{' '}
-                            </span>
                             {constraint.subject}
                         </span>
                         <Badge variant="outline" className="font-normal">
                             {constraint.kind}
                         </Badge>
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setDraft(constraint.subject)}
-                        >
-                            <Pencil />
-                            <span className="sr-only">Edit constraint</span>
-                        </Button>
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() =>
-                                router.delete(
-                                    destroyConstraint.url(constraint.id),
-                                    { preserveScroll: true },
-                                )
-                            }
-                        >
-                            <Trash2 />
-                            <span className="sr-only">Delete constraint</span>
-                        </Button>
+                        <TruthActions>
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7"
+                                onClick={() => setDraft(constraint.subject)}
+                            >
+                                <Pencil />
+                                <span className="sr-only">Edit constraint</span>
+                            </Button>
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7"
+                                onClick={() =>
+                                    router.delete(
+                                        destroyConstraint.url(constraint.id),
+                                        { preserveScroll: true },
+                                    )
+                                }
+                            >
+                                <Trash2 />
+                                <span className="sr-only">
+                                    Delete constraint
+                                </span>
+                            </Button>
+                        </TruthActions>
                     </>
                 )}
             </div>
@@ -229,14 +286,38 @@ export function HouseholdTruth({
         personId === null
             ? household.name
             : (ownerNames.get(personId) ?? 'Household member');
-    const preferenceRows = (items: Preference[]) =>
-        items.map((item) => (
-            <EditablePreference
-                key={item.id}
-                preference={item}
-                owner={ownerFor(item.person_id)}
-            />
+    const preferenceGroups = (items: Preference[], category: string) =>
+        Array.from(groupByOwner(items), ([personId, ownerPreferences]) => (
+            <TruthOwnerGroup
+                key={personId ?? 'household'}
+                owner={ownerFor(personId)}
+                category={category}
+            >
+                {ownerPreferences.map((preference) => (
+                    <EditablePreference
+                        key={preference.id}
+                        preference={preference}
+                    />
+                ))}
+            </TruthOwnerGroup>
         ));
+    const constraintGroups = Array.from(
+        groupByOwner(constraints),
+        ([personId, ownerConstraints]) => (
+            <TruthOwnerGroup
+                key={personId ?? 'household'}
+                owner={ownerFor(personId)}
+                category="safety rules"
+            >
+                {ownerConstraints.map((constraint) => (
+                    <EditableConstraint
+                        key={constraint.id}
+                        constraint={constraint}
+                    />
+                ))}
+            </TruthOwnerGroup>
+        ),
+    );
 
     return (
         <section>
@@ -248,44 +329,41 @@ export function HouseholdTruth({
                     title="Safety rules"
                     empty="No confirmed allergies or safety rules"
                 >
-                    {constraints.map((item) => (
-                        <EditableConstraint
-                            key={item.id}
-                            constraint={item}
-                            owner={ownerFor(item.person_id)}
-                        />
-                    ))}
+                    {constraintGroups}
                 </TruthGroup>
                 <TruthGroup
                     title="Stated preferences"
                     empty="Nothing stated yet"
                 >
-                    {preferenceRows(
+                    {preferenceGroups(
                         preferences.filter(
                             (item) =>
                                 item.provenance === 'stated' ||
                                 item.provenance === 'feedback',
                         ),
+                        'stated preferences',
                     )}
                 </TruthGroup>
                 <TruthGroup
                     title="Working defaults"
                     empty="No planning defaults yet"
                 >
-                    {preferenceRows(
+                    {preferenceGroups(
                         preferences.filter(
                             (item) => item.provenance === 'default',
                         ),
+                        'working defaults',
                     )}
                 </TruthGroup>
                 <TruthGroup
                     title="Chef inferences"
                     empty="Chef has not inferred anything yet"
                 >
-                    {preferenceRows(
+                    {preferenceGroups(
                         preferences.filter(
                             (item) => item.provenance === 'inferred',
                         ),
+                        'Chef inferences',
                     )}
                 </TruthGroup>
             </div>

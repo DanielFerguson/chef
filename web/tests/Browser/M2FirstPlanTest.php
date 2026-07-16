@@ -55,6 +55,88 @@ it('creates a first plan and continues its conversation in a real browser', func
     $page->assertNoJavaScriptErrors();
 });
 
+it('renders persisted and streamed assistant markdown as readable content', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
+    $plan->conversations->first()->messages()->create([
+        'team_id' => $team->id,
+        'role' => MessageRole::Assistant,
+        'content' => "## Dinner ideas\n\n- **Satay chicken**\n- Pork katsu\n\n| Day | Time |\n| --- | ---: |\n| Monday | 30 min |\n\nUse `jasmine rice`.",
+    ]);
+    ChefAgent::fake([
+        "## Updated options\n\n1. **Butter chicken**\n2. Beef noodles\n\nReady in `35 minutes`.",
+    ])->preventStrayPrompts();
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $plan))->on()->desktop()
+        ->assertPresent('[data-message-role="assistant"] h2')
+        ->assertPresent('[data-message-role="assistant"] ul')
+        ->assertPresent('[data-message-role="assistant"] table')
+        ->assertPresent('[data-message-role="assistant"] code')
+        ->assertDontSee('**Satay chicken**')
+        ->type('textarea[aria-label="Message Chef"]', 'Please update those options.')
+        ->click('[data-testid="send-message"]')
+        ->assertSee('Updated options')
+        ->assertPresent('[data-message-role="assistant"] ol')
+        ->assertDontSee('**Butter chicken**')
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps a long conversation at the live edge with the composer in view', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
+    $conversation = $plan->conversations->first();
+
+    foreach (range(1, 12) as $index) {
+        $conversation->messages()->create([
+            'team_id' => $team->id,
+            'role' => MessageRole::User,
+            'user_id' => $user->id,
+            'content' => "Planning note {$index} with enough detail to make this transcript scroll.",
+        ]);
+        $conversation->messages()->create([
+            'team_id' => $team->id,
+            'role' => MessageRole::Assistant,
+            'content' => "Chef response {$index} with a useful recommendation for the plan.",
+        ]);
+    }
+
+    ChefAgent::fake([
+        'The newest recommendation stays visible at the live edge.',
+    ])->preventStrayPrompts();
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $plan))->on()->desktop()
+        ->wait(1)
+        ->assertPresent('[data-slot="message-scroller"]')
+        ->assertPresent('[data-slot="message"]')
+        ->assertPresent('[data-slot="bubble"]')
+        ->assertScript("() => {
+            const viewport = document.querySelector('[data-slot=message-scroller-viewport]');
+            return viewport.scrollHeight > viewport.clientHeight;
+        }")
+        ->assertScript("() => {
+            const viewport = document.querySelector('[data-slot=message-scroller-viewport]');
+            return Math.abs(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop) < 4;
+        }")
+        ->assertScript('() => document.documentElement.scrollHeight <= window.innerHeight + 4')
+        ->assertScript("() => {
+            const composer = document.querySelector('textarea[aria-label=\"Message Chef\"]');
+            const bounds = composer.getBoundingClientRect();
+            return !composer.disabled && bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+        }")
+        ->type('textarea[aria-label="Message Chef"]', 'What should we cook next?')
+        ->click('[data-testid="send-message"]')
+        ->assertSee('The newest recommendation stays visible at the live edge.')
+        ->assertScript("() => {
+            const viewport = document.querySelector('[data-slot=message-scroller-viewport]');
+            return Math.abs(viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop) < 4;
+        }")
+        ->assertNoJavaScriptErrors();
+});
+
 it('keeps the planning workspace usable at a narrow mobile width', function () {
     $user = User::factory()->create();
     $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
@@ -63,6 +145,7 @@ it('keeps the planning workspace usable at a narrow mobile width', function () {
 
     visit(route('meal-plans.show', $plan))
         ->resize(390, 844)
+        ->assertPresent('[data-slot="message-scroller"]')
         ->assertPresent('textarea[aria-label="Message Chef"]')
         ->assertSee('Household truth')
         ->assertNoJavaScriptErrors();

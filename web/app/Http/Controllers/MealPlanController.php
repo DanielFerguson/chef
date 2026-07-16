@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\MealPlans\DeleteMealPlan;
+use App\Actions\MealPlans\RenameMealPlan;
 use App\Actions\MealPlans\StartMealPlan;
+use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Models\MealPlan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,12 +38,14 @@ class MealPlanController extends Controller
         return to_route('meal-plans.show', $mealPlan);
     }
 
-    public function show(Request $request, MealPlan $mealPlan): Response
+    public function show(Request $request, MealPlan $mealPlan, AssessMealPlanReadiness $assessReadiness): Response
     {
         $this->authorize('view', $mealPlan);
 
         $mealPlan->load([
             'conversations.messages.author:id,name',
+            'conversations.messages.feedback' => fn ($query) => $query->whereBelongsTo($request->user()),
+            'conversations.feedback' => fn ($query) => $query->whereBelongsTo($request->user())->whereNull('message_id'),
             'slots.participants',
             'slots.plannedMeal.recipeVersion.ingredients',
             'slots.plannedMeal.recipeVersion.steps',
@@ -68,7 +73,38 @@ class MealPlanController extends Controller
                 'conversation' => $conversation,
                 'household' => $mealPlan->team,
                 'recipes' => $mealPlan->team->recipes,
+                'readiness' => $assessReadiness->handle($mealPlan),
             ],
         ]);
+    }
+
+    public function update(Request $request, MealPlan $mealPlan, RenameMealPlan $renameMealPlan): RedirectResponse
+    {
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:120'],
+            'expected_revision' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $renameMealPlan->handle(
+            $mealPlan,
+            $request->user(),
+            $validated['title'],
+            $validated['expected_revision'] ?? null,
+        );
+
+        return back();
+    }
+
+    public function destroy(Request $request, MealPlan $mealPlan, DeleteMealPlan $deleteMealPlan): RedirectResponse
+    {
+        $validated = $request->validate([
+            'redirect_to_dashboard' => ['sometimes', 'boolean'],
+        ]);
+
+        $deleteMealPlan->handle($mealPlan, $request->user());
+
+        return ($validated['redirect_to_dashboard'] ?? false)
+            ? to_route('dashboard')
+            : back();
     }
 }

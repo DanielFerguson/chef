@@ -10,6 +10,7 @@ use App\Models\Preference;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 
 class RecordPreference
 {
@@ -23,6 +24,7 @@ class RecordPreference
         int $strength = 3,
         ?float $confidence = null,
         ?Message $sourceMessage = null,
+        ?string $evidenceQuote = null,
     ): Preference {
         if (! $user->memberships()->whereBelongsTo($team)->exists() || ($person !== null && $person->team_id !== $team->id)) {
             throw new AuthorizationException('You cannot record a preference for this family.');
@@ -35,31 +37,43 @@ class RecordPreference
             throw new AuthorizationException('That message cannot support a preference for this family.');
         }
 
-        $identity = ['team_id' => $team->id, 'person_id' => $person?->id, 'subject' => $subject];
+        $subject = trim($subject);
         $values = [
             ...compact('sentiment', 'provenance', 'strength', 'confidence'),
             'evidence' => $sourceMessage === null ? null : ['message_id' => $sourceMessage->id],
+            'source_message_id' => $sourceMessage?->id,
+            'evidence_quote' => $evidenceQuote,
         ];
-        $existing = Preference::query()->where($identity)->first();
 
-        if ($existing !== null) {
-            $existing->update($values);
+        return DB::transaction(function () use ($team, $person, $subject, $values, $sourceMessage): Preference {
+            $existing = Preference::query()
+                ->active()
+                ->where('team_id', $team->id)
+                ->where('person_id', $person?->id)
+                ->whereRaw('lower(subject) = ?', [mb_strtolower($subject)])
+                ->lockForUpdate()
+                ->first();
 
-            return $existing;
-        }
+            if ($existing !== null) {
+                $existing->update([...$values, 'subject' => $subject]);
 
-        $personId = $person === null ? '' : (string) $person->id;
-        $idempotencyKey = $sourceMessage === null ? null : hash('sha256', implode('|', [
-            'preference', $team->id, $sourceMessage->id, $personId, mb_strtolower(trim($subject)),
-        ]));
+                return $existing;
+            }
 
-        if ($sourceMessage === null) {
-            return Preference::query()->updateOrCreate($identity, $values);
-        }
+            $personId = $person === null ? '' : (string) $person->id;
+            $idempotencyKey = $sourceMessage === null ? null : hash('sha256', implode('|', [
+                'preference', $team->id, $sourceMessage->id, $personId, mb_strtolower($subject),
+            ]));
+            $attributes = ['team_id' => $team->id, 'person_id' => $person?->id, 'subject' => $subject];
 
-        return Preference::query()->firstOrCreate(
-            ['idempotency_key' => $idempotencyKey],
-            [...$identity, ...$values],
-        );
+            if ($sourceMessage === null) {
+                return Preference::query()->create([...$attributes, ...$values]);
+            }
+
+            return Preference::query()->firstOrCreate(
+                ['idempotency_key' => $idempotencyKey],
+                [...$attributes, ...$values],
+            );
+        });
     }
 }

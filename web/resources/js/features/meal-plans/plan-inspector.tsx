@@ -19,6 +19,7 @@ import type { MealPlanWorkspace } from './types';
 
 function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
     const { plan, household } = workspace;
+    const { readiness } = workspace;
     const [showForm, setShowForm] = useState(plan.slots.length === 0);
     const slotForm = useForm({
         date: plan.starts_on.slice(0, 10),
@@ -68,7 +69,15 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                 {!confirmed && (
                     <Button
                         size="sm"
-                        disabled={milestoneForm.processing}
+                        disabled={
+                            milestoneForm.processing ||
+                            !readiness.ready_for_confirmation
+                        }
+                        title={
+                            readiness.ready_for_confirmation
+                                ? 'Confirm this completed plan'
+                                : 'Fill every slot and resolve suggestions before confirming'
+                        }
                         onClick={() =>
                             milestoneForm.post(
                                 `/meal-plans/${plan.id}/milestones`,
@@ -80,6 +89,15 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                     </Button>
                 )}
             </div>
+            {!confirmed && !readiness.ready_for_confirmation && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                    {readiness.open_slots > 0
+                        ? `${readiness.open_slots} ${readiness.open_slots === 1 ? 'slot still needs' : 'slots still need'} a meal.`
+                        : readiness.pending_proposals > 0
+                          ? 'Resolve the remaining meal suggestions before confirming.'
+                          : 'Confirm who is eating in every slot before confirming.'}
+                </p>
+            )}
             {showForm && (
                 <form
                     onSubmit={(event) => {
@@ -259,7 +277,7 @@ function InvitationForm({ workspace }: { workspace: MealPlanWorkspace }) {
 
 export function PlanInspector({ workspace }: { workspace: MealPlanWorkspace }) {
     return (
-        <aside className="border-t bg-muted/20 lg:w-96 lg:border-t-0 lg:border-l">
+        <aside className="border-t bg-muted/20 lg:h-full lg:w-96 lg:overflow-y-auto lg:border-t-0 lg:border-l">
             <div className="space-y-7 p-5">
                 <PlanStatus workspace={workspace} />
                 <HouseholdTruth household={workspace.household} />

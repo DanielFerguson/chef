@@ -58,6 +58,24 @@ class Team extends Model
         return $this->hasMany(Recipe::class);
     }
 
+    /** @return HasMany<ShoppingList, $this> */
+    public function shoppingLists(): HasMany
+    {
+        return $this->hasMany(ShoppingList::class);
+    }
+
+    /** @return HasMany<Budget, $this> */
+    public function budgets(): HasMany
+    {
+        return $this->hasMany(Budget::class);
+    }
+
+    /** @return HasMany<ProductPreference, $this> */
+    public function productPreferences(): HasMany
+    {
+        return $this->hasMany(ProductPreference::class);
+    }
+
     /** @return HasMany<Conversation, $this> */
     public function conversations(): HasMany
     {
@@ -67,7 +85,7 @@ class Team extends Model
     /** @return HasMany<Preference, $this> */
     public function preferences(): HasMany
     {
-        return $this->hasMany(Preference::class);
+        return $this->hasMany(Preference::class)->whereNull('superseded_at');
     }
 
     /** @return HasMany<Constraint, $this> */

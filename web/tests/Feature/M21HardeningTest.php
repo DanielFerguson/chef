@@ -142,7 +142,8 @@ it('lets Chef create people and attributed household truth through real SDK tool
     ChefAgent::fake([
         new ToolCall('person-call', 'CreateHouseholdPerson', ['name' => 'Tahlia']),
         new ToolCall('preference-call', 'RecordHouseholdPreference', [
-            'subject' => 'mushrooms', 'sentiment' => 'dislike', 'provenance' => 'stated', 'strength' => 5,
+            'scope' => 'family', 'subject' => 'mushrooms', 'sentiment' => 'dislike', 'provenance' => 'stated', 'strength' => 5,
+            'evidence_quote' => 'We dislike mushrooms',
         ]),
         new ToolCall('constraint-call', 'RecordSafetyConstraint', [
             'kind' => 'allergy', 'subject' => 'peanuts', 'severity' => 'severe',
@@ -254,7 +255,10 @@ it('supports authorised direct editing decisions and moves through HTTP controll
     $this->put(route('meal-proposals.accept', $accepted))->assertRedirect();
     $this->put(route('meal-proposals.reject', $rejected))->assertRedirect();
     $planned = $workspace['plan']->plannedMeals()->where('meal_proposal_id', $accepted->id)->sole();
-    $this->put(route('planned-meals.move', $planned), ['meal_slot_id' => $second->id])->assertRedirect();
+    $this->put(route('planned-meals.move', $planned), [
+        'meal_slot_id' => $second->id,
+        'expected_revision' => $workspace['plan']->refresh()->revision,
+    ])->assertRedirect();
 
     expect($workspace['team']->preferences()->count())->toBe(0)
         ->and($workspace['team']->constraints()->count())->toBe(0)
