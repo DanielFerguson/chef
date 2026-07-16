@@ -161,6 +161,14 @@ Avoid gamified progress, excessive recommendation carousels, or a dense project-
 
 The list should feel as fast as a lightweight document while remaining structured.
 
+Shopping uses progressive disclosure and preserves the meal plan's natural
+conversation. Before a useful list exists, show one primary preparation action
+and calm recipe/list progress. Do not lead with budget controls, an empty item
+editor, completion, or expanded manual ingredient forms. Once the generated
+list is ready, guide the household through pantry review and household extras;
+then reveal budget and product detail as optional next decisions. Manual recipe
+ingredient entry is a recovery path, not the default experience.
+
 - click or tap to edit;
 - enter to add;
 - drag to reorder where meaningful;

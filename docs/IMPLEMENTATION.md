@@ -4,7 +4,7 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestones 0 through 3.1 are complete. The Laravel 13 React/Inertia application
+Milestones 0 through 4.1 are complete. The Laravel 13 React/Inertia application
 in `web/` now provides authenticated family tenancy, durable arbitrary-span
 plans and conversations, versioned recipes, streamed Laravel AI SDK responses,
 authorised planning tools, direct calendar and list editing, plan revisions and
@@ -19,11 +19,20 @@ silently duplicating or deleting history. Plan readiness and next actions are
 derived from structured state, and a successful tool-only turn must still
 produce a visible acknowledgement.
 
-M4 is the shopping-list vertical slice. Shopping moved ahead of cooking in the
+M4 implemented the shopping-list domain. Shopping moved ahead of cooking in the
 delivery order after real first-plan testing reached a confirmed plan and found
-no executable next step. This matches the product journey: a confirmed plan is
-reviewed, converted into a trustworthy shopping list, and only then used while
-cooking.
+no executable next step. Subsequent testing exposed a missing boundary: Chef
+could select ordinary cookable meals as title-only custom meals, after which
+Shopping asked the household to supply their ingredients manually.
+
+[M4.1](M4.1-PLAN-TO-SHOP-RELIABILITY.md) closes that boundary. Selecting a
+cookable meal now prepares and retains a structured recipe version through a
+Chef-owned Laravel AI SDK adapter and queued, idempotent application actions.
+Plan readiness and shopping generation refuse unresolved cookable meals, while
+the same plan conversation continues through shopping preparation and list
+editing. The M4 list, revision, budget, catalogue, preference, and
+historical-order capabilities remain the structured foundation. M5 can now
+begin without weakening the recipe or shopping contracts.
 
 ## Technical stack
 
@@ -161,10 +170,12 @@ M4 uses one `ShoppingList` per confirmed `MealPlan`.
 behind every generated quantity, while `ShoppingListRevision` stores a durable
 snapshot after each mutation. Compatible units are normalised before
 aggregation and quantities are scaled from recipe servings to planned
-servings. Manual and staple rows have no invented recipe source. Custom meals
-without recipe versions remain unresolved until a household member explicitly
-records their ingredient rows; `ShoppingListMealResolution` makes that review
-state durable and traceable to the planned meal.
+servings. Manual and staple rows have no invented recipe source. Under M4.1,
+ordinary cookable meals selected from Chef proposals or named by the household
+must be materialised as versioned recipes before Plan review finishes. Explicit
+takeaway, eating-out, open, and linked-leftover states remain non-recipe meals.
+`ShoppingListMealResolution` remains a traceable recovery path for exceptional
+or failed preparation, not the default household workflow.
 
 Regeneration replaces recipe-derived rows but preserves manual and staple rows.
 Any later plan revision marks the list stale with the same human-readable

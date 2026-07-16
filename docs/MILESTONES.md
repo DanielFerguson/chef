@@ -220,6 +220,50 @@ M4 completion evidence recorded 16 July 2026:
 - The adversarial exit audit fixed nested-form submission, rapid check-off revision conflicts, reusable-action validation gaps, missing per-model policies, preference reuse, partial-total labelling, stale-diff typing, and catalogue-history mutation risks before M4 was closed.
 - The post-completion audit moved stale-list protection into locked domain actions, made conflicting document and meal-move revisions mandatory while preserving merge-safe check-offs, added portable uniqueness keys for household defaults and product preferences, and completed policy coverage for meal slots, list revisions, and item sources.
 
+The evidence above remains valid for the implemented M4 shopping domain. M4.1
+adds the missing automatic recipe-preparation boundary, so the original M4
+domain now also satisfies its natural-language end-to-end product exit.
+
+## M4.1 — Natural Plan-to-Shop reliability
+
+Status: `[x]`
+
+Implementation brief:
+[M4.1 — Natural Plan-to-Shop reliability](M4.1-PLAN-TO-SHOP-RELIABILITY.md)
+
+- [x] Generate a structured draft recipe when an ordinary cookable meal is selected.
+- [x] Retain the exact generated `RecipeVersion` on the planned meal.
+- [x] Track preparation durably and make retries idempotent and observable.
+- [x] Extend readiness so Plan review cannot finish with unresolved cookable meals.
+- [x] Prevent shopping generation from silently omitting cookable meals without recipes.
+- [x] Prepare and aggregate recipe ingredients without manual household reconstruction.
+- [x] Continue the same meal-plan conversation through shopping preparation and list editing.
+- [x] Replace the manual-first Shopping screen with progressive preparation, review, budget, and completion states.
+- [x] Recover existing confirmed plans through an authorised queued application workflow.
+- [x] Prove the natural-language Plan-to-Shop journey, failure recovery, tenancy, and responsive experience without live AI calls.
+
+Exit evidence:
+
+- A naturally planned ordinary meal has a usable versioned recipe before Plan review can finish.
+- A confirmed natural-language plan produces a populated, traceable shopping list without manual ingredient reconstruction.
+- Pantry, quantity, staple, and budget changes can be made conversationally and remain visible as structured list state.
+- Existing confirmed plans can be recovered without database migrations calling OpenAI.
+- Preparation failures are visible and safely retryable without duplicate recipes, revisions, or list rows.
+- The complete backend, frontend, browser, migration, audit, coverage, and React Doctor gates pass and are recorded.
+
+M4.1 acceptance evidence recorded 16 July 2026:
+
+- Selected custom meals and accepted Chef proposals invoke one authorised recipe-preparation action. A typed Laravel AI SDK structured-output adapter sits behind Chef's `RecipeDrafter` contract, while deterministic fakes cover normal tests without OpenAI requests.
+- A team-owned preparation record tracks pending, processing, completed, failed, and cancelled work. Fingerprinted recipe creation, locked materialisation, safe provider errors, and stale-job cancellation prevent duplicate or obsolete recipes and plan revisions.
+- Drafting context includes household-wide truths plus only the people participating in that meal. Person-specific preferences do not leak into meals they are not attending, and explicit safety constraints remain distinct from preferences.
+- Readiness, confirmation, legacy recovery, list generation, completion, and manual-recovery rules agree on the same recipe-required classification. Equivalent units such as `cup` and `cups` aggregate into one traceable row.
+- Shopping exposes one useful state at a time: prepare, wait/retry, review, optional budget, and complete. It retains the plan conversation, hides manual ingredient entry outside advanced failure recovery, polls durable preparation state, and presents a usable narrow-screen layout.
+- A real browser journey starts from a typed meal-planning request, accepts the proposed meal, automatically prepares its recipe, confirms the plan, opens its populated list, then uses the same conversation to mark pantry stock, add three litres of milk, and set a $180 budget. No manual recipe reconstruction or live model call is involved.
+- The recovered local meal plan 1 retains seven structured recipe versions and a generated 33-row list. Its combined jasmine-rice requirement has one source-traceable row rather than singular/plural duplicates.
+- Eleven focused M4.1 feature regressions cover proposal and direct selection, participant-scoped truth, explicit non-recipe states, stale queued work, readiness guards, safe failures, malformed output, SDK fakes, authorised legacy recovery and retry, tenancy, and conversational shopping mutations.
+- The final Composer gate passes 145 backend tests and 826 assertions at 86.1% application coverage. All 21 browser journeys pass with 166 assertions, including the natural-language Plan-to-Shop flow and 390 × 844 Shopping coverage.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, SQLite fresh/rollback/reapply, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings, and the live desktop/narrow inspection reports no browser warnings or errors.
+
 ## M5 — Cooking and feedback loop
 
 Status: `[ ]`
