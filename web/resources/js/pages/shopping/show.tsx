@@ -26,6 +26,9 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -41,6 +44,7 @@ import { useChefConversation } from '@/features/meal-plans/use-chef-conversation
 import type {
     ProductPreference,
     ShoppingListItem,
+    ShoppingListItemCategory,
     ShoppingWorkspace,
 } from '@/features/shopping/types';
 
@@ -347,12 +351,14 @@ function ShoppingItemRow({
     item,
     revision,
     stale,
+    shoppingCategories,
     retailers,
     preference,
 }: {
     item: ShoppingListItem;
     revision: number;
     stale: boolean;
+    shoppingCategories: ShoppingWorkspace['shopping_categories'];
     retailers: { id: number; name: string }[];
     preference: ProductPreference | null;
 }) {
@@ -370,7 +376,7 @@ function ShoppingItemRow({
         expected_revision: revision,
     });
     const updateState = (
-        changes: Record<string, boolean>,
+        changes: Record<string, boolean | string>,
         mergeSafe = false,
     ) => {
         router.put(
@@ -531,6 +537,28 @@ function ShoppingItemRow({
                     >
                         {item.included ? 'Exclude item' : 'Include item'}
                     </DropdownMenuItem>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>Move to</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            {shoppingCategories.map((category) => (
+                                <DropdownMenuItem
+                                    key={category.value}
+                                    onSelect={() =>
+                                        updateState({
+                                            category: category.value,
+                                        })
+                                    }
+                                >
+                                    <span className="w-4">
+                                        {item.category === category.value && (
+                                            <Check />
+                                        )}
+                                    </span>
+                                    {category.label}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                         variant="destructive"
@@ -988,6 +1016,7 @@ function ReadyShoppingList({
     productPreferences,
     recipePreparation,
     retailers,
+    shoppingCategories,
     shoppingList,
 }: {
     budget: ShoppingWorkspace['budget'];
@@ -999,9 +1028,25 @@ function ReadyShoppingList({
     productPreferences: ShoppingWorkspace['product_preferences'];
     recipePreparation: ShoppingWorkspace['recipe_preparation'];
     retailers: ShoppingWorkspace['retailers'];
+    shoppingCategories: ShoppingWorkspace['shopping_categories'];
     shoppingList: PreparedShoppingList;
 }) {
     const active = recipePreparation.preparing > 0;
+    const groupedItems: {
+        value: ShoppingListItemCategory;
+        label: string;
+        items: ShoppingListItem[];
+    }[] = [];
+
+    for (const category of shoppingCategories) {
+        const items = shoppingList.items.filter(
+            (item) => item.category === category.value,
+        );
+
+        if (items.length > 0) {
+            groupedItems.push({ ...category, items });
+        }
+    }
 
     return (
         <>
@@ -1078,22 +1123,46 @@ function ReadyShoppingList({
                         {included} included · revision {shoppingList.revision}
                     </p>
                 </div>
-                <div className="mt-3 divide-y border-y">
-                    {shoppingList.items.map((item) => (
-                        <ShoppingItemRow
-                            key={item.id}
-                            item={item}
-                            revision={shoppingList.revision}
-                            stale={shoppingList.stale_at !== null}
-                            retailers={retailers}
-                            preference={
-                                productPreferences.find(
-                                    (preference) =>
-                                        preference.normalized_item_name ===
-                                        item.normalized_name,
-                                ) ?? null
-                            }
-                        />
+                <div className="mt-5 space-y-7">
+                    {groupedItems.map((category) => (
+                        <section
+                            key={category.value}
+                            aria-labelledby={`shopping-category-${category.value}`}
+                        >
+                            <div className="flex items-baseline justify-between gap-3 px-1">
+                                <h3
+                                    id={`shopping-category-${category.value}`}
+                                    className="text-sm font-medium"
+                                >
+                                    {category.label}
+                                </h3>
+                                <span className="text-xs text-muted-foreground">
+                                    {category.items.length}{' '}
+                                    {category.items.length === 1
+                                        ? 'item'
+                                        : 'items'}
+                                </span>
+                            </div>
+                            <div className="mt-2 divide-y border-y">
+                                {category.items.map((item) => (
+                                    <ShoppingItemRow
+                                        key={item.id}
+                                        item={item}
+                                        revision={shoppingList.revision}
+                                        stale={shoppingList.stale_at !== null}
+                                        shoppingCategories={shoppingCategories}
+                                        retailers={retailers}
+                                        preference={
+                                            productPreferences.find(
+                                                (preference) =>
+                                                    preference.normalized_item_name ===
+                                                    item.normalized_name,
+                                            ) ?? null
+                                        }
+                                    />
+                                ))}
+                            </div>
+                        </section>
                     ))}
                     {shoppingList.items.length === 0 && (
                         <p className="px-1 py-8 text-sm text-muted-foreground">
@@ -1144,6 +1213,7 @@ export default function ShoppingShow({
         missing_meals: missingMeals,
         recipe_preparation: recipePreparation,
         conversation,
+        shopping_categories: shoppingCategories,
         retailers,
         product_preferences: productPreferences,
         budget,
@@ -1298,6 +1368,7 @@ export default function ShoppingShow({
                             productPreferences={productPreferences}
                             recipePreparation={recipePreparation}
                             retailers={retailers}
+                            shoppingCategories={shoppingCategories}
                             shoppingList={shoppingList}
                         />
                     )}

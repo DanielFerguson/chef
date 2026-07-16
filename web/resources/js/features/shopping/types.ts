@@ -22,9 +22,21 @@ export type ShoppingListItemSource = {
     } | null;
 };
 
+export type ShoppingListItemCategory =
+    | 'fruit_veg'
+    | 'meat_seafood'
+    | 'dairy_eggs'
+    | 'bakery'
+    | 'pantry'
+    | 'frozen'
+    | 'drinks'
+    | 'household'
+    | 'other';
+
 export type ShoppingListItem = {
     id: number;
     source_kind: 'recipe' | 'planned_meal' | 'manual' | 'staple';
+    category: ShoppingListItemCategory;
     name: string;
     normalized_name: string;
     quantity: number | null;
@@ -122,6 +134,10 @@ export type ShoppingWorkspace = {
         messages: Message[];
         feedback: ConversationFeedback[];
     };
+    shopping_categories: {
+        value: ShoppingListItemCategory;
+        label: string;
+    }[];
     retailers: { id: number; name: string; slug: string }[];
     product_preferences: ProductPreference[];
     budget: {
