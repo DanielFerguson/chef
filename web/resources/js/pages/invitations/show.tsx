@@ -6,6 +6,7 @@ type Invitation = {
     email: string;
     team: { id: number; name: string };
     inviter: { name: string } | null;
+    person: { id: number; name: string } | null;
     accept_url: string;
     matches_user: boolean;
 };
@@ -30,6 +31,13 @@ export default function InvitationShow({
                         {invitation.inviter?.name ?? 'A family member'} invited{' '}
                         {invitation.email} to plan meals together in Chef.
                     </p>
+                    {invitation.person && (
+                        <p className="mt-3 rounded-lg border bg-muted/50 p-3 text-sm leading-6">
+                            Accepting links your account to{' '}
+                            <strong>{invitation.person.name}</strong> and keeps
+                            their existing meal history and preferences.
+                        </p>
+                    )}
                     {invitation.matches_user ? (
                         <Button asChild className="mt-6 w-full">
                             <Link
