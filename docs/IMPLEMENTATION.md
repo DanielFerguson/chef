@@ -4,7 +4,9 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Chef is documentation-first. No application scaffold exists yet.
+Milestone 1 is complete. The Laravel 13 React/Inertia application lives in
+`web/` with authentication, family tenancy, local fixtures, the initial Chef
+workspace shell, and CI quality gates.
 
 The first implementation target is a thin, end-to-end vertical slice in which a new household signs up, creates its family team through conversation, answers only the questions needed for safe recommendations, receives a useful first meal plan, edits it in the supporting UI, and returns to it later.
 
@@ -150,35 +152,45 @@ flowchart LR
     APP <--> MCP["Laravel MCP server"]
 ```
 
-Recommended application structure after scaffolding:
+Repository and application structure:
 
 ```text
-app/
-├── Actions/
-│   ├── Teams/
-│   ├── Planning/
-│   ├── Recipes/
-│   ├── Shopping/
-│   ├── Cooking/
-│   └── Automation/
-├── Ai/
-│   ├── Agents/
-│   ├── Tools/
-│   └── Middleware/
-├── Domain/
-├── Http/
-├── Mcp/
-├── Models/
-├── Policies/
-└── Providers/
-resources/js/
-├── components/
-├── features/
-├── layouts/
-├── pages/
-└── types/
-extensions/chrome/
+web/
+├── app/
+│   ├── Actions/
+│   │   ├── Teams/
+│   │   ├── Planning/
+│   │   ├── Recipes/
+│   │   ├── Shopping/
+│   │   ├── Cooking/
+│   │   └── Automation/
+│   ├── Ai/
+│   │   ├── Agents/
+│   │   ├── Tools/
+│   │   └── Middleware/
+│   ├── Domain/
+│   ├── Http/
+│   ├── Mcp/
+│   ├── Models/
+│   ├── Policies/
+│   └── Providers/
+└── resources/js/
+    ├── components/
+    ├── features/
+    ├── layouts/
+    ├── pages/
+    └── types/
+docs/
+extensions/chrome/   # added when retailer automation begins
+ios/                 # added when the native client begins
+android/             # added when the native client begins
+marketing/           # added when the Astro site begins
 ```
+
+The root is the product repository, while `web/` is a self-contained Laravel
+application with its own Composer and npm manifests. Do not create empty client
+directories. Future native and marketing surfaces consume Chef's reviewed
+interfaces; they do not become parallel sources of domain truth.
 
 Use action classes for meaningful domain mutations. HTTP controllers, AI tools, queued jobs, console commands, and MCP tools should call the same actions rather than duplicating business logic.
 

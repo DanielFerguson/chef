@@ -8,7 +8,9 @@ Chef is not intended to be another recipe catalogue with an AI chat box attached
 
 ## Status
 
-Product definition only. The Laravel application has not been scaffolded yet.
+Milestone 1 is complete. The Laravel 13 web application is scaffolded under
+[`web/`](web/) with authentication, the initial family-tenancy model, and the
+responsive Chef workspace shell.
 
 The intended stack is:
 
@@ -530,9 +532,20 @@ The first useful slice should support one family team, multiple collaborating us
 - When should a managed browser become an alternative to the local extension?
 - What is the smallest useful recipe-import workflow?
 
-## Repository plan
+## Repository layout
 
-This repository begins documentation-first. The next milestone is to scaffold the Laravel application only after the first domain terms, user journeys, and MVP boundary have been reviewed.
+Chef is a monorepo so each client can share one product model without forcing the Laravel application to live at the repository root.
+
+```text
+web/                 Laravel, Inertia, and React application
+docs/                Product, architecture, milestones, and style
+extensions/chrome/   Future permissioned retailer-tab executor
+ios/                 Future native iOS client
+android/             Future native Android client
+marketing/           Future Astro marketing site
+```
+
+Only `web/` and `docs/` exist today. Future clients should be added when implementation begins rather than as empty placeholder directories. Laravel remains the authoritative application and domain boundary; native clients will use reviewed HTTP or Realtime interfaces rather than reimplementing business rules.
 
 Supporting documents:
 

@@ -1,0 +1,165 @@
+@import '@fontsource/source-sans-3/400.css';
+@import '@fontsource/source-sans-3/500.css';
+@import '@fontsource/source-sans-3/600.css';
+@import '@fontsource/newsreader/500.css';
+
+@import 'tailwindcss';
+
+@import 'tw-animate-css';
+
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+    --font-sans:
+        'Source Sans 3', ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-editorial: 'Newsreader', ui-serif, Georgia, Cambria, serif;
+
+    --color-brand-ink: var(--brand-ink);
+    --color-brand-paprika: var(--brand-paprika);
+    --color-brand-sage: var(--brand-sage);
+    --color-brand-oat: var(--brand-oat);
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+    --brand-ink: #24231f;
+    --brand-paprika: #c94f32;
+    --brand-sage: #6f806a;
+    --brand-oat: #dccfb9;
+
+    --background: #ffffff;
+    --foreground: #24231f;
+    --card: #ffffff;
+    --card-foreground: #24231f;
+    --popover: #ffffff;
+    --popover-foreground: #24231f;
+    --primary: #c94f32;
+    --primary-foreground: #ffffff;
+    --secondary: #f7f7f6;
+    --secondary-foreground: #24231f;
+    --muted: #f7f7f6;
+    --muted-foreground: #6e6d68;
+    --accent: #f2f2f0;
+    --accent-foreground: #24231f;
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: #ffffff;
+    --border: #e4e4e1;
+    --input: #dededa;
+    --ring: #c94f32;
+    --chart-1: #c94f32;
+    --chart-2: #6f806a;
+    --chart-3: #dccfb9;
+    --chart-4: #8f8e88;
+    --chart-5: #24231f;
+    --radius: 0.625rem;
+    --sidebar: #f7f7f6;
+    --sidebar-foreground: #24231f;
+    --sidebar-primary: #c94f32;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #ececea;
+    --sidebar-accent-foreground: #24231f;
+    --sidebar-border: #e4e4e1;
+    --sidebar-ring: #c94f32;
+}
+
+.dark {
+    --background: #181816;
+    --foreground: #f7f7f4;
+    --card: #1e1e1b;
+    --card-foreground: #f7f7f4;
+    --popover: #242421;
+    --popover-foreground: #f7f7f4;
+    --primary: #c94f32;
+    --primary-foreground: #ffffff;
+    --secondary: #292926;
+    --secondary-foreground: #f7f7f4;
+    --muted: #292926;
+    --muted-foreground: #aaa9a3;
+    --accent: #30302c;
+    --accent-foreground: #f7f7f4;
+    --destructive: oklch(0.396 0.141 25.723);
+    --destructive-foreground: #ffffff;
+    --border: #383834;
+    --input: #41413c;
+    --ring: #d86a4f;
+    --chart-1: #d86a4f;
+    --chart-2: #8d9c87;
+    --chart-3: #dccfb9;
+    --chart-4: #aaa9a3;
+    --chart-5: #f7f7f4;
+    --sidebar: #1e1e1b;
+    --sidebar-foreground: #f7f7f4;
+    --sidebar-primary: #c94f32;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #30302c;
+    --sidebar-accent-foreground: #f7f7f4;
+    --sidebar-border: #383834;
+    --sidebar-ring: #d86a4f;
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+        font-variant-numeric: proportional-nums;
+        text-rendering: optimizeLegibility;
+    }
+
+    :where(time, [data-numeric='tabular']) {
+        font-variant-numeric: tabular-nums;
+    }
+}

@@ -27,7 +27,7 @@ Public release additionally requires secure tenancy, accessible core journeys, o
 
 ## M0 — Product and architecture definition
 
-Status: `[~]`
+Status: `[x]`
 
 - [x] Define the product thesis and four-stage experience.
 - [x] Define conversational onboarding as the first meal plan.
@@ -39,7 +39,7 @@ Status: `[~]`
 - [x] Document the initial visual and interaction language.
 - [x] Add durable contributor instructions.
 - [x] Review and resolve contradictions across the product and implementation documents.
-- [ ] Commit the documentation baseline.
+- [x] Commit the documentation baseline.
 
 Exit evidence:
 
@@ -48,23 +48,31 @@ Exit evidence:
 
 ## M1 — Application foundation and team tenancy
 
-Status: `[ ]`
+Status: `[x]`
 
-- [ ] Scaffold Laravel 13 with the React/Inertia starter kit.
-- [ ] Configure TypeScript, Tailwind, shadcn/ui, Pest, formatting, and static analysis.
-- [ ] Establish the Chef application shell and responsive navigation.
-- [ ] Implement authentication.
-- [ ] Implement `Team`, `TeamMembership`, `TeamInvitation`, `Person`, and `UserPersonLink`.
-- [ ] Implement active-team selection and team-scoped route bindings.
-- [ ] Add policies and cross-team isolation tests.
-- [ ] Add seeded local accounts and a representative family fixture.
-- [ ] Establish CI for backend tests, frontend checks, and production builds.
+- [x] Scaffold Laravel 13 with the React/Inertia starter kit.
+- [x] Configure TypeScript, Tailwind, shadcn/ui, Pest, formatting, and static analysis.
+- [x] Establish the Chef application shell and responsive navigation.
+- [x] Implement authentication.
+- [x] Implement `Team`, `TeamMembership`, `TeamInvitation`, `Person`, and `UserPersonLink`.
+- [x] Implement active-team selection and team-scoped route bindings.
+- [x] Add policies and cross-team isolation tests.
+- [x] Add seeded local accounts and a representative family fixture.
+- [x] Establish CI for backend tests, frontend checks, and production builds.
 
 Exit evidence:
 
 - Two users can belong to one team and see the same empty Chef workspace.
 - A user cannot read or mutate another team's records by changing identifiers.
 - Desktop and narrow-screen shells pass a focused browser test.
+
+Acceptance evidence recorded 16 July 2026:
+
+- `composer test` passes 44 tests and 175 assertions, including registration, policies, active-family switching, scoped person bindings, and cross-team denial.
+- ESLint, Prettier, TypeScript, PHPStan, Pint, and the production Vite build pass.
+- React Doctor reports no errors; its remaining warnings are non-blocking starter-kit maintainability advice and an npm-inapplicable pnpm hardening check.
+- The seeded Daniel and Tahlia accounts see the same family workspace, alongside a person without an account; a separate household fixture proves isolation.
+- Browser checks pass at 1440 × 900 and 390 × 844, including the mobile navigation drawer, with no console errors.
 
 ## M2 — First-plan conversational onboarding
 
