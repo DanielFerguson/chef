@@ -29,19 +29,36 @@ class ProposeMeal
             throw new AuthorizationException('The meal slot does not belong to this plan.');
         }
 
-        if ($message !== null && $message->team_id !== $mealPlan->team_id) {
-            throw new AuthorizationException('The message does not belong to this family.');
+        if ($message !== null && (
+            $message->team_id !== $mealPlan->team_id
+            || $message->conversation?->meal_plan_id !== $mealPlan->id
+        )) {
+            throw new AuthorizationException('The message does not belong to this meal plan.');
         }
 
-        return $mealPlan->proposals()->create([
+        $attributes = [
             'team_id' => $mealPlan->team_id,
             'meal_slot_id' => $mealSlot?->id,
             'message_id' => $message?->id,
-            'proposed_by_user_id' => $user->id,
             'title' => $title,
+        ];
+        $mealSlotId = $mealSlot === null ? '' : (string) $mealSlot->id;
+        $idempotencyKey = $message === null ? null : hash('sha256', implode('|', [
+            'meal-proposal', $mealPlan->id, $message->id, $mealSlotId, mb_strtolower(trim($title)),
+        ]));
+
+        $values = [
+            'proposed_by_user_id' => $user->id,
             'summary' => $summary,
             'estimated_minutes' => $estimatedMinutes,
             'estimated_cost' => $estimatedCost,
-        ]);
+        ];
+
+        return $message === null
+            ? $mealPlan->proposals()->create([...$attributes, ...$values])
+            : $mealPlan->proposals()->firstOrCreate(
+                ['idempotency_key' => $idempotencyKey],
+                [...$attributes, ...$values],
+            );
     }
 }

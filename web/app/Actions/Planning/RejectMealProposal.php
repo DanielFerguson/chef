@@ -6,6 +6,8 @@ use App\Enums\MealProposalStatus;
 use App\Models\MealProposal;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class RejectMealProposal
 {
@@ -15,12 +17,22 @@ class RejectMealProposal
             throw new AuthorizationException('You cannot update this meal proposal.');
         }
 
-        $proposal->update([
-            'status' => MealProposalStatus::Rejected,
-            'decided_by_user_id' => $user->id,
-            'decided_at' => now(),
-        ]);
+        return DB::transaction(function () use ($proposal, $user): MealProposal {
+            $proposal = MealProposal::query()->lockForUpdate()->findOrFail($proposal->id);
 
-        return $proposal;
+            if ($proposal->status !== MealProposalStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'proposal' => 'Only a pending meal proposal can be rejected.',
+                ]);
+            }
+
+            $proposal->update([
+                'status' => MealProposalStatus::Rejected,
+                'decided_by_user_id' => $user->id,
+                'decided_at' => now(),
+            ]);
+
+            return $proposal;
+        });
     }
 }

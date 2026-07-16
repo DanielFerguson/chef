@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon $expires_at
  * @property Carbon|null $accepted_at
  */
-#[Fillable(['team_id', 'email', 'role', 'token', 'invited_by_user_id', 'expires_at', 'accepted_at'])]
+#[Fillable(['team_id', 'person_id', 'email', 'role', 'token', 'invited_by_user_id', 'expires_at', 'accepted_at'])]
 class TeamInvitation extends Model
 {
     /** @use HasFactory<TeamInvitationFactory> */
@@ -40,6 +40,12 @@ class TeamInvitation extends Model
     public function inviter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'invited_by_user_id');
+    }
+
+    /** @return BelongsTo<Person, $this> */
+    public function person(): BelongsTo
+    {
+        return $this->belongsTo(Person::class);
     }
 
     protected function casts(): array

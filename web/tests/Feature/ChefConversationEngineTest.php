@@ -4,6 +4,7 @@ use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Ai\LaravelAiConversationEngine;
+use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
 use App\Ai\Tools\CreatePlanMealSlot;
 use App\Ai\Tools\InspectMealPlan;
@@ -77,6 +78,7 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
     expect($tools->map(fn (object $tool) => $tool::class)->all())->toBe([
         InspectTeamContext::class,
         InspectMealPlan::class,
+        CreateHouseholdPerson::class,
         UpdatePlanDateSpan::class,
         CreatePlanMealSlot::class,
         CreateMealProposal::class,

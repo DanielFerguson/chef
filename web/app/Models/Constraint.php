@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $severity
  * @property Carbon $explicitly_confirmed_at
  */
-#[Fillable(['team_id', 'person_id', 'created_by_user_id', 'kind', 'subject', 'details', 'severity', 'explicitly_confirmed_at'])]
+#[Fillable(['team_id', 'person_id', 'created_by_user_id', 'confirmation_message_id', 'idempotency_key', 'kind', 'subject', 'details', 'severity', 'explicitly_confirmed_at'])]
 class Constraint extends Model
 {
     /** @use HasFactory<ConstraintFactory> */
@@ -46,6 +46,12 @@ class Constraint extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /** @return BelongsTo<Message, $this> */
+    public function confirmationMessage(): BelongsTo
+    {
+        return $this->belongsTo(Message::class, 'confirmation_message_id');
     }
 
     /** @return array<string, string> */

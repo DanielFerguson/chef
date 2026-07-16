@@ -22,7 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property float|null $confidence
  * @property array<string, mixed>|null $evidence
  */
-#[Fillable(['team_id', 'person_id', 'subject', 'sentiment', 'strength', 'provenance', 'confidence', 'evidence'])]
+#[Fillable(['team_id', 'person_id', 'subject', 'sentiment', 'strength', 'provenance', 'confidence', 'evidence', 'idempotency_key'])]
 class Preference extends Model
 {
     /** @use HasFactory<PreferenceFactory> */

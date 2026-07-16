@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Teams\AcceptTeamInvitation;
 use App\Actions\Teams\InviteUserToTeam;
+use App\Models\Person;
 use App\Models\TeamInvitation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,10 +15,20 @@ class TeamInvitationController extends Controller
 {
     public function store(Request $request, InviteUserToTeam $invite): RedirectResponse
     {
-        $validated = $request->validate(['email' => ['required', 'email:rfc', 'max:255']]);
+        $validated = $request->validate([
+            'email' => ['required', 'email:rfc', 'max:255'],
+            'person_id' => ['nullable', 'integer'],
+        ]);
         $team = $request->user()->currentTeam;
         abort_unless($team !== null, 404);
-        $invitation = $invite->handle($team, $request->user(), $validated['email']);
+        $person = isset($validated['person_id'])
+            ? Person::query()
+                ->where('team_id', $team->id)
+                ->whereDoesntHave('userLink')
+                ->whereKey($validated['person_id'])
+                ->firstOrFail()
+            : null;
+        $invitation = $invite->handle($team, $request->user(), $validated['email'], $person);
 
         return back()->with('invitation_url', route('team-invitations.show', $invitation));
     }
@@ -31,6 +42,7 @@ class TeamInvitationController extends Controller
                 'email' => $teamInvitation->email,
                 'team' => $teamInvitation->team->only(['id', 'name']),
                 'inviter' => $teamInvitation->inviter?->only(['name']),
+                'person' => $teamInvitation->person?->only(['id', 'name']),
                 'accept_url' => route('team-invitations.accept', $teamInvitation),
                 'matches_user' => mb_strtolower($request->user()->email) === mb_strtolower($teamInvitation->email),
             ],

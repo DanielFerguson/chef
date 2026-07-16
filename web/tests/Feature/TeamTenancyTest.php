@@ -2,6 +2,7 @@
 
 use App\Actions\Teams\AddUserToTeam;
 use App\Actions\Teams\CreateTeamForUser;
+use App\Actions\Teams\InviteUserToTeam;
 use App\Enums\TeamRole;
 use App\Models\Person;
 use App\Models\User;
@@ -81,4 +82,24 @@ it('applies team policies across the tenancy boundary', function () {
         ->and($member->can('view', $team))->toBeTrue()
         ->and($member->can('delete', $team))->toBeFalse()
         ->and($outsider->can('view', $team))->toBeFalse();
+});
+
+it('applies person and invitation policies across roles and families', function () {
+    $owner = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($owner, 'Policy family');
+    $person = $team->people()->sole();
+    $member = User::factory()->create();
+    app(AddUserToTeam::class)->handle($team, $member);
+    $outsider = User::factory()->create();
+    $invitation = app(InviteUserToTeam::class)->handle($team, $owner, 'future@example.test');
+
+    expect($owner->can('create', [Person::class, $team]))->toBeTrue()
+        ->and($member->can('update', $person))->toBeTrue()
+        ->and($member->can('delete', $person))->toBeFalse()
+        ->and($owner->can('delete', $person))->toBeTrue()
+        ->and($outsider->can('update', $person))->toBeFalse()
+        ->and($owner->can('view', $invitation))->toBeTrue()
+        ->and($owner->can('create', [$invitation::class, $team]))->toBeTrue()
+        ->and($owner->can('delete', $invitation))->toBeTrue()
+        ->and($outsider->can('view', $invitation))->toBeFalse();
 });

@@ -2,12 +2,14 @@
 
 namespace App\Ai\Agents;
 
+use App\Actions\Households\CreateHouseholdPerson as CreateHouseholdPersonAction;
 use App\Actions\Households\RecordConstraint;
 use App\Actions\Households\RecordPreference;
 use App\Actions\MealPlans\UpdateMealPlanDateSpan;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\MovePlannedMeal;
 use App\Actions\Planning\ProposeMeal;
+use App\Ai\Tools\CreateHouseholdPerson;
 use App\Ai\Tools\CreateMealProposal;
 use App\Ai\Tools\CreatePlanMealSlot;
 use App\Ai\Tools\InspectMealPlan;
@@ -110,12 +112,13 @@ class ChefAgent implements Agent, Conversational, HasTools
         return [
             new InspectTeamContext($team),
             new InspectMealPlan($mealPlan),
+            new CreateHouseholdPerson($team, $this->actor, $this->currentMessage, app(CreateHouseholdPersonAction::class)),
             new UpdatePlanDateSpan($mealPlan, $this->actor, app(UpdateMealPlanDateSpan::class)),
-            new CreatePlanMealSlot($mealPlan, $this->actor, app(CreateMealSlot::class)),
+            new CreatePlanMealSlot($mealPlan, $this->actor, $this->currentMessage, app(CreateMealSlot::class)),
             new CreateMealProposal($mealPlan, $this->actor, $this->currentMessage, app(ProposeMeal::class)),
             new MoveSelectedMeal($mealPlan, $this->actor, app(MovePlannedMeal::class)),
-            new RecordHouseholdPreference($team, $this->actor, app(RecordPreference::class)),
-            new RecordSafetyConstraint($team, $this->actor, app(RecordConstraint::class)),
+            new RecordHouseholdPreference($team, $this->actor, $this->currentMessage, app(RecordPreference::class)),
+            new RecordSafetyConstraint($team, $this->actor, $this->currentMessage, app(RecordConstraint::class)),
         ];
     }
 }

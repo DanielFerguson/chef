@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property int $position
  * @property string|null $notes
  */
-#[Fillable(['team_id', 'meal_plan_id', 'date', 'kind', 'label', 'position', 'notes'])]
+#[Fillable(['team_id', 'meal_plan_id', 'source_message_id', 'idempotency_key', 'date', 'kind', 'label', 'position', 'notes'])]
 class MealSlot extends Model
 {
     /** @use HasFactory<MealSlotFactory> */
@@ -41,6 +41,12 @@ class MealSlot extends Model
     public function mealPlan(): BelongsTo
     {
         return $this->belongsTo(MealPlan::class);
+    }
+
+    /** @return BelongsTo<Message, $this> */
+    public function sourceMessage(): BelongsTo
+    {
+        return $this->belongsTo(Message::class, 'source_message_id');
     }
 
     /** @return BelongsToMany<Person, $this> */

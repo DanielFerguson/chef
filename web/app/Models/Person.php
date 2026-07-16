@@ -20,7 +20,7 @@ use Illuminate\Support\Collection;
  * @property-read Collection<int, Preference> $preferences
  * @property-read Collection<int, Constraint> $constraints
  */
-#[Fillable(['team_id', 'name'])]
+#[Fillable(['team_id', 'created_by_user_id', 'source_message_id', 'name'])]
 class Person extends Model
 {
     /** @use HasFactory<PersonFactory> */
@@ -30,6 +30,18 @@ class Person extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    /** @return BelongsTo<Message, $this> */
+    public function sourceMessage(): BelongsTo
+    {
+        return $this->belongsTo(Message::class, 'source_message_id');
     }
 
     /** @return HasOne<UserPersonLink, $this> */

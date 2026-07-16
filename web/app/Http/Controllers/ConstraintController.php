@@ -11,7 +11,7 @@ class ConstraintController extends Controller
 {
     public function update(Request $request, Constraint $constraint, RecordConstraint $record): RedirectResponse
     {
-        abort_unless($request->user()->memberships()->where('team_id', $constraint->team_id)->exists(), 403);
+        $this->authorize('update', $constraint);
         $validated = $request->validate([
             'subject' => ['required', 'string', 'max:120'],
             'details' => ['nullable', 'string', 'max:500'],
@@ -19,14 +19,14 @@ class ConstraintController extends Controller
             'explicitly_confirmed' => ['accepted'],
         ]);
         $record->handle(
-            $constraint->team,
-            $request->user(),
-            $constraint->kind,
-            $validated['subject'],
-            true,
-            $constraint->person,
-            $validated['details'] ?? null,
-            $validated['severity'] ?? null,
+            team: $constraint->team,
+            user: $request->user(),
+            kind: $constraint->kind,
+            subject: $validated['subject'],
+            directlyConfirmed: true,
+            person: $constraint->person,
+            details: $validated['details'] ?? null,
+            severity: $validated['severity'] ?? null,
         );
 
         if ($constraint->subject !== $validated['subject']) {
@@ -38,7 +38,7 @@ class ConstraintController extends Controller
 
     public function destroy(Request $request, Constraint $constraint): RedirectResponse
     {
-        abort_unless($request->user()->memberships()->where('team_id', $constraint->team_id)->exists(), 403);
+        $this->authorize('delete', $constraint);
         $constraint->delete();
 
         return back();

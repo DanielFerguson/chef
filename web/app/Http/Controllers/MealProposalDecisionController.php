@@ -12,6 +12,7 @@ class MealProposalDecisionController extends Controller
 {
     public function accept(Request $request, MealProposal $mealProposal, AcceptMealProposal $accept): RedirectResponse
     {
+        $this->authorize('update', $mealProposal);
         $accept->handle($mealProposal, $request->user());
 
         return back();
@@ -19,6 +20,7 @@ class MealProposalDecisionController extends Controller
 
     public function reject(Request $request, MealProposal $mealProposal, RejectMealProposal $reject): RedirectResponse
     {
+        $this->authorize('update', $mealProposal);
         $reject->handle($mealProposal, $request->user());
 
         return back();

@@ -5,6 +5,7 @@ namespace App\Ai\Tools;
 use App\Actions\Planning\CreateMealSlot;
 use App\Enums\MealSlotKind;
 use App\Models\MealPlan;
+use App\Models\Message;
 use App\Models\Person;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -18,6 +19,7 @@ class CreatePlanMealSlot implements Tool
     public function __construct(
         private readonly MealPlan $mealPlan,
         private readonly User $actor,
+        private readonly Message $sourceMessage,
         private readonly CreateMealSlot $createMealSlot,
     ) {}
 
@@ -40,6 +42,7 @@ class CreatePlanMealSlot implements Tool
             kind: MealSlotKind::from($request->string('kind')->toString()),
             participants: $participants,
             label: $request->string('label')->toString() ?: null,
+            sourceMessage: $this->sourceMessage,
         );
 
         return $slot->toJson(JSON_PRETTY_PRINT);

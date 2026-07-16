@@ -23,14 +23,28 @@ class AcceptMealProposal
         }
 
         return DB::transaction(function () use ($proposal, $user): PlannedMeal {
-            $existing = PlannedMeal::query()->where('meal_slot_id', $proposal->meal_slot_id)->first();
+            $proposal = MealProposal::query()->lockForUpdate()->findOrFail($proposal->id);
+
+            if ($proposal->status !== MealProposalStatus::Pending) {
+                throw ValidationException::withMessages([
+                    'proposal' => 'Only a pending meal proposal can be accepted.',
+                ]);
+            }
+
+            $existing = PlannedMeal::query()
+                ->where('meal_slot_id', $proposal->meal_slot_id)
+                ->lockForUpdate()
+                ->first();
 
             if ($existing?->meal_proposal_id !== null) {
-                MealProposal::query()->whereKey($existing->meal_proposal_id)->update([
-                    'status' => MealProposalStatus::Replaced,
-                    'decided_by_user_id' => $user->id,
-                    'decided_at' => now(),
-                ]);
+                MealProposal::query()
+                    ->whereKey($existing->meal_proposal_id)
+                    ->where('status', MealProposalStatus::Accepted->value)
+                    ->update([
+                        'status' => MealProposalStatus::Replaced,
+                        'decided_by_user_id' => $user->id,
+                        'decided_at' => now(),
+                    ]);
             }
 
             $existing?->delete();

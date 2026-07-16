@@ -12,6 +12,7 @@ class PlannedMealMoveController extends Controller
 {
     public function __invoke(Request $request, PlannedMeal $plannedMeal, MovePlannedMeal $move): RedirectResponse
     {
+        $this->authorize('update', $plannedMeal);
         $validated = $request->validate(['meal_slot_id' => ['required', 'integer']]);
         $target = MealSlot::query()
             ->where('team_id', $plannedMeal->team_id)

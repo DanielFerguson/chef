@@ -13,7 +13,7 @@ class PreferenceController extends Controller
 {
     public function update(Request $request, Preference $preference, RecordPreference $record): RedirectResponse
     {
-        abort_unless($request->user()->memberships()->where('team_id', $preference->team_id)->exists(), 403);
+        $this->authorize('update', $preference);
         $validated = $request->validate([
             'subject' => ['required', 'string', 'max:120'],
             'sentiment' => ['required', Rule::enum(PreferenceSentiment::class)],
@@ -39,7 +39,7 @@ class PreferenceController extends Controller
 
     public function destroy(Request $request, Preference $preference): RedirectResponse
     {
-        abort_unless($request->user()->memberships()->where('team_id', $preference->team_id)->exists(), 403);
+        $this->authorize('delete', $preference);
         $preference->delete();
 
         return back();

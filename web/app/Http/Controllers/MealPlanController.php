@@ -44,10 +44,13 @@ class MealPlanController extends Controller
             'slots.participants',
             'slots.plannedMeal',
             'proposals' => fn ($query) => $query->latest(),
+            'team.people.userLink',
             'team.people.preferences',
-            'team.people.constraints',
-            'team.preferences',
-            'team.constraints',
+            'team.people.constraints.confirmationMessage.author:id,name',
+            'team.preferences' => fn ($query) => $query->whereNull('person_id'),
+            'team.constraints' => fn ($query) => $query
+                ->whereNull('person_id')
+                ->with('confirmationMessage.author:id,name'),
         ]);
 
         $conversation = $mealPlan->conversations->firstOrFail();

@@ -5,6 +5,7 @@ namespace App\Ai\Tools;
 use App\Actions\Households\RecordPreference;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
+use App\Models\Message;
 use App\Models\Person;
 use App\Models\Team;
 use App\Models\User;
@@ -18,6 +19,7 @@ class RecordHouseholdPreference implements Tool
     public function __construct(
         private readonly Team $team,
         private readonly User $actor,
+        private readonly Message $sourceMessage,
         private readonly RecordPreference $recordPreference,
     ) {}
 
@@ -29,7 +31,9 @@ class RecordHouseholdPreference implements Tool
     public function handle(Request $request): Stringable|string
     {
         $personId = $request->integer('person_id');
-        $person = $personId > 0 ? Person::query()->findOrFail($personId) : null;
+        $person = $personId > 0
+            ? Person::query()->where('team_id', $this->team->id)->findOrFail($personId)
+            : null;
 
         $preference = $this->recordPreference->handle(
             team: $this->team,
@@ -40,6 +44,7 @@ class RecordHouseholdPreference implements Tool
             person: $person,
             strength: max(1, min(5, $request->integer('strength', 3))),
             confidence: $request->float('confidence') ?: null,
+            sourceMessage: $this->sourceMessage,
         );
 
         return $preference->toJson(JSON_PRETTY_PRINT);

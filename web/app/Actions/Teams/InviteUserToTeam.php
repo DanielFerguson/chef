@@ -3,6 +3,7 @@
 namespace App\Actions\Teams;
 
 use App\Enums\TeamRole;
+use App\Models\Person;
 use App\Models\Team;
 use App\Models\TeamInvitation;
 use App\Models\User;
@@ -11,16 +12,21 @@ use Illuminate\Support\Str;
 
 class InviteUserToTeam
 {
-    public function handle(Team $team, User $inviter, string $email): TeamInvitation
+    public function handle(Team $team, User $inviter, string $email, ?Person $person = null): TeamInvitation
     {
         if (! $inviter->can('invite', $team)) {
             throw new AuthorizationException('You cannot invite people to this family.');
+        }
+
+        if ($person !== null && ($person->team_id !== $team->id || $person->userLink()->exists())) {
+            throw new AuthorizationException('That person cannot be linked by this invitation.');
         }
 
         return TeamInvitation::query()->updateOrCreate(
             ['team_id' => $team->id, 'email' => Str::lower(trim($email)), 'accepted_at' => null],
             [
                 'role' => TeamRole::Member,
+                'person_id' => $person?->id,
                 'token' => hash('sha256', Str::random(64)),
                 'invited_by_user_id' => $inviter->id,
                 'expires_at' => now()->addDays(7),

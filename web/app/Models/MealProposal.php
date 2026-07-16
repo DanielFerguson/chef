@@ -24,7 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $decided_by_user_id
  * @property Carbon|null $decided_at
  */
-#[Fillable(['team_id', 'meal_plan_id', 'meal_slot_id', 'message_id', 'proposed_by_user_id', 'title', 'summary', 'estimated_minutes', 'estimated_cost', 'status', 'decided_by_user_id', 'decided_at'])]
+#[Fillable(['team_id', 'meal_plan_id', 'meal_slot_id', 'message_id', 'idempotency_key', 'proposed_by_user_id', 'title', 'summary', 'estimated_minutes', 'estimated_cost', 'status', 'decided_by_user_id', 'decided_at'])]
 class MealProposal extends Model
 {
     use ResolvesWithinCurrentTeam;

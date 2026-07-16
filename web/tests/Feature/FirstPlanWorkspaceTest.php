@@ -157,11 +157,10 @@ it('never records an unconfirmed safety constraint', function () {
     $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
 
     app(RecordConstraint::class)->handle(
-        $team,
-        $user,
-        ConstraintKind::Allergy,
-        'Peanuts',
-        false,
+        team: $team,
+        user: $user,
+        kind: ConstraintKind::Allergy,
+        subject: 'Peanuts',
     );
 })->throws(ValidationException::class);
 

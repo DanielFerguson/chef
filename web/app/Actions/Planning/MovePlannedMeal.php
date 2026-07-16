@@ -19,6 +19,10 @@ class MovePlannedMeal
         }
 
         if ($target->plannedMeal()->exists()) {
+            if ($plannedMeal->meal_slot_id === $target->id) {
+                return $plannedMeal;
+            }
+
             throw ValidationException::withMessages(['meal_slot_id' => 'Replace the existing meal before moving into this slot.']);
         }
 
