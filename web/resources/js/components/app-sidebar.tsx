@@ -1,5 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
+    BookOpen,
     CalendarDays,
     CirclePlus,
     Clock3,
@@ -72,6 +73,14 @@ export function AppSidebar() {
                 <NavMain items={mainNavItems} />
                 <div className="px-2">
                     <SidebarMenu>
+                        <SidebarMenuItem>
+                            <SidebarMenuButton asChild tooltip="Recipes">
+                                <Link href="/recipes">
+                                    <BookOpen />
+                                    <span>Recipes</span>
+                                </Link>
+                            </SidebarMenuButton>
+                        </SidebarMenuItem>
                         <SidebarMenuItem>
                             <SidebarMenuButton disabled tooltip="Calendar">
                                 <CalendarDays />

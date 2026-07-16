@@ -22,6 +22,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
 
@@ -220,4 +221,80 @@ it('explains recommendations using safety preferences recency cost and effort', 
         ->and($planned->recommendation_explanation['recency'])->toBe('Not found in earlier plans.')
         ->and($planned->recommendation_explanation['effort'])->toBe('35 minutes total.')
         ->and($planned->recommendation_explanation['cost'])->toBe('Estimated at $14.50.');
+});
+
+it('exposes authorised recipe creation import versioning and reading over HTTP', function () {
+    $workspace = m3PlanningWorkspace();
+    $payload = [
+        'title' => 'Air fryer schnitzel',
+        'summary' => 'Crisp and quick.',
+        'servings' => 2,
+        'prep_minutes' => 15,
+        'cook_minutes' => 18,
+        'ingredients' => [['name' => 'Chicken breast', 'quantity' => 2, 'unit' => 'pieces']],
+        'steps' => [['instruction' => 'Crumb and air fry.', 'timer_minutes' => 18]],
+        'equipment' => ['Air fryer'],
+        'notices' => [],
+    ];
+
+    $this->withoutVite()->actingAs($workspace['user'])->post(route('recipes.store'), $payload)->assertRedirect();
+    $recipe = $workspace['team']->recipes()->sole();
+    $this->get(route('recipes.index'))->assertInertia(fn (Assert $page) => $page
+        ->component('recipes/index')
+        ->where('recipes.0.title', 'Air fryer schnitzel'));
+    $this->get(route('recipes.show', $recipe))->assertInertia(fn (Assert $page) => $page
+        ->component('recipes/show')
+        ->where('recipe.versions.0.version', 1)
+        ->where('recipe.versions.0.ingredients.0.name', 'Chicken breast'));
+    $this->post(route('recipes.versions.store', $recipe), [...$payload, 'title' => 'Air fryer schnitzel updated'])->assertRedirect();
+    $this->post(route('recipes.import'), [
+        'source_text' => "Toast\nIngredients\n- Bread\nSteps\n1. Toast the bread.",
+    ])->assertRedirect();
+
+    expect($recipe->versions()->count())->toBe(2)
+        ->and($workspace['team']->recipes()->count())->toBe(2);
+});
+
+it('exposes the complete planning workspace mutations over HTTP', function () {
+    $workspace = m3PlanningWorkspace();
+    $recipe = m3CreateRecipe($workspace);
+    $person = $workspace['team']->people()->sole();
+    $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, [$person]);
+    $this->actingAs($workspace['user']);
+
+    $this->post(route('meal-slots.planned-meal.store', $slot), [
+        'type' => 'recipe',
+        'recipe_version_id' => $recipe->latestVersion->id,
+        'estimated_cost' => 12.5,
+    ])->assertRedirect();
+    $planned = $slot->plannedMeal()->sole();
+    $this->put(route('meal-slots.participants.update', $slot), [
+        'participants' => [['person_id' => $person->id, 'servings' => 1.5]],
+    ])->assertRedirect();
+    $this->put(route('planned-meals.update', $planned), [
+        'servings' => 1.5,
+        'status' => 'skipped',
+        'notes' => 'Not tonight.',
+    ])->assertRedirect();
+    $this->post(route('meal-plans.milestones.store', $workspace['plan']), [
+        'kind' => 'planning_confirmed',
+    ])->assertRedirect();
+
+    $this->withoutVite()->get(route('meal-plans.show', $workspace['plan']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('workspace.plan.slots.0.planned_meal.recipe_version.id', $recipe->latestVersion->id)
+            ->where('workspace.plan.slots.0.planned_meal.status', 'skipped')
+            ->where('workspace.plan.milestones.0.kind', 'planning_confirmed')
+            ->where('workspace.recipes.0.id', $recipe->id));
+});
+
+it('returns not found for cross-family M3 route-bound resources', function () {
+    $workspace = m3PlanningWorkspace();
+    $recipe = m3CreateRecipe($workspace);
+    $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    $outsider = User::factory()->create();
+    app(CreateTeamForUser::class)->handle($outsider, 'Outside family');
+
+    $this->actingAs($outsider)->get(route('recipes.show', $recipe))->assertNotFound();
+    $this->post(route('meal-slots.planned-meal.store', $slot), ['type' => 'open', 'title' => 'Open'])->assertNotFound();
 });

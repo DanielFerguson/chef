@@ -1,38 +1,84 @@
-import { router, useForm, usePage } from '@inertiajs/react';
-import { CalendarDays, Check, Copy, MailPlus, Plus } from 'lucide-react';
+import { useForm, usePage } from '@inertiajs/react';
+import {
+    CalendarDays,
+    Check,
+    CircleAlert,
+    Copy,
+    History,
+    MailPlus,
+    Plus,
+} from 'lucide-react';
 import { useState } from 'react';
 import { store as storeMealSlot } from '@/actions/App/Http/Controllers/MealSlotController';
-import PlannedMealMoveController from '@/actions/App/Http/Controllers/PlannedMealMoveController';
 import { store as storeInvitation } from '@/actions/App/Http/Controllers/TeamInvitationController';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatDay } from './format-day';
 import { HouseholdTruth } from './household-truth';
 import type { MealPlanWorkspace } from './types';
 
-function PlanSlots({ workspace }: { workspace: MealPlanWorkspace }) {
+function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
     const { plan, household } = workspace;
     const [showForm, setShowForm] = useState(plan.slots.length === 0);
     const slotForm = useForm({
         date: plan.starts_on.slice(0, 10),
         kind: 'dinner',
+        label: '',
         participant_ids: household.people.map((person) => person.id),
     });
-    const emptySlots = plan.slots.filter((slot) => slot.planned_meal === null);
+    const milestoneForm = useForm({ kind: 'planning_confirmed' });
+    const confirmed = plan.milestones.some(
+        (milestone) => milestone.kind === 'planning_confirmed',
+    );
 
     return (
         <section>
-            <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-medium">
-                    <CalendarDays className="size-4" /> Plan
-                </h2>
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <h2 className="flex items-center gap-2 text-sm font-medium">
+                        <CalendarDays className="size-4" /> Plan status
+                    </h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {plan.slots.length} slots · revision {plan.revision}
+                    </p>
+                </div>
+                <Badge variant={confirmed ? 'secondary' : 'outline'}>
+                    {confirmed ? 'Confirmed' : 'Planning'}
+                </Badge>
+            </div>
+            {plan.derived_data_stale_at && (
+                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                    <p className="flex items-center gap-2 font-medium">
+                        <CircleAlert className="size-3.5" /> Shopping data needs
+                        refreshing
+                    </p>
+                    <p className="mt-1 leading-5">
+                        {plan.derived_data_stale_reason}
+                    </p>
+                </div>
+            )}
+            <div className="mt-3 flex gap-2">
                 <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     onClick={() => setShowForm((value) => !value)}
                 >
                     <Plus /> Add slot
                 </Button>
+                {!confirmed && (
+                    <Button
+                        size="sm"
+                        disabled={milestoneForm.processing}
+                        onClick={() =>
+                            milestoneForm.post(
+                                `/meal-plans/${plan.id}/milestones`,
+                                { preserveScroll: true },
+                            )
+                        }
+                    >
+                        <Check /> Confirm plan
+                    </Button>
+                )}
             </div>
             {showForm && (
                 <form
@@ -43,7 +89,7 @@ function PlanSlots({ workspace }: { workspace: MealPlanWorkspace }) {
                             onSuccess: () => setShowForm(false),
                         });
                     }}
-                    className="mb-3 grid grid-cols-[1fr_auto_auto] gap-2"
+                    className="mt-3 grid grid-cols-[1fr_auto_auto] gap-2"
                 >
                     <Input
                         type="date"
@@ -67,6 +113,7 @@ function PlanSlots({ workspace }: { workspace: MealPlanWorkspace }) {
                         <option value="lunch">Lunch</option>
                         <option value="dinner">Dinner</option>
                         <option value="snack">Snack</option>
+                        <option value="custom">Custom</option>
                     </select>
                     <Button
                         size="icon"
@@ -77,101 +124,36 @@ function PlanSlots({ workspace }: { workspace: MealPlanWorkspace }) {
                         <Check />
                         <span className="sr-only">Add meal slot</span>
                     </Button>
-                    {slotForm.errors.date && (
-                        <p
-                            role="alert"
-                            className="col-span-3 text-xs text-destructive"
-                        >
-                            {slotForm.errors.date}
-                        </p>
+                    {slotForm.data.kind === 'custom' && (
+                        <Input
+                            className="col-span-3"
+                            aria-label="Custom meal slot label"
+                            placeholder="Occasion name"
+                            value={slotForm.data.label}
+                            onChange={(event) =>
+                                slotForm.setData('label', event.target.value)
+                            }
+                        />
                     )}
                 </form>
             )}
-            <div className="space-y-2">
-                {plan.slots.length === 0 && (
-                    <p className="rounded-lg border border-dashed p-3 text-xs leading-5 text-muted-foreground">
-                        Add the meals you want to cover, or tell Chef in the
-                        conversation.
-                    </p>
-                )}
-                {plan.slots.map((slot) => (
-                    <div
-                        key={slot.id}
-                        className="rounded-lg border bg-background p-3"
-                    >
-                        <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium">
-                                {formatDay(slot.date)} ·{' '}
-                                {slot.label ?? slot.kind}
-                            </p>
-                            <span className="text-xs text-muted-foreground">
-                                {slot.participants.length} eating
-                            </span>
-                        </div>
-                        {slot.planned_meal ? (
-                            <div className="mt-2">
-                                <p className="text-sm font-medium">
-                                    {slot.planned_meal.title}
-                                </p>
-                                {slot.planned_meal.summary && (
-                                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                                        {slot.planned_meal.summary}
-                                    </p>
-                                )}
-                                {emptySlots.length > 0 && (
-                                    <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                                        Move to
-                                        <select
-                                            defaultValue=""
-                                            className="min-w-0 flex-1 rounded border bg-background px-2 py-1"
-                                            onChange={(event) => {
-                                                if (
-                                                    event.target.value &&
-                                                    slot.planned_meal
-                                                ) {
-                                                    router.put(
-                                                        PlannedMealMoveController.url(
-                                                            slot.planned_meal
-                                                                .id,
-                                                        ),
-                                                        {
-                                                            meal_slot_id:
-                                                                Number(
-                                                                    event.target
-                                                                        .value,
-                                                                ),
-                                                        },
-                                                        {
-                                                            preserveScroll: true,
-                                                        },
-                                                    );
-                                                }
-                                            }}
-                                        >
-                                            <option value="" disabled>
-                                                Choose slot
-                                            </option>
-                                            {emptySlots.map((target) => (
-                                                <option
-                                                    key={target.id}
-                                                    value={target.id}
-                                                >
-                                                    {formatDay(target.date)} ·{' '}
-                                                    {target.kind}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                )}
-                            </div>
-                        ) : (
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                Open
-                            </p>
-                        )}
-                    </div>
-                ))}
-            </div>
+            {plan.revisions.length > 0 && (
+                <details className="mt-4 border-t pt-3">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground">
+                        <History className="size-3.5" /> Recent changes
+                    </summary>
+                    <ol className="mt-3 space-y-2 border-l pl-3 text-xs text-muted-foreground">
+                        {plan.revisions.slice(0, 5).map((revision) => (
+                            <li key={revision.id}>
+                                <span className="text-foreground">
+                                    v{revision.revision}
+                                </span>{' '}
+                                {revision.summary}
+                            </li>
+                        ))}
+                    </ol>
+                </details>
+            )}
         </section>
     );
 }
@@ -279,7 +261,7 @@ export function PlanInspector({ workspace }: { workspace: MealPlanWorkspace }) {
     return (
         <aside className="border-t bg-muted/20 lg:w-96 lg:border-t-0 lg:border-l">
             <div className="space-y-7 p-5">
-                <PlanSlots workspace={workspace} />
+                <PlanStatus workspace={workspace} />
                 <HouseholdTruth household={workspace.household} />
                 <InvitationForm workspace={workspace} />
             </div>

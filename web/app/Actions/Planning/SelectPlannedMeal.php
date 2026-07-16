@@ -39,6 +39,9 @@ class SelectPlannedMeal
             $resolvedTitle = match ($type) {
                 PlannedMealType::Recipe => $recipeVersion->title,
                 PlannedMealType::Leftovers => 'Leftovers: '.$sourcePlannedMeal->title,
+                PlannedMealType::Takeaway => trim($title ?: 'Takeaway'),
+                PlannedMealType::EatingOut => trim($title ?: 'Eating out'),
+                PlannedMealType::Open => trim($title ?: 'Open'),
                 default => trim($title ?? ''),
             };
 

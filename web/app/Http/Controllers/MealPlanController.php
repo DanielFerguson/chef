@@ -42,8 +42,14 @@ class MealPlanController extends Controller
         $mealPlan->load([
             'conversations.messages.author:id,name',
             'slots.participants',
-            'slots.plannedMeal',
+            'slots.plannedMeal.recipeVersion.ingredients',
+            'slots.plannedMeal.recipeVersion.steps',
+            'slots.plannedMeal.recipeVersion.equipment',
+            'slots.plannedMeal.recipeVersion.preparationNotices',
+            'slots.plannedMeal.sourcePlannedMeal',
             'proposals' => fn ($query) => $query->latest(),
+            'revisions' => fn ($query) => $query->limit(20),
+            'milestones',
             'team.people.userLink',
             'team.people.preferences',
             'team.people.constraints.confirmationMessage.author:id,name',
@@ -51,6 +57,7 @@ class MealPlanController extends Controller
             'team.constraints' => fn ($query) => $query
                 ->whereNull('person_id')
                 ->with('confirmationMessage.author:id,name'),
+            'team.recipes.latestVersion.ingredients',
         ]);
 
         $conversation = $mealPlan->conversations->firstOrFail();
@@ -60,6 +67,7 @@ class MealPlanController extends Controller
                 'plan' => $mealPlan,
                 'conversation' => $conversation,
                 'household' => $mealPlan->team,
+                'recipes' => $mealPlan->team->recipes,
             ],
         ]);
     }

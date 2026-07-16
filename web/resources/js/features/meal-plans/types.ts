@@ -39,6 +39,7 @@ export type Person = {
     user_link?: { id: number; user_id: number } | null;
     preferences: Preference[];
     constraints: Constraint[];
+    pivot?: { servings: number };
 };
 
 export type PlannedMeal = {
@@ -48,6 +49,27 @@ export type PlannedMeal = {
     summary: string | null;
     estimated_minutes: number | null;
     estimated_cost: number | null;
+    type:
+        'recipe' | 'custom' | 'leftovers' | 'takeaway' | 'eating_out' | 'open';
+    status: 'planned' | 'skipped';
+    servings: number;
+    notes: string | null;
+    recipe_version_id: number | null;
+    source_planned_meal_id: number | null;
+    recommendation_explanation: {
+        safety: string;
+        preferences: { subject: string; sentiment: string }[];
+        recency: string;
+        effort: string;
+        cost: string;
+    } | null;
+    recipe_version: {
+        id: number;
+        recipe_id: number;
+        version: number;
+        title: string;
+        summary: string | null;
+    } | null;
 };
 
 export type MealSlot = {
@@ -75,8 +97,24 @@ export type MealPlanWorkspace = {
         title: string;
         starts_on: string;
         ends_on: string;
+        revision: number;
+        planning_confirmed_at: string | null;
+        derived_data_stale_at: string | null;
+        derived_data_stale_reason: string | null;
         slots: MealSlot[];
         proposals: MealProposal[];
+        revisions: {
+            id: number;
+            revision: number;
+            summary: string;
+            created_at: string;
+        }[];
+        milestones: {
+            id: number;
+            kind: string;
+            plan_revision: number;
+            achieved_at: string;
+        }[];
     };
     conversation: {
         id: number;
@@ -89,6 +127,17 @@ export type MealPlanWorkspace = {
         preferences: Preference[];
         constraints: Constraint[];
     };
+    recipes: {
+        id: number;
+        title: string;
+        summary: string | null;
+        latest_version: {
+            id: number;
+            version: number;
+            title: string;
+            summary: string | null;
+        };
+    }[];
 };
 
 export type StreamEvent = {
