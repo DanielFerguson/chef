@@ -1,0 +1,307 @@
+# Chef product and interface style
+
+Chef borrows the spatial confidence and restraint of the ChatGPT and Codex desktop experiences: quiet navigation, content-led workspaces, a strong composer, and progressive disclosure. It should not be a visual clone. The design language must serve planning, shopping, and cooking rather than software-development workflows.
+
+## Design intent
+
+Chef should feel:
+
+- calm enough for Sunday planning;
+- fast enough for a weeknight change;
+- trustworthy enough for allergies, budgets, and shopping automation;
+- focused enough to cook from with messy hands;
+- warm without becoming decorative or childish;
+- intelligent without constantly announcing that it uses AI.
+
+The product's a-ha moment is not receiving a paragraph from an assistant. It is watching a useful family plan take shape from an ordinary conversation.
+
+## Experience principles
+
+### Content is the interface
+
+Prefer the meal plan, shopping list, recipe, or conversation itself over dashboards of summary cards. Chrome should be quiet and stable.
+
+### Conversation and structure coexist
+
+Natural language expresses intent. Structured UI shows durable state and enables precise changes. A message that schedules meals should visibly update the plan inspector; it should not leave the result trapped in prose.
+
+### Progressive disclosure
+
+Show the next useful decision. Avoid presenting every setting, filter, model, metric, and stage at once.
+
+### Direct manipulation remains first-class
+
+Anything the assistant can change should also be inspectable and, where practical, directly editable. Dragging a meal, ticking a list item, and changing servings must not require a prompt.
+
+### Trust is visible
+
+Distinguish:
+
+- confirmed facts from suggestions;
+- allergies from dislikes;
+- estimates from actual prices;
+- planned items from ordered products;
+- background activity from actions awaiting approval.
+
+### One product across input modes
+
+Typing, dictation, and native voice operate the same plan. Voice must not create a separate navigation model or hidden state.
+
+## Application shell
+
+### Left rail
+
+The desktop left rail is persistent and narrow. It contains:
+
+- `New meal plan`;
+- Today;
+- Calendar;
+- Shopping;
+- search;
+- recent plans grouped by useful state such as Draft, Upcoming, Active, and Completed;
+- team switcher and account controls at the bottom.
+
+Do not place a large month calendar permanently in the rail. Calendar is a destination; the rail is navigation.
+
+Plan titles should be human and date-aware, for example `Winter weeknight plan` or `16–21 July`, not database-like identifiers.
+
+### Top bar
+
+The top bar communicates context rather than duplicating navigation:
+
+- editable plan title;
+- date range;
+- current phase or important milestone;
+- participant summary;
+- share or invite action;
+- contextual overflow actions.
+
+Keep it one quiet row on desktop. On small screens, collapse secondary metadata.
+
+### Main workspace
+
+The central column holds the primary activity:
+
+- conversation during planning and onboarding;
+- shopping list during shopping;
+- recipe steps during cooking;
+- outcomes during review.
+
+The conversation should have a comfortable readable width rather than stretching across the viewport. Structured artifacts can break wider when comparison benefits from space.
+
+### Inspector
+
+The right inspector is collapsible and changes with context:
+
+- onboarding: family profile and developing first plan;
+- planning: calendar, meal slots, participants, cost and unresolved decisions;
+- shopping: list summary, budget, source meals, product matches and automation status;
+- cooking: ingredients, equipment, timers and substitutions;
+- review: outcomes and person-specific feedback.
+
+The inspector shows current truth. Conversation explains how it changed.
+
+### Composer
+
+The composer is persistent when conversation is available. It includes:
+
+- multiline text entry;
+- attach;
+- microphone;
+- send or stop;
+- one contextual action when useful.
+
+Avoid a toolbar of rarely used AI controls. Model selection, reasoning settings, and developer diagnostics do not belong in the household interface.
+
+## Onboarding style
+
+Onboarding uses the normal workspace rather than a wizard.
+
+- Start with one welcoming prompt and one answerable question.
+- Let the household speak naturally before showing forms.
+- Translate answers into visible chips, people, constraints, and meal slots in the inspector.
+- Ask at most one important follow-up at a time.
+- Offer `Skip` and `I don't know yet` without penalty.
+- Use quick reactions and meal cards when they reduce typing.
+- Show lightweight progress such as `Family · Food · Week · First plan`, but never block value behind completing every category.
+- End inside the useful first plan, not on a completion screen.
+
+Permission prompts appear only at the moment of use and explain the benefit, scope, and fallback in one concise surface.
+
+## Planning interactions
+
+- Draft meal cards show name, participants, effort, key constraint fit, and estimated cost only when available.
+- Selected meals visibly occupy dated slots.
+- Drag-and-drop is supported, with an accessible move alternative.
+- Changes caused by conversation animate subtly in the inspector so the connection is legible.
+- Unresolved decisions are explicit and actionable.
+- A stale shopping list shows a compact change summary rather than a generic warning.
+
+Avoid gamified progress, excessive recommendation carousels, or a dense project-management board.
+
+## Shopping interactions
+
+The list should feel as fast as a lightweight document while remaining structured.
+
+- click or tap to edit;
+- enter to add;
+- drag to reorder where meaningful;
+- tick to complete;
+- annotate inline;
+- group by aisle, source meal, or status;
+- reveal product and substitution detail on demand;
+- keep estimated and actual totals visually distinct.
+
+Automation status should read like a calm activity log:
+
+```text
+Matching 34 items
+28 added
+3 need your choice
+3 still searching
+```
+
+Approval requests state the proposed action and consequence. Do not use vague prompts such as `Allow Chef to continue?`.
+
+## Cooking mode
+
+Cooking mode is deliberately different from planning:
+
+- large type and generous targets;
+- high contrast;
+- one current step with adjacent steps available;
+- ingredients and quantities reachable without losing place;
+- screen-wake support where available;
+- minimal navigation and no promotional content;
+- timers that remain visible after moving between steps;
+- substitutions from the actual shop, not only the original recipe.
+
+The cook should be able to use the view at arm's length on a narrow screen.
+
+## Mobile and responsive behaviour
+
+Chef is responsive web-first.
+
+Suggested mobile navigation:
+
+- Today;
+- Plans;
+- Shop;
+- Chat.
+
+The desktop rail becomes a drawer. The inspector becomes a full-height sheet. Cooking mode becomes a focused full-screen flow. Preserve plan context when switching between chat and structured views.
+
+## Visual language
+
+### Colour
+
+Use a restrained neutral base with one warm culinary accent. Colour communicates state before decoration.
+
+Initial semantic roles:
+
+- background and elevated surface;
+- foreground and muted foreground;
+- border and focus ring;
+- primary action;
+- success or completed;
+- warning or unresolved;
+- destructive or unsafe;
+- assistant activity;
+- hard safety constraint.
+
+Allergy and safety indicators must not rely on colour alone.
+
+### Typography
+
+- Use a highly legible sans-serif UI family.
+- Keep conversation and recipe text comfortably readable.
+- Use tabular numerals for prices, quantities, timers, and budget comparisons.
+- Reserve monospace for identifiers or developer diagnostics, not ordinary shopping lists.
+- Prefer sentence case throughout the product.
+
+### Shape and elevation
+
+- Use moderate radii and thin borders.
+- Keep shadows soft and infrequent.
+- Avoid nesting cards inside cards.
+- Use whitespace and alignment before additional containers.
+- Floating surfaces are for composers, menus, approvals, and temporary inspectors—not every section.
+
+### Icons
+
+Use one consistent outline icon family. Pair unfamiliar icons with labels. Avoid food emoji as primary navigation or status language.
+
+### Motion
+
+Motion should explain:
+
+- where a newly scheduled meal went;
+- that an assistant is actively working;
+- that an inspector changed context;
+- that an automation paused for approval.
+
+Keep transitions short and respect reduced-motion preferences. Avoid ambient animation.
+
+## Component approach
+
+Use shadcn/ui primitives as the starting point and compose Chef-specific patterns from them. Prefer accessible primitives over custom interaction code.
+
+Likely shared components:
+
+- `AppShell`
+- `PlanRailItem`
+- `ConversationThread`
+- `Composer`
+- `ArtifactCard`
+- `PlanInspector`
+- `MealSlotCard`
+- `PersonChip`
+- `ConstraintBadge`
+- `ShoppingListEditor`
+- `BudgetSummary`
+- `AutomationActivity`
+- `ApprovalCard`
+- `RecipeStepView`
+- `PermissionPrompt`
+
+Do not build a large abstract design system before the first slice reveals repeated needs.
+
+## Writing and conversation style
+
+Chef is concise, warm, and practical.
+
+- Lead with the recommendation or changed outcome.
+- Ask one material question at a time.
+- Explain why a suggestion fits using household context.
+- State uncertainty plainly.
+- Never call an inferred preference a fact.
+- Never soften allergy language.
+- Avoid congratulatory filler after routine actions.
+- Use the household's names when it clarifies participation or disagreement.
+- Say `I added the items to your cart for review`, never `I placed your order`.
+
+## Accessibility baseline
+
+- Meet WCAG 2.2 AA for public version 1.
+- Full keyboard access for planning and shopping interactions.
+- Visible focus states.
+- Accessible alternatives to drag-and-drop.
+- Announce streamed messages and plan changes without overwhelming screen readers.
+- Use labelled controls and meaningful status text.
+- Support zoom and large text without hiding core actions.
+- Maintain sufficient touch targets in cooking and shopping modes.
+- Caption or transcribe voice interactions.
+- Never encode safety, completion, or approval state with colour alone.
+
+## Design review checklist
+
+Before accepting a new surface, ask:
+
+1. Is the main household task immediately obvious?
+2. Is durable state visible outside the conversation?
+3. Could direct manipulation be faster here?
+4. Are suggestions, facts, constraints, and approvals distinguishable?
+5. Does the surface work by keyboard and on a narrow screen?
+6. Is any information duplicated without helping orientation?
+7. Does the interface remain calm during streaming or automation?
+8. Is the user still in control of consequential actions?
