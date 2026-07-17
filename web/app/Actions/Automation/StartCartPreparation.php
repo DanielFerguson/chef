@@ -11,6 +11,8 @@ use App\Models\Budget;
 use App\Models\Retailer;
 use App\Models\ShoppingList;
 use App\Models\User;
+use App\Support\OperationalMetrics;
+use App\Support\UsageGuard;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -18,7 +20,11 @@ use Illuminate\Validation\ValidationException;
 
 class StartCartPreparation
 {
-    public function __construct(private readonly RetailerOriginPolicy $origins) {}
+    public function __construct(
+        private readonly RetailerOriginPolicy $origins,
+        private readonly UsageGuard $usageGuard,
+        private readonly OperationalMetrics $metrics,
+    ) {}
 
     public function handle(
         ShoppingList $shoppingList,
@@ -73,6 +79,8 @@ class StartCartPreparation
                 return $existing;
             }
 
+            $this->usageGuard->assertAutomationAllowed($shoppingList->team);
+
             if ($connection->automationRuns()
                 ->whereNotIn('status', [AutomationRunStatus::Completed, AutomationRunStatus::Failed, AutomationRunStatus::Cancelled, AutomationRunStatus::Expired])
                 ->exists()) {
@@ -123,7 +131,7 @@ class StartCartPreparation
                 })->values()->all(),
             ];
 
-            return AutomationRun::query()->create([
+            $run = AutomationRun::query()->create([
                 'uuid' => (string) Str::uuid(),
                 'team_id' => $shoppingList->team_id,
                 'shopping_list_id' => $shoppingList->id,
@@ -136,6 +144,17 @@ class StartCartPreparation
                 'progress' => ['total' => $items->count(), 'added' => 0, 'unresolved' => 0],
                 'expires_at' => now()->addMinutes((int) config('ai.computer_use.run_expiry_minutes', 60)),
             ]);
+
+            $this->metrics->recordAutomation(
+                $shoppingList->team,
+                $user,
+                'cart_preparation_started',
+                'awaiting_browser',
+                $run->id,
+                ['retailer' => $retailer->slug, 'item_count' => $items->count()],
+            );
+
+            return $run;
         });
     }
 }

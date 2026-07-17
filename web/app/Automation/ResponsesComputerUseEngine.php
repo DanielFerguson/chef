@@ -6,38 +6,87 @@ use App\Automation\Contracts\ComputerUseEngine;
 use App\Automation\Data\ComputerUseStep;
 use App\Models\AutomationRun;
 use App\Models\AutomationStep;
+use App\Support\OperationalMetrics;
+use App\Support\UsageGuard;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Laravel\Ai\Responses\Data\Usage;
+use Throwable;
 
 class ResponsesComputerUseEngine implements ComputerUseEngine
 {
-    public function __construct(private readonly HttpFactory $http) {}
+    public function __construct(
+        private readonly HttpFactory $http,
+        private readonly OperationalMetrics $metrics,
+        private readonly UsageGuard $usageGuard,
+    ) {}
 
     public function advance(AutomationRun $run): ComputerUseStep
     {
         $run->loadMissing('retailer', 'steps');
+        $this->usageGuard->assertAutomationStepAllowed($run);
+        $startedAt = hrtime(true);
         $observation = $run->steps
             ->filter(fn (AutomationStep $step): bool => filled($step->screenshot_path))
             ->last();
+        $disk = Storage::disk((string) config('chef.storage.automation_screenshots_disk'));
 
-        if ($observation === null || ! Storage::disk('local')->exists($observation->screenshot_path)) {
+        if ($observation === null || ! $disk->exists($observation->screenshot_path)) {
             throw ValidationException::withMessages(['screenshot' => 'The browser must provide a current screenshot before Chef can continue.']);
         }
 
-        $image = base64_encode((string) Storage::disk('local')->get($observation->screenshot_path));
+        $image = base64_encode((string) $disk->get($observation->screenshot_path));
         $payload = $run->previous_response_id === null
             ? $this->initialPayload($run, $image)
             : $this->continuationPayload($run, $observation, $image);
 
-        $response = $this->http
-            ->baseUrl(rtrim((string) config('ai.providers.openai.url'), '/'))
-            ->withToken((string) config('ai.providers.openai.key'))
-            ->acceptJson()
-            ->timeout((int) config('ai.computer_use.timeout', 90))
-            ->post('/responses', $payload)
-            ->throw()
-            ->json();
+        try {
+            $response = $this->http
+                ->baseUrl(rtrim((string) config('ai.providers.openai.url'), '/'))
+                ->withToken((string) config('ai.providers.openai.key'))
+                ->acceptJson()
+                ->timeout((int) config('ai.computer_use.timeout', 90))
+                ->post('/responses', $payload)
+                ->throw()
+                ->json();
+        } catch (Throwable $exception) {
+            $this->metrics->recordAi(
+                $run->team,
+                $run->requester,
+                'computer_use_step',
+                'failed',
+                null,
+                'openai',
+                (string) config('ai.computer_use.model'),
+                null,
+                (int) round((hrtime(true) - $startedAt) / 1_000_000),
+                'automation_run',
+                $run->id,
+            );
+
+            throw $exception;
+        }
+
+        $usage = $response['usage'] ?? [];
+        $this->metrics->recordAi(
+            $run->team,
+            $run->requester,
+            'computer_use_step',
+            'completed',
+            null,
+            'openai',
+            (string) ($response['model'] ?? config('ai.computer_use.model')),
+            new Usage(
+                promptTokens: (int) ($usage['input_tokens'] ?? 0),
+                completionTokens: (int) ($usage['output_tokens'] ?? 0),
+                cacheReadInputTokens: (int) ($usage['input_tokens_details']['cached_tokens'] ?? 0),
+                reasoningTokens: (int) ($usage['output_tokens_details']['reasoning_tokens'] ?? 0),
+            ),
+            (int) round((hrtime(true) - $startedAt) / 1_000_000),
+            'automation_run',
+            $run->id,
+        );
 
         return $this->parseResponse($response);
     }

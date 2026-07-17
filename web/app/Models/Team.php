@@ -123,4 +123,22 @@ class Team extends Model
     {
         return $this->hasMany(AutomationRun::class);
     }
+
+    /** @return HasMany<ConsentRecord, $this> */
+    public function consentRecords(): HasMany
+    {
+        return $this->hasMany(ConsentRecord::class);
+    }
+
+    /** @return HasMany<OperationalEvent, $this> */
+    public function operationalEvents(): HasMany
+    {
+        return $this->hasMany(OperationalEvent::class);
+    }
+
+    /** @return HasMany<VoiceSession, $this> */
+    public function voiceSessions(): HasMany
+    {
+        return $this->hasMany(VoiceSession::class);
+    }
 }

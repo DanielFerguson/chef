@@ -100,6 +100,31 @@ export default function Welcome() {
                         ))}
                     </section>
                 </main>
+                <footer className="mx-auto mt-20 max-w-6xl border-t px-5 py-8 sm:px-8">
+                    <nav
+                        className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground"
+                        aria-label="Legal and support"
+                    >
+                        <Link className="-my-1 py-1" href="/privacy">
+                            Privacy
+                        </Link>
+                        <Link className="-my-1 py-1" href="/terms">
+                            Terms
+                        </Link>
+                        <Link
+                            className="-my-1 py-1"
+                            href="/security-and-privacy"
+                        >
+                            Security
+                        </Link>
+                        <Link className="-my-1 py-1" href="/help">
+                            Help
+                        </Link>
+                        <Link className="-my-1 py-1" href="/release-notes">
+                            Release notes
+                        </Link>
+                    </nav>
+                </footer>
             </div>
         </>
     );

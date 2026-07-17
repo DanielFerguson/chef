@@ -93,7 +93,13 @@ microphone/provider acceptance gate.
 - Post-v1 Laravel MCP for exposing reviewed Chef domain capabilities
 - A permissioned Manifest V3 Chrome extension for local retailer-tab execution
 
-SQLite must remain supported for personal and local installations. Before public launch, verify the expected concurrency and operational model; a hosted multi-team service will likely use PostgreSQL in production without changing the Eloquent domain model.
+SQLite remains supported for personal and local installations. The hosted
+version 1 service uses Laravel Cloud in Sydney with managed MySQL 8.4, managed
+Valkey, private object storage, managed Reverb, dedicated worker compute, the
+Laravel scheduler, and Nightwatch. The application retains ordinary Eloquent,
+queue, cache, filesystem, and broadcast contracts rather than binding domain
+code to the hosting vendor. The exact topology and release probe are documented
+in `docs/operations/PRODUCTION.md`.
 
 ## Product language and tenancy
 
@@ -610,7 +616,6 @@ The slice is complete only when this journey works through the real UI with pers
 
 ## Deferred decisions
 
-- production database and hosting topology;
 - exact Laravel authentication starter kit;
 - Reverb versus SSE for each stream;
 - direct retailer APIs if they become available;

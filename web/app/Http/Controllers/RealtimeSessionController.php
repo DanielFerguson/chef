@@ -8,6 +8,7 @@ use App\Models\Conversation;
 use App\Models\VoiceSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class RealtimeSessionController extends Controller
@@ -21,6 +22,8 @@ class RealtimeSessionController extends Controller
 
         try {
             $result = $startVoiceSession->handle($conversation, $request->user(), $validated['sdp']);
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             report($exception);
 

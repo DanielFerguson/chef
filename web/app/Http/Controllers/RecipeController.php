@@ -73,7 +73,7 @@ class RecipeController extends Controller
             'servings' => ['required', 'numeric', 'min:0.25', 'max:999'],
             'prep_minutes' => ['nullable', 'integer', 'min:0', 'max:65535'],
             'cook_minutes' => ['nullable', 'integer', 'min:0', 'max:65535'],
-            'source_url' => ['nullable', 'url', 'max:2048'],
+            'source_url' => ['nullable', 'url:http,https', 'max:2048'],
             'notes' => ['nullable', 'string', 'max:10000'],
             'ingredients' => ['required', 'array', 'min:1', 'max:200'],
             'ingredients.*.name' => ['required', 'string', 'max:255'],

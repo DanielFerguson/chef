@@ -96,7 +96,7 @@ it('rejects non-assistant and cross-family message feedback', function () {
     app(CreateTeamForUser::class)->handle($outsider, 'Other family');
     $this->actingAs($outsider)->put(route('messages.feedback.update', $workspace['message']), [
         'rating' => 'helpful',
-    ])->assertForbidden();
+    ])->assertNotFound();
 });
 
 it('collects one planning checkpoint response only after confirmation', function () {

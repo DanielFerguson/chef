@@ -1,4 +1,5 @@
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
+import { useEcho } from '@laravel/echo-react';
 import {
     Ban,
     Check,
@@ -57,6 +58,17 @@ const currencyFormatter = new Intl.NumberFormat('en-AU', {
     style: 'currency',
     currency: 'AUD',
 });
+
+function AutomationBroadcastListener({ teamId }: { teamId: number }) {
+    useEcho<Record<string, unknown>>(
+        `teams.${teamId}`,
+        '.automation.run.updated',
+        () => router.reload({ only: ['workspace'] }),
+        [teamId],
+    );
+
+    return null;
+}
 
 function RunControl({
     run,
@@ -273,6 +285,7 @@ export function AutomationActivity({
     revision: number;
     retailers: { id: number; name: string; slug: string }[];
 }) {
+    const { auth } = usePage().props;
     const activeConnections = automation.connections.filter(
         (connection) => connection.status === 'active',
     );
@@ -304,6 +317,9 @@ export function AutomationActivity({
 
     return (
         <section className="mt-8 border-t pt-6" aria-labelledby="cart-handoff">
+            {import.meta.env.VITE_REVERB_APP_KEY && auth.currentTeam && (
+                <AutomationBroadcastListener teamId={auth.currentTeam.id} />
+            )}
             <div>
                 <h2
                     id="cart-handoff"

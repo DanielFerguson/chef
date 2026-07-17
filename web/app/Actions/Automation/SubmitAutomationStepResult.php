@@ -90,13 +90,13 @@ class SubmitAutomationStepResult
                 return $step->refresh();
             });
         } catch (Throwable $exception) {
-            Storage::disk('local')->delete((string) $stored['path']);
+            Storage::disk((string) config('chef.storage.automation_screenshots_disk'))->delete((string) $stored['path']);
 
             throw $exception;
         }
 
         if ($step->screenshot_path !== $stored['path']) {
-            Storage::disk('local')->delete((string) $stored['path']);
+            Storage::disk((string) config('chef.storage.automation_screenshots_disk'))->delete((string) $stored['path']);
         }
 
         $run = $step->automationRun->refresh();

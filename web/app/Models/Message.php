@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\MessageResponseStatus;
 use App\Enums\MessageRole;
+use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Database\Factories\MessageFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,11 +23,11 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property array<string, mixed>|null $metadata
  * @property string|null $client_message_id
  */
-#[Fillable(['team_id', 'conversation_id', 'user_id', 'in_reply_to_message_id', 'role', 'content', 'metadata', 'client_message_id', 'response_status', 'response_error', 'response_started_at', 'response_completed_at'])]
+#[Fillable(['team_id', 'conversation_id', 'user_id', 'in_reply_to_message_id', 'role', 'content', 'content_redacted_at', 'metadata', 'client_message_id', 'response_status', 'response_error', 'response_started_at', 'response_completed_at'])]
 class Message extends Model
 {
     /** @use HasFactory<MessageFactory> */
-    use HasFactory;
+    use HasFactory, ResolvesWithinCurrentTeam;
 
     /** @return BelongsTo<Team, $this> */
     public function team(): BelongsTo
@@ -70,6 +71,7 @@ class Message extends Model
         return [
             'role' => MessageRole::class,
             'metadata' => 'array',
+            'content_redacted_at' => 'datetime',
             'response_status' => MessageResponseStatus::class,
             'response_started_at' => 'datetime',
             'response_completed_at' => 'datetime',

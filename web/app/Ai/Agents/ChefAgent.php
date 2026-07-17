@@ -140,6 +140,7 @@ class ChefAgent implements Agent, Conversational, HasProviderOptions, HasTools
     {
         return $this->conversation->messages()
             ->where('id', '<', $this->beforeMessageId)
+            ->whereNull('content_redacted_at')
             ->get()
             ->map(fn (ChefMessage $message) => new Message($message->role->value, $message->content))
             ->all();

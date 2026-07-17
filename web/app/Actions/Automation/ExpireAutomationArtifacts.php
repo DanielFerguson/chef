@@ -133,7 +133,7 @@ class ExpireAutomationArtifacts
             ->whereNotNull('screenshot_path')
             ->where('screenshot_expires_at', '<=', now())
             ->each(function (AutomationStep $step) use (&$screenshots): void {
-                Storage::disk('local')->delete((string) $step->screenshot_path);
+                Storage::disk((string) config('chef.storage.automation_screenshots_disk'))->delete((string) $step->screenshot_path);
                 $step->update(['screenshot_path' => null, 'screenshot_expires_at' => null]);
                 $screenshots++;
             });

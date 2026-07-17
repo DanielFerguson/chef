@@ -68,7 +68,7 @@ class AttachBrowserTab
             });
         } catch (\Throwable $exception) {
             if (is_array($stored)) {
-                Storage::disk('local')->delete((string) $stored['path']);
+                Storage::disk((string) config('chef.storage.automation_screenshots_disk'))->delete((string) $stored['path']);
             }
 
             throw $exception;

@@ -8,6 +8,7 @@ use App\Enums\MessageResponseStatus;
 use App\Enums\MessageRole;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Support\UsageGuard;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -21,8 +22,10 @@ class ConversationMessageStreamController extends Controller
         Conversation $conversation,
         CreateUserMessage $createUserMessage,
         ChefConversationEngine $engine,
+        UsageGuard $usageGuard,
     ): StreamedResponse|JsonResponse {
         $this->authorize('update', $conversation);
+        $usageGuard->assertAiAllowed($conversation->team()->firstOrFail());
         $validated = $request->validate([
             'content' => ['required', 'string', 'max:10000'],
             'client_message_id' => ['required', 'uuid'],

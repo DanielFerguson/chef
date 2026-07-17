@@ -46,4 +46,8 @@ return [
         ],
     ],
 
+    'nightwatch' => [
+        'token' => env('NIGHTWATCH_TOKEN'),
+    ],
+
 ];

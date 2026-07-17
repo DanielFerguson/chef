@@ -1,8 +1,10 @@
 export default function Heading({
+    id,
     title,
     description,
     variant = 'default',
 }: {
+    id?: string;
     title: string;
     description?: string;
     variant?: 'default' | 'small';
@@ -10,6 +12,7 @@ export default function Heading({
     return (
         <header className={variant === 'small' ? '' : 'mb-8 space-y-0.5'}>
             <h2
+                id={id}
                 className={
                     variant === 'small'
                         ? 'mb-0.5 text-base font-medium'

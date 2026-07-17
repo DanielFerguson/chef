@@ -24,7 +24,9 @@ class FinishPreparingShoppingListJob implements ShouldBeUniqueUntilProcessing, S
     public function __construct(
         public readonly int $mealPlanId,
         public readonly int $userId,
-    ) {}
+    ) {
+        $this->onQueue('ai');
+    }
 
     public function uniqueId(): string
     {

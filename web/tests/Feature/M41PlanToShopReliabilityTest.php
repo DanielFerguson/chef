@@ -353,8 +353,9 @@ it('rejects malformed structured drafts before creating a recipe', function () {
 });
 
 it('uses the Laravel AI SDK structured fake behind the Chef-owned drafting boundary', function () {
+    $workspace = m41Workspace();
     $request = new RecipeDraftRequest(
-        teamId: 10,
+        teamId: $workspace['team']->id,
         mealPlanId: 15,
         plannedMealId: 20,
         mealDate: '2026-07-18',
@@ -373,7 +374,7 @@ it('uses the Laravel AI SDK structured fake behind the Chef-owned drafting bound
     $draft = m41ValidDraft('Pork katsu');
     RecipeDraftingAgent::fake([$draft->toArray()])->preventStrayPrompts();
 
-    $result = (new LaravelAiRecipeDrafter)->draft($request);
+    $result = app(LaravelAiRecipeDrafter::class)->draft($request);
 
     expect($result->title)->toBe('Pork katsu')
         ->and($result->ingredients)->toHaveCount(2);

@@ -4,6 +4,7 @@ import {
     CalendarDays,
     CirclePlus,
     Clock3,
+    CircleHelp,
     Search,
     ShoppingBasket,
     Utensils,
@@ -126,6 +127,16 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild tooltip="Help">
+                            <Link href="/help">
+                                <CircleHelp />
+                                <span>Help</span>
+                            </Link>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

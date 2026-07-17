@@ -14,7 +14,7 @@ class RecipeImportController extends Controller
         abort_unless($team !== null, 404);
         $validated = $request->validate([
             'source_text' => ['required', 'string', 'max:100000'],
-            'source_url' => ['nullable', 'url', 'max:2048'],
+            'source_url' => ['nullable', 'url:http,https', 'max:2048'],
         ]);
         $recipe = $importRecipe->handle(
             $team,

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\ApplySecurityHeaders;
 use App\Http\Middleware\AuthenticateBrowserConnection;
 use App\Http\Middleware\EnsureCurrentTeam;
 use App\Http\Middleware\HandleAppearance;
@@ -9,6 +10,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -25,7 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            ApplySecurityHeaders::class,
         ]);
+
+        $middleware->api(append: [ApplySecurityHeaders::class]);
 
         $middleware->alias([
             'current-team' => EnsureCurrentTeam::class,
@@ -36,4 +42,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+        $exceptions->respond(function (SymfonyResponse $response, Throwable $exception, Request $request): SymfonyResponse {
+            $status = $response->getStatusCode();
+
+            if ($status === 419) {
+                return back()->with('error', 'Your session expired. Reload and try again.');
+            }
+
+            if (app()->environment('production')
+                && ! $request->expectsJson()
+                && in_array($status, [403, 404, 429, 500, 503], true)) {
+                return Inertia::render('error', ['status' => $status])
+                    ->toResponse($request)
+                    ->setStatusCode($status);
+            }
+
+            return $response;
+        });
     })->create();

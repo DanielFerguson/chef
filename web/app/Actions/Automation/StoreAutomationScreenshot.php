@@ -27,7 +27,10 @@ class StoreAutomationScreenshot
         }
 
         $path = 'automation/'.$run->uuid.'/'.Str::uuid().'.'.$extension;
-        Storage::disk('local')->put($path, $bytes);
+
+        if (! Storage::disk((string) config('chef.storage.automation_screenshots_disk'))->put($path, $bytes)) {
+            throw ValidationException::withMessages(['screenshot' => 'Chef could not store the browser screenshot safely.']);
+        }
 
         return [
             'path' => $path,

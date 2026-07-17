@@ -7,6 +7,7 @@ use App\Actions\MealPlans\RenameMealPlan;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Models\MealPlan;
+use App\Support\OperationalMetrics;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,7 +15,7 @@ use Inertia\Response;
 
 class MealPlanController extends Controller
 {
-    public function store(Request $request, StartMealPlan $startMealPlan): RedirectResponse
+    public function store(Request $request, StartMealPlan $startMealPlan, OperationalMetrics $metrics): RedirectResponse
     {
         $validated = $request->validate([
             'title' => ['nullable', 'string', 'max:120'],
@@ -34,6 +35,10 @@ class MealPlanController extends Controller
             $endsOn,
             $validated['title'] ?? null,
         );
+        $metrics->recordProduct($team, $user, 'first_plan_started', [
+            'plan_id' => $mealPlan->id,
+            'range_days' => $startsOn->diffInDays($endsOn) + 1,
+        ]);
 
         return to_route('meal-plans.show', $mealPlan);
     }

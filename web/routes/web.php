@@ -26,6 +26,7 @@ use App\Http\Controllers\PlannedMealMoveController;
 use App\Http\Controllers\PreferenceCandidateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\ProductMatchController;
+use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\RealtimeSessionController;
 use App\Http\Controllers\RealtimeToolCallController;
 use App\Http\Controllers\RecipeController;
@@ -42,6 +43,27 @@ use App\Http\Controllers\TeamInvitationController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+Route::get('ready', ReadinessController::class)->name('ready');
+Route::inertia('privacy', 'privacy', [
+    'operator' => fn () => config('chef.legal.operator'),
+    'supportEmail' => fn () => config('chef.support.email'),
+    'contactAddress' => fn () => config('chef.legal.contact_address'),
+    'processingCountries' => fn () => config('chef.legal.processing_countries'),
+    'conversationDays' => fn () => config('chef.retention.conversations_days'),
+    'screenshotHours' => fn () => config('chef.retention.automation_screenshots_hours'),
+    'auditDays' => fn () => config('chef.retention.audit_days'),
+])->name('privacy');
+Route::inertia('terms', 'terms', [
+    'operator' => fn () => config('chef.legal.operator'),
+    'supportEmail' => fn () => config('chef.support.email'),
+])->name('terms');
+Route::inertia('security-and-privacy', 'security-and-privacy', [
+    'supportEmail' => fn () => config('chef.support.email'),
+])->name('security-and-privacy');
+Route::inertia('help', 'help', [
+    'supportEmail' => fn () => config('chef.support.email'),
+])->name('help');
+Route::inertia('release-notes', 'release-notes')->name('release-notes');
 
 Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

@@ -19,7 +19,10 @@ class AdvanceAutomationRunJob implements ShouldQueue
     /** @var int[] */
     public array $backoff = [2, 10, 30];
 
-    public function __construct(public readonly AutomationRun $run) {}
+    public function __construct(public readonly AutomationRun $run)
+    {
+        $this->onQueue('automation');
+    }
 
     public function handle(AdvanceAutomationRun $advance): void
     {
