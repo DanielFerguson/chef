@@ -522,7 +522,7 @@ The first useful slice should support one family team, multiple collaborating us
 3. **Recipes and complete planning** — Recipe versions, imports, richer meal occasions, calendar and list views, revisions, and explainable recommendations.
 4. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
 5. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
-6. **Retailer handoff** — Chrome extension, Responses API computer use, Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
+6. **Retailer handoff** — Chrome extension, Responses API computer use, Woolworths and Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
 7. **Native voice** — Realtime WebRTC input and output over the same durable conversations and domain actions.
 8. **MCP** — Read tools first, then reviewed planning, shopping, and feedback writes for external hosts.
 9. **Public launch** — Operational, privacy, accessibility, security, recovery, and support gates for version 1.
@@ -550,10 +550,15 @@ docs/                Product, architecture, milestones, and style
 extensions/chrome/   Future permissioned retailer-tab executor
 ios/                 Future native iOS client
 android/             Future native Android client
-marketing/           Future Astro marketing site
+marketing/           Astro public marketing site
 ```
 
-Only `web/` and `docs/` exist today. Future clients should be added when implementation begins rather than as empty placeholder directories. Laravel remains the authoritative application and domain boundary; native clients will use reviewed HTTP or Realtime interfaces rather than reimplementing business rules.
+`web/`, `docs/`, and `marketing/` are active today. Future clients should be
+added when implementation begins rather than as empty placeholder directories.
+Laravel remains the authoritative application and domain boundary; the Astro
+site presents public product and editorial content without reimplementing
+application behaviour. Native clients will use reviewed HTTP or Realtime
+interfaces rather than reimplementing business rules.
 
 Supporting documents:
 

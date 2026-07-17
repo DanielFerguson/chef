@@ -18,7 +18,7 @@ Chef version 1 is the first publicly available release that lets a real family c
 3. plan meals over an arbitrary date range;
 4. review recipes and cook from the plan;
 5. generate and edit a budget-aware shopping list;
-6. prepare a Coles cart through reviewed computer use;
+6. prepare a Woolworths or Coles cart through reviewed computer use;
 7. use typed and voice conversation;
 8. invite another account into the family team;
 9. provide feedback that improves later recommendations.
@@ -289,7 +289,7 @@ Exit evidence:
 - A cook can go from the Today screen to completing and rating a meal without reading the planning conversation.
 - The next recommendation can explain how prior feedback affected it.
 
-## M6 — Coles computer-use handoff
+## M6 — Woolworths and Coles computer-use handoff
 
 Status: `[ ]`
 
@@ -303,11 +303,11 @@ Status: `[ ]`
 - [ ] Require approval at defined risk boundaries.
 - [ ] Reconcile intended list items with the prepared cart.
 - [ ] Keep checkout, address changes, authentication, and payment human-controlled.
-- [ ] Validate the workflow against a real Coles session without putting credentials in Chef.
+- [ ] Validate the workflow against real Woolworths and Coles sessions without putting credentials in Chef.
 
 Exit evidence:
 
-- From an approved frozen list, Chef can prepare a reviewable Coles cart in the user's chosen tab, stop safely when uncertain, and hand control back before checkout.
+- From an approved frozen list, Chef can prepare a reviewable Woolworths or Coles cart in the user's chosen tab, preserve the benefits of the user's retailer account, stop safely when uncertain, and hand control back before checkout.
 
 ## M7 — Native voice experience
 
@@ -364,14 +364,14 @@ Release gates:
 - all previous milestone exit evidence remains true in the production-like environment;
 - no known critical or high-severity security issue remains open;
 - tenant isolation, backups, restore, and deletion are proven;
-- the first-plan a-ha journey and Coles handoff have measured success criteria;
+- the first-plan a-ha journey and both retailer handoffs have measured success criteria;
 - operating cost and automation failure rates are understood and bounded.
 
 ## After version 1
 
 Candidates, not commitments:
 
-- Woolworths and additional retailers;
+- additional retailers beyond Woolworths and Coles;
 - managed cloud-browser execution;
 - pantry inference from orders and receipts;
 - calendar integrations;

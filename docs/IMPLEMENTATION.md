@@ -295,7 +295,7 @@ docs/
 extensions/chrome/   # added when retailer automation begins
 ios/                 # added when the native client begins
 android/             # added when the native client begins
-marketing/           # added when the Astro site begins
+marketing/           # Astro public marketing site
 ```
 
 The root is the product repository, while `web/` is a self-contained Laravel
