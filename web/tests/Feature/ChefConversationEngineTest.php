@@ -4,7 +4,7 @@ use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Ai\LaravelAiConversationEngine;
-use App\Ai\Tools\AddPlanShoppingItem;
+use App\Ai\Tools\AddPlanShoppingItems;
 use App\Ai\Tools\ConfirmPlan;
 use App\Ai\Tools\CorrectHouseholdPreference;
 use App\Ai\Tools\CreateFamilyRecipe;
@@ -26,6 +26,7 @@ use App\Ai\Tools\UpdatePlanShoppingItem;
 use App\Enums\MessageRole;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Prompts\AgentPrompt;
 
 uses(RefreshDatabase::class);
@@ -97,7 +98,7 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
         CreateFamilyRecipe::class,
         SelectPlanMeal::class,
         PreparePlanShoppingList::class,
-        AddPlanShoppingItem::class,
+        AddPlanShoppingItems::class,
         UpdatePlanShoppingItem::class,
         SetPlanShoppingBudget::class,
         MoveSelectedMeal::class,
@@ -106,4 +107,21 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
         ConfirmPlan::class,
         RecordSafetyConstraint::class,
     ]);
+});
+
+it('disables parallel openai tool calls for the mixed read and write agent', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(6));
+    $conversation = $plan->conversations->first();
+    $current = $conversation->messages()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'role' => MessageRole::User,
+        'content' => 'Add milk and paper towels.',
+    ]);
+    $agent = new ChefAgent($conversation, $current->id, $user, $current);
+
+    expect($agent->providerOptions(Lab::OpenAI))->toBe(['parallel_tool_calls' => false])
+        ->and($agent->providerOptions(Lab::Anthropic))->toBe([]);
 });

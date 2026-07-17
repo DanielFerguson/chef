@@ -40,13 +40,23 @@ it('creates a first plan and continues its conversation in a real browser', func
         ]),
         'I have added satay chicken for you to review.',
         new ToolCall('inspect-shopping', 'InspectPlanShoppingList', []),
-        fn () => new ToolCall('add-milk', 'AddPlanShoppingItem', [
-            'name' => 'Milk',
-            'quantity' => 3,
-            'unit' => 'litres',
-            'note' => 'Household extra',
-            'staple' => true,
-            'expected_revision' => ShoppingList::query()->sole()->revision,
+        fn () => new ToolCall('add-extras', 'AddPlanShoppingItems', [
+            'items' => [
+                [
+                    'name' => 'Milk',
+                    'quantity' => 3,
+                    'unit' => 'litres',
+                    'note' => 'Household extra',
+                    'staple' => true,
+                ],
+                [
+                    'name' => 'Paper towels',
+                    'quantity' => 1,
+                    'unit' => 'pack',
+                    'note' => null,
+                    'staple' => false,
+                ],
+            ],
         ]),
         fn () => new ToolCall('pantry-ingredient', 'UpdatePlanShoppingItem', [
             'item_id' => ShoppingListItem::query()->where('normalized_name', 'satay chicken ingredients')->sole()->id,
@@ -57,7 +67,7 @@ it('creates a first plan and continues its conversation in a real browser', func
             'amount' => 180,
             'household_default' => false,
         ]),
-        'Done — I added three litres of milk, marked the satay ingredients as already at home, and set the budget to $180.',
+        'Done — I added three litres of milk and paper towels, marked the satay ingredients as already at home, and set the budget to $180.',
     ])->preventStrayPrompts();
     $this->actingAs($user);
 
@@ -81,11 +91,12 @@ it('creates a first plan and continues its conversation in a real browser', func
         ->assertNotPresent('textarea[aria-label="Ingredients for Satay chicken"]')
         ->type(
             'textarea[aria-label="Message Chef about shopping"]',
-            'We already have the satay ingredients. Add three litres of milk and keep the shop below $180.',
+            'We already have the satay ingredients. Add three litres of milk and paper towels, and keep the shop below $180.',
         )
         ->pressAndWaitFor('Send shopping message')
         ->assertSee('Done — I added three litres of milk')
         ->assertPresent('input[aria-label="Milk name"]')
+        ->assertPresent('input[aria-label="Paper towels name"]')
         ->assertSee('Already in pantry')
         ->click('Budget and estimate')
         ->assertSee('$180.00');

@@ -42,6 +42,7 @@ class RecordShoppingListRevision
                     'items' => $locked->items->map(fn (ShoppingListItem $item): array => [
                         'id' => $item->id,
                         'source_kind' => $item->getRawOriginal('source_kind'),
+                        'source_message_id' => $item->source_message_id,
                         'category' => $item->getRawOriginal('category'),
                         'name' => $item->name,
                         'quantity' => $item->quantity,

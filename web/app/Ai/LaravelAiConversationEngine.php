@@ -9,6 +9,7 @@ use App\Ai\Data\AssistantStreamChunk;
 use App\Models\Conversation;
 use App\Models\Message;
 use Laravel\Ai\Streaming\Events\TextDelta;
+use Throwable;
 
 class LaravelAiConversationEngine implements ChefConversationEngine
 {
@@ -38,12 +39,32 @@ class LaravelAiConversationEngine implements ChefConversationEngine
         $initialShoppingRevision = $conversation->mealPlan?->shoppingList?->revision;
         $response = (new ChefAgent($conversation, $message->id, $actor, $message))->stream($message->content);
         $content = '';
+        $recoveredFromFailure = false;
 
-        foreach ($response as $event) {
-            if ($event instanceof TextDelta) {
-                $content .= $event->delta;
-                yield new AssistantStreamChunk(type: 'delta', delta: $event->delta);
+        try {
+            foreach ($response as $event) {
+                if ($event instanceof TextDelta) {
+                    $content .= $event->delta;
+                    yield new AssistantStreamChunk(type: 'delta', delta: $event->delta);
+                }
             }
+        } catch (Throwable $exception) {
+            try {
+                $recovery = $this->buildRecoveryReply->handle(
+                    $conversation,
+                    $message,
+                    $initialPlanRevision,
+                    $initialShoppingRevision,
+                );
+            } catch (Throwable) {
+                throw $exception;
+            }
+
+            report($exception);
+            $delta = (trim($content) === '' ? '' : "\n\n").$recovery;
+            $content .= $delta;
+            $recoveredFromFailure = true;
+            yield new AssistantStreamChunk(type: 'delta', delta: $delta);
         }
 
         if (trim($content) === '') {
@@ -55,7 +76,10 @@ class LaravelAiConversationEngine implements ChefConversationEngine
 
         yield new AssistantStreamChunk(
             type: 'complete',
-            metadata: ['invocation_id' => $response->invocationId],
+            metadata: [
+                'invocation_id' => $response->invocationId,
+                'recovered_from_failure' => $recoveredFromFailure,
+            ],
         );
     }
 }

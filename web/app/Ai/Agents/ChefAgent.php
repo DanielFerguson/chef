@@ -15,11 +15,11 @@ use App\Actions\Planning\MovePlannedMeal;
 use App\Actions\Planning\ProposeMeal;
 use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Recipes\CreateRecipe;
-use App\Actions\Shopping\AddShoppingListItem;
+use App\Actions\Shopping\AddShoppingListItems;
 use App\Actions\Shopping\PrepareMealPlanShoppingList;
 use App\Actions\Shopping\SetShoppingBudget;
 use App\Actions\Shopping\UpdateShoppingListItem;
-use App\Ai\Tools\AddPlanShoppingItem;
+use App\Ai\Tools\AddPlanShoppingItems;
 use App\Ai\Tools\ConfirmPlan;
 use App\Ai\Tools\CorrectHouseholdPreference;
 use App\Ai\Tools\CreateFamilyRecipe;
@@ -43,13 +43,15 @@ use App\Models\Message as ChefMessage;
 use App\Models\User;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Messages\Message;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-class ChefAgent implements Agent, Conversational, HasTools
+class ChefAgent implements Agent, Conversational, HasProviderOptions, HasTools
 {
     use Promptable;
 
@@ -123,6 +125,7 @@ class ChefAgent implements Agent, Conversational, HasTools
         - If recipes are still preparing, say so clearly and let the household continue. If preparation failed, offer a retry rather than silently omitting the meal.
         - When the household asks to begin shopping, call PreparePlanShoppingList. Do not merely describe a possible list in prose.
         - Inspect the shopping list before editing it. Use exact item identifiers and the current list revision.
+        - When one message requests multiple household extras, call AddPlanShoppingItems once with every requested item. Never split one addition request into repeated single-item writes.
         - Pantry, quantity, inclusion, check-off, household-extra, and budget requests must update structured list state through their tools before you say they are done.
         - Budget is optional. Guide the household to review generated ingredients and pantry state before implying that a budget is required.
         - Keep the conversation moving by stating what changed and offering the next useful shopping decision.
@@ -140,6 +143,16 @@ class ChefAgent implements Agent, Conversational, HasTools
             ->get()
             ->map(fn (ChefMessage $message) => new Message($message->role->value, $message->content))
             ->all();
+    }
+
+    /** @return array<string, mixed> */
+    public function providerOptions(Lab|string $provider): array
+    {
+        $provider = $provider instanceof Lab ? $provider : Lab::tryFrom($provider);
+
+        return $provider === Lab::OpenAI
+            ? ['parallel_tool_calls' => false]
+            : [];
     }
 
     /** @return Tool[] */
@@ -164,7 +177,7 @@ class ChefAgent implements Agent, Conversational, HasTools
             new CreateFamilyRecipe($team, $this->actor, $this->currentMessage, app(CreateRecipe::class)),
             new SelectPlanMeal($mealPlan, $this->actor, app(SelectPlannedMeal::class), app(AssessMealPlanReadiness::class)),
             new PreparePlanShoppingList($mealPlan, $this->actor, app(PrepareMealPlanShoppingList::class), app(AssessMealPlanReadiness::class)),
-            new AddPlanShoppingItem($mealPlan, $this->actor, app(AddShoppingListItem::class)),
+            new AddPlanShoppingItems($mealPlan, $this->actor, $this->currentMessage, app(AddShoppingListItems::class)),
             new UpdatePlanShoppingItem($mealPlan, $this->actor, app(UpdateShoppingListItem::class)),
             new SetPlanShoppingBudget($mealPlan, $this->actor, app(SetShoppingBudget::class)),
             new MoveSelectedMeal($mealPlan, $this->actor, app(MovePlannedMeal::class)),

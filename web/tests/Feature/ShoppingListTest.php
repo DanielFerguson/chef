@@ -8,6 +8,7 @@ use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Planning\UpdatePlannedMeal;
 use App\Actions\Recipes\CreateRecipe;
 use App\Actions\Shopping\AddShoppingListItem;
+use App\Actions\Shopping\AddShoppingListItems;
 use App\Actions\Shopping\CompleteShoppingList;
 use App\Actions\Shopping\DeleteShoppingListItem;
 use App\Actions\Shopping\GenerateShoppingList;
@@ -18,6 +19,7 @@ use App\Actions\Shopping\SetShoppingBudget;
 use App\Actions\Shopping\UpdateShoppingListItem;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Enums\MealSlotKind;
+use App\Enums\MessageRole;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\ShoppingListItemCategory;
@@ -227,6 +229,123 @@ it('supports manual editing pantry exclusions completion and revision history', 
     app(DeleteShoppingListItem::class)->handle($bread, $workspace['user'], 8);
     expect($list->refresh()->status)->toBe(ShoppingListStatus::Draft)
         ->and($list->items()->whereKey($bread->id)->exists())->toBeFalse();
+});
+
+it('atomically adds and replays a conversational batch as one shopping revision', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    $message = $workspace['plan']->conversations()->sole()->messages()->create([
+        'team_id' => $workspace['team']->id,
+        'user_id' => $workspace['user']->id,
+        'role' => MessageRole::User,
+        'content' => 'Add a Scrub Daddy sponge pack and paper towels.',
+    ]);
+    $requested = [
+        ['name' => 'Scrub Daddy sponge pack', 'quantity' => null, 'unit' => null, 'note' => null, 'staple' => false],
+        ['name' => 'Paper towels', 'quantity' => 1, 'unit' => 'pack', 'note' => null, 'staple' => true],
+    ];
+
+    $items = app(AddShoppingListItems::class)->handle($list, $workspace['user'], $message, $requested);
+
+    expect($items)->toHaveCount(2)
+        ->and($items->pluck('normalized_name')->all())->toBe(['scrub daddy sponge pack', 'paper towels'])
+        ->and($items->every(fn ($item) => $item->category === ShoppingListItemCategory::Household))->toBeTrue()
+        ->and($items->every(fn ($item) => $item->source_message_id === $message->id))->toBeTrue()
+        ->and($list->refresh()->revision)->toBe(2)
+        ->and($list->revisions()->where('revision', 2)->sole()->summary)->toBe('Added Scrub Daddy sponge pack and Paper towels');
+
+    $replayed = app(AddShoppingListItems::class)->handle($list, $workspace['user'], $message, $requested);
+
+    expect($replayed->pluck('id')->all())->toBe($items->pluck('id')->all())
+        ->and($list->refresh()->revision)->toBe(2)
+        ->and($list->revisions()->count())->toBe(2)
+        ->and($list->items()->whereIn('normalized_name', ['scrub daddy sponge pack', 'paper towels'])->count())->toBe(2);
+});
+
+it('validates every conversational addition before writing any item', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    $message = $workspace['plan']->conversations()->sole()->messages()->create([
+        'team_id' => $workspace['team']->id,
+        'user_id' => $workspace['user']->id,
+        'role' => MessageRole::User,
+        'content' => 'Add milk and an invalid item.',
+    ]);
+    $initialCount = $list->items()->count();
+
+    expect(fn () => app(AddShoppingListItems::class)->handle($list, $workspace['user'], $message, [
+        ['name' => 'Milk', 'quantity' => 3, 'unit' => 'litres', 'note' => null, 'staple' => false],
+        ['name' => '', 'quantity' => null, 'unit' => null, 'note' => null, 'staple' => false],
+    ]))->toThrow(ValidationException::class);
+
+    expect($list->items()->count())->toBe($initialCount)
+        ->and($list->refresh()->revision)->toBe(1)
+        ->and($list->revisions()->count())->toBe(1);
+});
+
+it('merges conversational additions onto the latest list revision', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    app(AddShoppingListItem::class)->handle($list, $workspace['user'], 'Milo', 1, 'tin', null, false, 1);
+    $message = $workspace['plan']->conversations()->sole()->messages()->create([
+        'team_id' => $workspace['team']->id,
+        'user_id' => $workspace['user']->id,
+        'role' => MessageRole::User,
+        'content' => 'Add a Scrub Daddy sponge pack and paper towels.',
+    ]);
+
+    app(AddShoppingListItems::class)->handle($list, $workspace['user'], $message, [
+        ['name' => 'Scrub Daddy sponge pack', 'quantity' => null, 'unit' => null, 'note' => null, 'staple' => false],
+        ['name' => 'Paper towels', 'quantity' => null, 'unit' => null, 'note' => null, 'staple' => false],
+    ]);
+
+    expect($list->refresh()->revision)->toBe(3)
+        ->and($list->items()->whereIn('normalized_name', ['milo', 'scrub daddy sponge pack', 'paper towels'])->count())->toBe(3);
+});
+
+it('adds only missing items when a previous conversation turn partially succeeded', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    app(AddShoppingListItem::class)->handle($list, $workspace['user'], 'Scrub Daddy sponge pack', 1, 'pack', null, false, 1);
+    $message = $workspace['plan']->conversations()->sole()->messages()->create([
+        'team_id' => $workspace['team']->id,
+        'user_id' => $workspace['user']->id,
+        'role' => MessageRole::User,
+        'content' => 'Add a Scrub Daddy sponge pack and paper towels.',
+    ]);
+
+    $items = app(AddShoppingListItems::class)->handle($list, $workspace['user'], $message, [
+        ['name' => 'Scrub Daddy sponge pack', 'quantity' => 1, 'unit' => 'pack', 'note' => null, 'staple' => false],
+        ['name' => 'Paper towels', 'quantity' => 1, 'unit' => 'pack', 'note' => null, 'staple' => false],
+    ]);
+
+    expect($items)->toHaveCount(2)
+        ->and($list->items()->where('normalized_name', 'scrub daddy sponge pack')->count())->toBe(1)
+        ->and($list->items()->where('normalized_name', 'paper towels')->count())->toBe(1)
+        ->and($list->refresh()->revision)->toBe(3)
+        ->and($list->revisions()->where('revision', 3)->sole()->summary)->toBe('Added Paper towels');
+});
+
+it('rejects conversational additions from a different household', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    $outsider = User::factory()->create();
+    $otherTeam = app(CreateTeamForUser::class)->handle($outsider, 'Another household');
+    $otherPlan = app(StartMealPlan::class)->handle($otherTeam, $outsider, today(), today());
+    $message = $otherPlan->conversations()->sole()->messages()->create([
+        'team_id' => $otherTeam->id,
+        'user_id' => $outsider->id,
+        'role' => MessageRole::User,
+        'content' => 'Add paper towels.',
+    ]);
+    $initialCount = $list->items()->count();
+
+    expect(fn () => app(AddShoppingListItems::class)->handle($list, $workspace['user'], $message, [
+        ['name' => 'Paper towels', 'quantity' => 1, 'unit' => 'pack', 'note' => null, 'staple' => false],
+    ]))->toThrow(AuthorizationException::class);
+
+    expect($list->items()->count())->toBe($initialCount)
+        ->and($list->refresh()->revision)->toBe(1);
 });
 
 it('refuses to complete a stale or unfinished list', function () {

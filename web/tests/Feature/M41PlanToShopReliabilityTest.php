@@ -23,6 +23,7 @@ use App\Ai\Data\RecipeDraftRequest;
 use App\Ai\LaravelAiRecipeDrafter;
 use App\Enums\ConstraintKind;
 use App\Enums\MealSlotKind;
+use App\Enums\MessageResponseStatus;
 use App\Enums\PlannedMealRecipePreparationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
@@ -465,13 +466,14 @@ it('updates the structured shopping list through the same durable conversation',
     $conversation = $workspace['plan']->conversations()->sole();
     ChefAgent::fake([
         new ToolCall('inspect-shopping', 'InspectPlanShoppingList', []),
-        new ToolCall('add-milk', 'AddPlanShoppingItem', [
-            'name' => 'Milk',
-            'quantity' => 3,
-            'unit' => 'litres',
-            'note' => 'Household extra',
-            'staple' => true,
-            'expected_revision' => 1,
+        new ToolCall('add-milk', 'AddPlanShoppingItems', [
+            'items' => [[
+                'name' => 'Milk',
+                'quantity' => 3,
+                'unit' => 'litres',
+                'note' => 'Household extra',
+                'staple' => true,
+            ]],
         ]),
         new ToolCall('have-chicken', 'UpdatePlanShoppingItem', [
             'item_id' => $chicken->id,
@@ -498,4 +500,52 @@ it('updates the structured shopping list through the same durable conversation',
         ->and($workspace['plan']->budget->amount)->toBe(180.0)
         ->and($conversation->messages()->reorder()->where('role', 'user')->latest('id')->firstOrFail()->content)->toContain('three litres of milk')
         ->and($conversation->messages()->reorder()->where('role', 'assistant')->latest('id')->firstOrFail()->content)->toContain('set the plan budget');
+});
+
+it('recovers an atomic shopping batch when the provider fails after the tools finish', function () {
+    $workspace = m41Workspace();
+    $recipe = m41CreateRecipe($workspace);
+    $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Recipe, $recipe->latestVersion);
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $conversation = $workspace['plan']->conversations()->sole();
+    ChefAgent::fake([
+        new ToolCall('add-extras', 'AddPlanShoppingItems', [
+            'items' => [
+                [
+                    'name' => 'Scrub Daddy sponge pack',
+                    'quantity' => 1,
+                    'unit' => 'pack',
+                    'note' => null,
+                    'staple' => false,
+                ],
+                [
+                    'name' => 'Paper towels',
+                    'quantity' => 1,
+                    'unit' => 'pack',
+                    'note' => null,
+                    'staple' => false,
+                ],
+            ],
+        ]),
+        fn () => throw new RuntimeException('Provider failed after the tool result.'),
+    ])->preventStrayPrompts();
+    $clientId = (string) Str::uuid();
+
+    $response = $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $conversation), [
+        'content' => 'Can you please add a Scrub Daddy sponge pack and paper towels?',
+        'client_message_id' => $clientId,
+    ]);
+    $stream = $response->streamedContent();
+    $userMessage = $conversation->messages()->where('client_message_id', $clientId)->sole();
+    $assistantMessage = $userMessage->response()->sole();
+
+    expect($stream)->toContain('Added Scrub Daddy sponge pack and Paper towels')
+        ->not->toContain('"type":"error"')
+        ->and($list->refresh()->revision)->toBe(2)
+        ->and($list->revisions()->count())->toBe(2)
+        ->and($list->items()->whereIn('normalized_name', ['scrub daddy sponge pack', 'paper towels'])->count())->toBe(2)
+        ->and($userMessage->response_status)->toBe(MessageResponseStatus::Completed)
+        ->and($assistantMessage->metadata['recovered_from_failure'])->toBeTrue();
 });
