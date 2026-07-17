@@ -24,7 +24,7 @@ function m8LaunchManifest(): array
     $probe = $truths([
         'release_check', 'database', 'cache', 'object_storage', 'queue_worker',
         'scheduler', 'broadcast_tenancy', 'nightwatch_web', 'nightwatch_worker',
-        'mail_delivery',
+        'mail_delivery', 'marketing_start_link', 'marketing_login_link',
     ]);
     $gate = fn (array $metrics, string $completedAt = '2026-07-18T08:00:00+10:00'): array => [
         'result' => 'passed',
@@ -80,7 +80,7 @@ function m8LaunchManifest(): array
                 'high_open' => 0,
             ], '2026-07-10T08:00:00+10:00'),
             'production_replay' => $gate([
-                ...$truths(['previous_milestones_passed', 'mysql_ci_passed', 'full_suite_passed', 'browser_suite_passed', 'dependency_audits_clear', 'security_review_clear', 'cost_ceiling_configured', 'automation_failure_rate_measured']),
+                ...$truths(['previous_milestones_passed', 'mysql_ci_passed', 'full_suite_passed', 'browser_suite_passed', 'dependency_audits_clear', 'security_review_clear', 'marketing_production_build_passed', 'extension_production_build_passed', 'ci_required_jobs_passed', 'cost_ceiling_configured', 'automation_failure_rate_measured']),
                 'automation_failure_rate' => 0.1,
                 'monthly_ai_cost_per_active_family_usd' => 8.5,
                 'monthly_ai_cost_ceiling_usd' => 25,

@@ -2,6 +2,8 @@ const form = document.querySelector('#pairing-form');
 const paired = document.querySelector('#paired');
 const status = document.querySelector('#status');
 const label = document.querySelector('#connection-label');
+const manifest = chrome.runtime.getManifest();
+const API_BASE = ChefExtensionPolicy.apiOrigin(manifest.homepage_url, manifest.host_permissions);
 
 void refresh();
 
@@ -10,8 +12,7 @@ form.addEventListener('submit', async (event) => {
   setStatus('Pairing…');
 
   try {
-    const apiBase = document.querySelector('#api-base').value.replace(/\/$/, '');
-    const response = await fetch(`${apiBase}/api/extension/connections/claim`, {
+    const response = await fetch(`${API_BASE}/api/extension/connections/claim`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -23,7 +24,6 @@ form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(body.message || 'Pairing failed.');
 
     await chrome.storage.local.set({
-      apiBase,
       connectionToken: body.token,
       connection: body.connection,
     });
@@ -36,7 +36,7 @@ form.addEventListener('submit', async (event) => {
 
 document.querySelector('#attach-tab').addEventListener('click', async () => {
   try {
-    const config = await chrome.storage.local.get(['apiBase', 'connectionToken']);
+    const config = await chrome.storage.local.get(['connectionToken']);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id || !ChefExtensionPolicy.ALLOWED_ORIGINS.has(ChefExtensionPolicy.originOf(tab.url))) {
       throw new Error('Open the chosen Woolworths or Coles tab first.');
@@ -69,7 +69,7 @@ document.querySelector('#disconnect').addEventListener('click', async () => {
 });
 
 async function api(config, path, options = {}) {
-  const response = await fetch(`${config.apiBase}${path}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       Accept: 'application/json',
@@ -83,8 +83,9 @@ async function api(config, path, options = {}) {
 }
 
 async function refresh() {
-  const config = await chrome.storage.local.get(['apiBase', 'connectionToken', 'connection']);
-  const isPaired = Boolean(config.apiBase && config.connectionToken);
+  await chrome.storage.local.remove('apiBase');
+  const config = await chrome.storage.local.get(['connectionToken', 'connection']);
+  const isPaired = Boolean(config.connectionToken);
   form.hidden = isPaired;
   paired.hidden = !isPaired;
   if (config.connection?.name) label.textContent = config.connection.name;

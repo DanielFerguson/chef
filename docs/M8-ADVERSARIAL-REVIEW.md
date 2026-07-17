@@ -43,6 +43,25 @@ unchecked.
    null broadcasting, or local storage look like the expected production
    contract. The MySQL/Redis/Reverb/S3 contract is now immutable application
    configuration; only credentials and endpoints remain environmental.
+9. **The extension token destination was mutable:** the popup stored an editable
+   API base beside the connection token and both extension surfaces trusted it.
+   The destination is now package-pinned, permission-matched, HTTPS-only outside
+   localhost development, and covered by policy tests.
+10. **Browser content still reached raw HTML sinks:** two-factor QR SVG used
+    React's raw HTML escape hatch, marketing JSON-LD did not neutralise a closing
+    script sequence, and the hero used `innerHTML` for constant labels. QR is now
+    an encoded image, JSON-LD escapes `<`, and hero updates use text nodes.
+11. **The public launch CTA was not a real application route:** marketing linked
+    to `/start`, but Laravel had no matching route and the marketing production
+    build accepted placeholders. `/start` now hands guests to registration and
+    signed-in households to the dashboard; the production build rejects missing,
+    unsafe, placeholder, cross-origin, and wrong-path destinations.
+12. **Release checks could drift outside CI:** dependency audits, marketing, and
+    extension packaging were local evidence only. They are now independent CI
+    gates and the final signed manifest requires their hosted success.
+13. **The full gate could fail across midnight:** one fourteen-day M3 test
+    recalculated `today()` for each slot. It now uses the persisted plan start,
+    removing the date-boundary flake without weakening the domain rule.
 
 ## Open launch blockers
 

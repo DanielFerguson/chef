@@ -40,9 +40,11 @@ use App\Http\Controllers\ShoppingListItemController;
 use App\Http\Controllers\ShoppingMealResolutionController;
 use App\Http\Controllers\SwitchTeamController;
 use App\Http\Controllers\TeamInvitationController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+Route::get('start', fn (Request $request) => redirect()->route($request->user() === null ? 'register' : 'dashboard'))->name('start');
 Route::get('ready', ReadinessController::class)->name('ready');
 Route::inertia('privacy', 'privacy', [
     'operator' => fn () => config('chef.legal.operator'),

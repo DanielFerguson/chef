@@ -1,6 +1,8 @@
 importScripts('policy.js');
 
 const POLL_ALARM = 'chef-automation-poll';
+const manifest = chrome.runtime.getManifest();
+const API_BASE = ChefExtensionPolicy.apiOrigin(manifest.homepage_url, manifest.host_permissions);
 let pollInProgress = false;
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -25,7 +27,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 async function settings() {
   return chrome.storage.local.get([
-    'apiBase',
     'connectionToken',
     'activeRunUuid',
     'activeTabId',
@@ -34,7 +35,7 @@ async function settings() {
 
 async function api(path, options = {}) {
   const config = await settings();
-  const response = await fetch(`${config.apiBase}${path}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       Accept: 'application/json',
@@ -67,7 +68,7 @@ async function poll() {
 
 async function pollOnce() {
   const config = await settings();
-  if (!config.apiBase || !config.connectionToken || !config.activeRunUuid || !config.activeTabId) return;
+  if (!config.connectionToken || !config.activeRunUuid || !config.activeTabId) return;
 
   const selectedTabId = Number(config.activeTabId);
   const selectedTab = await chrome.tabs.get(selectedTabId).catch(() => null);

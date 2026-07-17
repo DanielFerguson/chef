@@ -2,6 +2,32 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const policy = require('../policy.js');
 
+test('pins the Chef API to the packaged application origin and permission', () => {
+  assert.equal(
+    policy.apiOrigin('https://app.cheffamily.com', ['https://app.cheffamily.com/*']),
+    'https://app.cheffamily.com',
+  );
+  assert.equal(
+    policy.apiOrigin('http://localhost:8000', ['http://localhost:8000/*']),
+    'http://localhost:8000',
+  );
+  assert.throws(() => policy.apiOrigin('https://attacker.example', ['https://app.cheffamily.com/*']));
+  assert.throws(() => policy.apiOrigin('http://app.cheffamily.com', ['http://app.cheffamily.com/*']));
+  assert.throws(() => policy.apiOrigin('https://app.cheffamily.com/path', ['https://app.cheffamily.com/*']));
+});
+
+test('rejects unsafe production extension origins and versions', async () => {
+  const { validateOrigin, validateVersion } = await import('../scripts/release-config.mjs');
+
+  assert.equal(validateOrigin('https://app.cheffamily.com'), 'https://app.cheffamily.com');
+  assert.equal(validateVersion('1.2.3'), '1.2.3');
+  assert.throws(() => validateOrigin('http://app.cheffamily.com'));
+  assert.throws(() => validateOrigin('https://app.chef.example'));
+  assert.throws(() => validateOrigin('https://app.example.com'));
+  assert.throws(() => validateOrigin('https://app.cheffamily.com/path'));
+  assert.throws(() => validateVersion('v1'));
+});
+
 test('accepts only the two retailer origins and the selected tab', () => {
   const step = {
     run_uuid: 'run-1',

@@ -51,7 +51,7 @@ deployed release.
 
 - staging and production probes: configuration, DB, cache, object storage,
   worker, scheduler, tenant-private broadcasting, Nightwatch web/worker traces,
-  and mail delivery;
+  mail delivery, and working marketing start/login links;
 - isolated backup restore with current schema, reconciled counts, private file
   proof, untouched source, recovery point no greater than 24 hours, and recovery
   time no greater than four hours;
@@ -61,7 +61,8 @@ deployed release.
 - measured real-microphone Realtime sessions;
 - private beta thresholds with zero critical/high issues;
 - production replay of prior milestones, MySQL CI, full/browser suites,
-  dependency audits, security review, configured cost ceiling, and measured
+  dependency audits, security review, production marketing and extension
+  builds, every required CI job, configured cost ceiling, and measured
   automation failure rate no greater than 20%; measured monthly AI cost per
   active family must remain within the positive configured ceiling.
 

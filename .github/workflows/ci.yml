@@ -24,6 +24,7 @@ jobs:
       - uses: ramsey/composer-install@v3
         with:
           working-directory: web
+      - run: composer audit --locked --no-interaction
       - run: cp .env.example .env
       - run: php artisan key:generate
       - run: composer lint:check
@@ -93,10 +94,44 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run lint:check
       - run: npm run format:check
       - run: npm run types:check
       - run: npm run build
+
+  marketing:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marketing
+    env:
+      SITE_URL: https://www.cheffamily.com
+      PUBLIC_APP_URL: https://app.cheffamily.com/start
+      PUBLIC_LOGIN_URL: https://app.cheffamily.com/login
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - run: bun install --frozen-lockfile
+      - run: bun audit --audit-level=high
+      - run: bun run test
+      - run: bun run format:check
+      - run: bun run build:production
+
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extensions/chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check
+      - run: npm run build:production -- --origin=https://ci.cheffamily.com --version=0.0.0
 
   browser:
     runs-on: ubuntu-latest

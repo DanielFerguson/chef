@@ -27,6 +27,9 @@ const socialImage = new URL(image, Astro.site);
 const schema = structuredData.length
   ? { '@context': 'https://schema.org', '@graph': structuredData }
   : undefined;
+const schemaJson = schema
+  ? JSON.stringify(schema).replaceAll('<', '\\u003c')
+  : undefined;
 ---
 
 <!doctype html>
@@ -77,12 +80,8 @@ const schema = structuredData.length
 
     <title>{title}</title>
     {
-      schema && (
-        <script
-          is:inline
-          type="application/ld+json"
-          set:html={JSON.stringify(schema)}
-        />
+      schemaJson && (
+        <script is:inline type="application/ld+json" set:html={schemaJson} />
       )
     }
   </head>

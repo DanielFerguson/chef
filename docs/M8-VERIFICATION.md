@@ -8,19 +8,23 @@ or private-beta gates ran.
 
 | Gate | Result |
 | --- | --- |
-| `composer test` | Passed: 247 tests, 1,431 assertions; Pint and PHPStan clean. |
-| `composer test:coverage` | Passed: 247 tests, 1,431 assertions; 86.5% application coverage (minimum 75%). |
+| `composer test` | Passed: 248 tests, 1,435 assertions; Pint and PHPStan clean. |
+| `composer test:coverage` | Passed: 248 tests, 1,435 assertions; 86.5% application coverage (minimum 75%). |
 | `composer test:browser` | Passed: 29 browser tests, 243 assertions across desktop and 390×844 journeys. |
 | Frontend format, ESLint, TypeScript, production build | Passed. |
 | React Doctor | 100/100, no issues in changed React code. |
-| Chrome extension `npm run check` | Passed: syntax checks and 6 policy tests. |
-| Production extension build assertion | Passed for a non-production verification origin: exact host and version emitted, with no localhost/example permission. This was not a distributable beta package. |
+| Chrome extension `npm run check` | Passed: syntax checks and 8 policy/release-config tests. |
+| Production extension build assertion | Passed for a non-production verification origin: exact API destination, host permissions, clean six-file package, and version emitted with no localhost/example permission. This was not a distributable beta package. |
+| Marketing production gate | Passed: 8 configuration acceptance/rejection tests, frozen Bun install, Astro with 0 diagnostics, safe static checks, and an exact non-placeholder `/start` and `/login` contract. |
 | `composer audit --locked` | No security vulnerability advisories. |
 | `npm audit --audit-level=high` | 0 vulnerabilities. |
+| `bun audit --audit-level=high` | No vulnerabilities. |
 
-The CI workflow also contains a MySQL 8.4 migration/test job. Its hosted run is
-still part of the production-like replay gate rather than evidence from this
-local verification.
+The CI workflow now requires backend coverage and Composer audit, MySQL 8.4
+portability, frontend build and npm audit, strict marketing build and Bun audit,
+extension policy and production packaging, and the browser suite as independent
+jobs. A hosted run of these jobs is still part of the production-like replay
+gate rather than evidence from this local verification.
 
 The final approval suite proves a complete signed manifest can approve the exact
 configured deployment and rejects waivers, weak retailer/beta results, stale or
@@ -29,6 +33,11 @@ secrets, wrong release/origin, signature tampering, restore RPO over 24 hours,
 restore time over four hours, automation failure above 20%, and observed AI
 cost above its configured family ceiling. The example manifest was executed and
 correctly refused signing while pending.
+
+The public `/start` handoff now routes guests to registration and authenticated
+households to the dashboard. The full gate also exposed a midnight-only M3 test
+flake caused by recalculating `today()` while constructing a fourteen-day plan;
+the test now derives every slot from the persisted plan start date.
 
 ## Accessibility and responsive evidence
 

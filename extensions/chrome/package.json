@@ -4,6 +4,6 @@
   "private": true,
   "scripts": {
     "build:production": "node scripts/build-production.mjs",
-    "check": "node --check background.js && node --check popup.js && node --check policy.js && node --check scripts/build-production.mjs && node --test tests/*.test.js"
+    "check": "node --check background.js && node --check popup.js && node --check policy.js && node --check scripts/build-production.mjs && node --check scripts/release-config.mjs && node --test tests/*.test.js"
   }
 }

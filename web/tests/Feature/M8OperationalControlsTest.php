@@ -120,6 +120,15 @@ it('publishes the privacy, terms, security, help, and release candidate pages', 
     $this->get(route('release-notes'))->assertOk()->assertInertia(fn (Assert $page) => $page->component('release-notes'));
 });
 
+it('provides a stable first-plan handoff for the public marketing site', function () {
+    $this->get(route('start'))->assertRedirect(route('register'));
+
+    $user = User::factory()->create();
+    app(CreateTeamForUser::class)->handle($user, 'Marketing handoff family');
+
+    $this->actingAs($user)->get(route('start'))->assertRedirect(route('dashboard'));
+});
+
 it('applies strict production security headers without disabling microphone fallback', function () {
     $this->app->detectEnvironment(fn () => 'production');
 

@@ -1,11 +1,7 @@
 ---
 import Brand from './Brand.astro';
 import { primaryNavigation } from '../data/site';
-
-const appUrl =
-  import.meta.env.PUBLIC_APP_URL ?? 'https://app.chef.example/start';
-const loginUrl =
-  import.meta.env.PUBLIC_LOGIN_URL ?? 'https://app.chef.example/login';
+import { appUrl, loginUrl } from '../data/public-links';
 ---
 
 <header class="site-header">

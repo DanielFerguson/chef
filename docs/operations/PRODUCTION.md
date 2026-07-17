@@ -128,3 +128,21 @@ expectations, so deployment configuration cannot redefine MySQL/Redis/Reverb/S3
 requirements to make an unsafe local driver pass. The approval command always
 re-probes database, cache, and object storage and refuses stale, waived,
 unsigned, tampered, wrong-release, or wrong-origin external evidence.
+
+## Public marketing build
+
+Build the static public site with its exact production destinations rather than
+the placeholder-aware local command:
+
+```shell
+SITE_URL=https://your-public-host \
+PUBLIC_APP_URL=https://your-app-host/start \
+PUBLIC_LOGIN_URL=https://your-app-host/login \
+bun run build:production
+```
+
+Publish only after the required hosted CI jobs pass. From an unauthenticated
+browser, prove the marketing start link reaches application registration and
+the login link reaches the login form; repeat `/start` while authenticated and
+prove it reaches the household dashboard. Record both results in the staging
+and production probe sections of the signed M8 evidence manifest.

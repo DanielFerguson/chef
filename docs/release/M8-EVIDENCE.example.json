@@ -21,7 +21,9 @@
         "broadcast_tenancy": false,
         "nightwatch_web": false,
         "nightwatch_worker": false,
-        "mail_delivery": false
+        "mail_delivery": false,
+        "marketing_start_link": false,
+        "marketing_login_link": false
       }
     },
     "production_probe": {
@@ -40,7 +42,9 @@
         "broadcast_tenancy": false,
         "nightwatch_web": false,
         "nightwatch_worker": false,
-        "mail_delivery": false
+        "mail_delivery": false,
+        "marketing_start_link": false,
+        "marketing_login_link": false
       }
     },
     "backup_restore": {
@@ -173,6 +177,9 @@
         "browser_suite_passed": false,
         "dependency_audits_clear": false,
         "security_review_clear": false,
+        "marketing_production_build_passed": false,
+        "extension_production_build_passed": false,
+        "ci_required_jobs_passed": false,
         "cost_ceiling_configured": false,
         "automation_failure_rate_measured": false,
         "automation_failure_rate": 0,

@@ -38,6 +38,33 @@ external-account evidence listed below is still outstanding.
    (`web/app/Actions/Privacy/ExportTeamData.php:13-135`). Team deletion requires
    owner authorisation and refuses to complete if retained screenshots cannot
    be deleted (`web/app/Actions/Privacy/DeleteTeam.php:18-51`).
+6. **REACT-XSS-001 — raw QR SVG rendering.** The two-factor setup used
+   `dangerouslySetInnerHTML` for a server-returned SVG. It now renders an encoded
+   SVG only in image context, preserving the QR and accessible name without an
+   HTML execution sink
+   (`web/resources/js/components/two-factor-setup-modal.tsx:52-93`).
+7. **REACT-NET-001 — mutable extension credential destination.** The extension
+   stored an editable API base beside the connection token and reused it for
+   authenticated requests. The API origin is now derived only from the packaged
+   manifest, must match an exact host permission, and is never read from browser
+   storage (`extensions/chrome/policy.js:35-57`,
+   `extensions/chrome/background.js:3-46`,
+   `extensions/chrome/popup.js:1-88`).
+8. **REACT-CONFIG-001 / REACT-XSS-002 — public build input and script sinks.**
+   Marketing destinations now reject active schemes and embedded credentials,
+   the production gate rejects placeholders and cross-origin/wrong-path links,
+   JSON-LD escapes script-closing input, and constant hero updates use
+   `textContent` rather than `innerHTML`
+   (`marketing/src/data/public-links.ts:1-38`,
+   `marketing/scripts/production-config.mjs:1-51`,
+   `marketing/src/layouts/BaseLayout.astro:27-87`,
+   `marketing/src/scripts/hero-workflow.ts:482-531`).
+9. **REACT-SUPPLY-001 — release checks were local-only.** Required CI now
+   includes Composer/npm/Bun audits, the frozen marketing install and strict
+   production build, extension policy and clean packaging, MySQL portability,
+   backend coverage, frontend build, and browser journeys
+   (`.github/workflows/ci.yml:11-161`). Hosted execution remains part of the
+   production replay rather than being claimed locally.
 
 ## Tenancy and automation boundary evidence
 
@@ -72,8 +99,8 @@ external-account evidence listed below is still outstanding.
 4. **External safety proof, release-blocking.** Complete the real signed-in
    Woolworths/Coles and microphone tests from `docs/M8-LAUNCH.md`. Fixtures do
    not close these conditions.
-5. **Dependency and dynamic verification, passed locally.** Composer and npm
-   reported no vulnerability advisory; Pint, PHPStan, frontend checks, React
+5. **Dependency and dynamic verification, passed locally.** Composer, npm, and
+   Bun reported no vulnerability advisory; Pint, PHPStan, frontend checks, React
    Doctor, extension checks, the full application suite, the 86.5% coverage
    gate, and the complete browser suite passed. The exact results are recorded
    in `docs/M8-VERIFICATION.md`; production-like replay is still required.

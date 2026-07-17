@@ -1,7 +1,7 @@
 import { Form } from '@inertiajs/react';
 import { REGEXP_ONLY_DIGITS } from 'input-otp';
 import { Check, Copy, ScanLine } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AlertError from '@/components/alert-error';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,10 @@ function GridScanIcon() {
     );
 }
 
+function svgImageUrl(svg: string) {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 function TwoFactorSetupStep({
     qrCodeSvg,
     manualSetupKey,
@@ -76,11 +80,10 @@ function TwoFactorSetupStep({
                         <div className="mx-auto aspect-square w-64 rounded-lg border border-border">
                             <div className="z-10 flex h-full w-full items-center justify-center p-5">
                                 {qrCodeSvg ? (
-                                    <div
-                                        className="aspect-square w-full rounded-lg bg-white p-2 [&_svg]:size-full"
-                                        dangerouslySetInnerHTML={{
-                                            __html: qrCodeSvg,
-                                        }}
+                                    <img
+                                        src={svgImageUrl(qrCodeSvg)}
+                                        alt="Two-factor authentication QR code"
+                                        className="aspect-square w-full rounded-lg bg-white p-2"
                                         style={{
                                             filter:
                                                 resolvedAppearance === 'dark'
@@ -246,6 +249,35 @@ type Props = {
     errors: string[];
 };
 
+function getModalConfig(
+    twoFactorEnabled: boolean,
+    showVerificationStep: boolean,
+) {
+    if (twoFactorEnabled) {
+        return {
+            title: 'Two-factor authentication enabled',
+            description:
+                'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
+            buttonText: 'Close',
+        };
+    }
+
+    if (showVerificationStep) {
+        return {
+            title: 'Verify authentication code',
+            description: 'Enter the 6-digit code from your authenticator app',
+            buttonText: 'Continue',
+        };
+    }
+
+    return {
+        title: 'Enable two-factor authentication',
+        description:
+            'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
+        buttonText: 'Continue',
+    };
+}
+
 export default function TwoFactorSetupModal({
     isOpen,
     onClose,
@@ -259,52 +291,22 @@ export default function TwoFactorSetupModal({
 }: Props) {
     const [showVerificationStep, setShowVerificationStep] =
         useState<boolean>(false);
+    const modalConfig = getModalConfig(twoFactorEnabled, showVerificationStep);
 
-    const modalConfig = useMemo<{
-        title: string;
-        description: string;
-        buttonText: string;
-    }>(() => {
-        if (twoFactorEnabled) {
-            return {
-                title: 'Two-factor authentication enabled',
-                description:
-                    'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
-                buttonText: 'Close',
-            };
-        }
-
-        if (showVerificationStep) {
-            return {
-                title: 'Verify authentication code',
-                description:
-                    'Enter the 6-digit code from your authenticator app',
-                buttonText: 'Continue',
-            };
-        }
-
-        return {
-            title: 'Enable two-factor authentication',
-            description:
-                'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
-            buttonText: 'Continue',
-        };
-    }, [twoFactorEnabled, showVerificationStep]);
-
-    const resetModalState = useCallback(() => {
+    const resetModalState = () => {
         if (twoFactorEnabled) {
             clearSetupData();
         }
 
         setShowVerificationStep(false);
-    }, [clearSetupData, twoFactorEnabled]);
+    };
 
-    const handleClose = useCallback(() => {
+    const handleClose = () => {
         resetModalState();
         onClose();
-    }, [onClose, resetModalState]);
+    };
 
-    const handleModalNextStep = useCallback(() => {
+    const handleModalNextStep = () => {
         if (requiresConfirmation) {
             setShowVerificationStep(true);
 
@@ -313,7 +315,7 @@ export default function TwoFactorSetupModal({
 
         clearSetupData();
         handleClose();
-    }, [requiresConfirmation, clearSetupData, handleClose]);
+    };
 
     const fetchSetupDataRef = useRef(fetchSetupData);
 

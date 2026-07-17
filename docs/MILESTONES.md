@@ -498,10 +498,14 @@ Status: `[ ]`
 
 Code-level evidence:
 
-- `docs/M8-VERIFICATION.md` records 247 passing application tests, 86.5%
+- `docs/M8-VERIFICATION.md` records 248 passing application tests, 86.5%
   coverage, 29 passing browser tests across desktop and 390×844, clean static
   and frontend gates, React Doctor 100/100, extension policy checks, and clean
-  Composer/npm vulnerability audits.
+  Composer/npm/Bun vulnerability audits.
+- Required CI jobs now include the MySQL replay, backend coverage/audit,
+  frontend build/audit, strict marketing production build, deterministic
+  extension package, and browser suite. The signed approval manifest requires
+  all hosted jobs plus working marketing `/start` and `/login` probes.
 - `docs/accessibility/M8-ACCESSIBILITY-REVIEW.md` records the core-journey
   interaction, structure, and responsive review and the defects closed.
 - `docs/security/M8-SECURITY-REVIEW.md` records the security and cross-family

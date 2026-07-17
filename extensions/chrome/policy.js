@@ -32,6 +32,30 @@
     }
   }
 
+  function apiOrigin(homepageUrl, hostPermissions) {
+    let parsed;
+
+    try {
+      parsed = new URL(homepageUrl);
+    } catch {
+      throw new Error('The extension package has no valid Chef application origin.');
+    }
+
+    const localDevelopment = parsed.protocol === 'http:' && parsed.hostname === 'localhost';
+    const expectedPermission = `${parsed.origin}/*`;
+
+    if (
+      parsed.origin !== homepageUrl
+      || (parsed.protocol !== 'https:' && !localDevelopment)
+      || !Array.isArray(hostPermissions)
+      || !hostPermissions.includes(expectedPermission)
+    ) {
+      throw new Error('The extension package has no valid Chef application origin.');
+    }
+
+    return parsed.origin;
+  }
+
   function assertStep(step, currentUrl, expectedTabId, expectedRunUuid) {
     const origin = originOf(currentUrl);
 
@@ -140,7 +164,7 @@
     }
   }
 
-  const policy = { ALLOWED_ORIGINS, originOf, assertStep, assertAction, assertVisibleTab, requiresTakeover };
+  const policy = { ALLOWED_ORIGINS, originOf, apiOrigin, assertStep, assertAction, assertVisibleTab, requiresTakeover };
   root.ChefExtensionPolicy = policy;
 
   if (typeof module !== 'undefined') module.exports = policy;

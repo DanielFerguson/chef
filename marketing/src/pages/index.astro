@@ -5,10 +5,9 @@ import MarketingFooter from '../components/MarketingFooter.astro';
 import MarketingHeader from '../components/MarketingHeader.astro';
 import PricingOffer from '../components/PricingOffer.astro';
 import { faqs, site } from '../data/site';
+import { appUrl } from '../data/public-links';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
-const appUrl =
-  import.meta.env.PUBLIC_APP_URL ?? 'https://app.chef.example/start';
 const siteUrl = Astro.site?.toString() ?? 'https://chef.example/';
 
 const stages = [

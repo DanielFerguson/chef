@@ -15,8 +15,15 @@ The production gate is:
 
 ```bash
 bun run format:check
-bun run build
+SITE_URL=https://your-public-host \
+PUBLIC_APP_URL=https://your-app-host/start \
+PUBLIC_LOGIN_URL=https://your-app-host/login \
+bun run build:production
 ```
+
+The production command rejects missing, non-HTTPS, credential-bearing,
+cross-origin, reserved, and placeholder destinations before Astro builds.
+`bun run build` remains the local placeholder-aware preview gate.
 
 ## Environment
 

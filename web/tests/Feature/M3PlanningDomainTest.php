@@ -431,7 +431,7 @@ it('revises a complete fourteen-day plan without losing recipe versions or parti
             $slot = app(CreateMealSlot::class)->handle(
                 $workspace['plan'],
                 $workspace['user'],
-                today()->addDays($day),
+                $workspace['plan']->starts_on->copy()->addDays($day),
                 $kind,
                 $workspace['team']->people,
             );

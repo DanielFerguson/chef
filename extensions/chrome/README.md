@@ -10,8 +10,9 @@ in the retailer tab selected by the household.
 1. In Chrome, open `chrome://extensions` and enable **Developer mode**.
 2. Choose **Load unpacked** and select this `extensions/chrome` directory.
 3. In Chef's Shopping workspace, create a temporary pairing code.
-4. Open the extension, use the Chef application origin as **Chef API URL**, and
-   enter the pairing code.
+4. Open the extension and enter the pairing code. The Chef application origin
+   is fixed by the extension package and cannot be changed in the popup or
+   browser storage.
 5. Start a Woolworths or Coles cart-preparation run in Chef, open that retailer,
    then use **Connect selected retailer tab** in the extension.
 
@@ -25,10 +26,10 @@ npm run build:production -- --origin=https://your-chef-host --version=1.0.0
 ```
 
 The command rejects localhost and reserved placeholder domains, removes all
-development application origins from `dist/manifest.json`, and pre-fills the
-same exact origin in the popup. Load and package `dist/`, record its hash in the
-beta evidence, and add no other application or retailer origin without a
-product and security review.
+development application origins from `dist/manifest.json`, and pins the same
+exact origin as the only destination for connection credentials. Load and
+package `dist/`, record its hash in the beta evidence, and add no other
+application or retailer origin without a product and security review.
 
 ## Safety boundary
 

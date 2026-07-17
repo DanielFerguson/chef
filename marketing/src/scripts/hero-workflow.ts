@@ -98,6 +98,12 @@ document
     const cookingAction = workflow.querySelector<HTMLElement>(
       '[data-cooking-action]',
     );
+    const cookingActionLabel = workflow.querySelector<HTMLElement>(
+      '[data-cooking-action-label]',
+    );
+    const cookingActionIcon = workflow.querySelector<HTMLElement>(
+      '[data-cooking-action-icon]',
+    );
     const timer = workflow.querySelector<HTMLElement>('[data-workflow-timer]');
 
     if (
@@ -127,6 +133,8 @@ document
       !cookingStrike ||
       !cookingComplete ||
       !cookingAction ||
+      !cookingActionLabel ||
+      !cookingActionIcon ||
       !timer
     ) {
       return;
@@ -494,7 +502,8 @@ document
       cookingState.textContent = 'Current step';
       cookingComplete.hidden = true;
       cookingAction.dataset.state = 'current';
-      cookingAction.innerHTML = 'Next step <i aria-hidden="true">→</i>';
+      cookingActionLabel.textContent = 'Next step';
+      cookingActionIcon.textContent = '→';
 
       if (animateChange && !reduceMotion) {
         trackAnimation(
@@ -518,7 +527,8 @@ document
       cookingState.textContent = 'Step complete';
       cookingComplete.hidden = false;
       cookingAction.dataset.state = 'complete';
-      cookingAction.innerHTML = 'Complete <i aria-hidden="true">✓</i>';
+      cookingActionLabel.textContent = 'Complete';
+      cookingActionIcon.textContent = '✓';
       trackAnimation(
         animate(
           cookingStrike,
