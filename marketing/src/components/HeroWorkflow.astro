@@ -7,11 +7,11 @@ const stages = [
 ] as const;
 
 const meals = [
-  ['MON 20', 'Spinach & lemon chicken', '4 people · 30m', ''],
-  ['TUE 21', 'Tomato gnocchi', '2 people · 25m', 'oat'],
-  ['WED 22', 'Leftover lemon chicken', '4 people · 10m', ''],
-  ['THU 23', 'Quick beef rice bowls', '4 people · 20m', 'sage'],
-  ['FRI 24', 'Takeaway night', 'Open choice', ''],
+  ['MON 20', 'Spinach & lemon chicken', '4 people · 30m', '', false],
+  ['TUE 21', 'Tomato gnocchi', '2 people · 25m', 'oat', false],
+  ['WED 22', 'Leftover lemon chicken', '4 people · 10m', '', true],
+  ['THU 23', 'Mushroom risotto', '4 people · 35m', 'sage', false],
+  ['FRI 24', 'Takeaway night', 'Open choice', '', true],
 ] as const;
 ---
 
@@ -72,21 +72,36 @@ const meals = [
         Plan five dinners for four. Tuesday is only two of us, Mia won’t eat
         mushrooms, Thursday needs to be quick, and use the spinach first.
       </p>
-      <div class="workflow-response" data-workflow-item>
+      <div class="workflow-response" data-plan-thinking hidden>
         <span class="workflow-avatar" aria-hidden="true">C</span>
         <span>
-          <strong>Creating five dinners for your week</strong>
-          <small>Keeping every household decision visible</small>
+          <strong class="workflow-thinking-label">
+            <i class="workflow-spinner" aria-hidden="true"></i>
+            Thinking through your week…
+          </strong>
+          <small>Checking who’s eating and what this week needs</small>
         </span>
       </div>
-      <ul class="workflow-context" aria-label="Household context being used">
-        <li data-workflow-item>
+      <div class="workflow-response" data-plan-response hidden>
+        <span class="workflow-avatar" aria-hidden="true">C</span>
+        <span>
+          <strong>I’ve built five dinners around your household</strong>
+          <small>Every decision stays visible and editable</small>
+        </span>
+      </div>
+      <ul
+        class="workflow-context"
+        aria-label="Household context being used"
+        data-plan-context-list
+        hidden
+      >
+        <li data-plan-context data-sequence-visible="false" aria-hidden="true">
           <span>Mia</span><strong>No mushrooms</strong>
         </li>
-        <li data-workflow-item>
+        <li data-plan-context data-sequence-visible="false" aria-hidden="true">
           <span>Thursday</span><strong>Quick dinner</strong>
         </li>
-        <li data-workflow-item>
+        <li data-plan-context data-sequence-visible="false" aria-hidden="true">
           <span>Use first</span><strong>Baby spinach</strong>
         </li>
       </ul>
@@ -100,20 +115,55 @@ const meals = [
       data-stage-index="1"
       hidden
     >
-      <div class="workflow-summary" data-workflow-item>
-        <strong><i aria-hidden="true"></i>5 dinners set</strong>
-        <span>Review before confirming</span>
+      <div class="workflow-summary">
+        <strong
+          ><i aria-hidden="true"></i><span data-meals-summary
+            >Reviewing five dinners</span
+          ></strong
+        >
+        <span data-meals-summary-detail>Checking household fit</span>
       </div>
       <div class="workflow-meals" aria-label="Meals set for the week">
         {
-          meals.map(([day, meal, meta, tone]) => (
+          meals.map(([day, meal, meta, tone, mobileHidden], index) => (
             <div
-              class:list={['workflow-meal', tone && `workflow-meal--${tone}`]}
-              data-workflow-item
+              class:list={[
+                'workflow-meal',
+                tone && `workflow-meal--${tone}`,
+                mobileHidden && 'workflow-meal--mobile-hidden',
+              ]}
+              data-meal-row
+              data-meal-index={index}
+              data-initial-title={meal}
+              data-initial-meta={meta}
+              data-final-title={index === 3 ? 'Quick beef rice bowls' : meal}
+              data-final-meta={index === 3 ? '4 people · 20m' : meta}
+              data-rejected-meta={
+                index === 3
+                  ? 'Mia dislikes mushrooms · Thursday needs to be quick'
+                  : undefined
+              }
+              data-approved-label="Approved"
+              data-rejected-label="Rejected"
+              data-replaced-label="Replaced"
+              data-sequence-visible="false"
+              aria-hidden="true"
             >
               <span>{day}</span>
-              <strong>{meal}</strong>
-              <small>{meta}</small>
+              <span class="workflow-meal-copy">
+                <strong data-meal-title>{meal}</strong>
+                <small data-meal-meta>{meta}</small>
+              </span>
+              <span
+                class="workflow-meal-status"
+                data-meal-status
+                data-state="pending"
+              >
+                <i aria-hidden="true">
+                  <span class="workflow-spinner" />
+                </i>
+                <span data-meal-status-label>Checking</span>
+              </span>
             </div>
           ))
         }
@@ -128,43 +178,66 @@ const meals = [
       data-stage-index="2"
       hidden
     >
-      <div class="workflow-trolley-heading" data-workflow-item>
+      <div class="workflow-trolley-heading">
         <span>
           <small>Woolworths trolley</small>
-          <strong>Ready for review</strong>
+          <strong data-trolley-title>Preparing your trolley</strong>
         </span>
-        <em>24 items</em>
+        <em data-trolley-count>Matching…</em>
       </div>
       <div class="workflow-progress" aria-hidden="true">
         <span data-workflow-progress></span>
       </div>
       <div class="workflow-trolley-list">
-        <div class="workflow-trolley-row" data-workflow-item>
-          <i aria-hidden="true">✓</i>
+        <div
+          class="workflow-trolley-row"
+          data-trolley-row
+          data-state="matching"
+          data-initial-title="Matching meal ingredients"
+          data-initial-detail="Checking quantities against the plan"
+          data-final-title="18 meal ingredients matched"
+          data-final-detail="Quantities checked against the plan"
+        >
+          <i aria-hidden="true"><span class="workflow-spinner"></span></i>
           <span>
-            <strong>18 meal ingredients matched</strong>
-            <small>Quantities checked against the plan</small>
+            <strong data-trolley-row-title>Matching meal ingredients</strong>
+            <small data-trolley-row-detail
+              >Checking quantities against the plan</small
+            >
           </span>
         </div>
-        <div class="workflow-trolley-row" data-workflow-item>
-          <i aria-hidden="true">✓</i>
+        <div
+          class="workflow-trolley-row"
+          data-trolley-row
+          data-state="matching"
+          data-initial-title="Adding household essentials"
+          data-initial-detail="Matching your saved products"
+          data-final-title="6 household essentials added"
+          data-final-detail="Milk, fruit, breakfast, and cleaning items"
+        >
+          <i aria-hidden="true"><span class="workflow-spinner"></span></i>
           <span>
-            <strong>6 household essentials added</strong>
-            <small>Milk, fruit, breakfast, and cleaning items</small>
+            <strong data-trolley-row-title>Adding household essentials</strong>
+            <small data-trolley-row-detail>Matching your saved products</small>
           </span>
         </div>
         <div
           class="workflow-trolley-row workflow-trolley-row--attention"
-          data-workflow-item
+          data-trolley-row
+          data-state="matching"
+          data-initial-title="Checking substitutions"
+          data-initial-detail="Comparing every product match"
+          data-final-title="One substitution needs you"
+          data-final-detail="Chef paused before making the choice"
         >
-          <i aria-hidden="true">1</i>
+          <i aria-hidden="true"><span class="workflow-spinner"></span></i>
           <span>
-            <strong>One substitution needs you</strong>
-            <small>Chef paused before making the choice</small>
+            <strong data-trolley-row-title>Checking substitutions</strong>
+            <small data-trolley-row-detail>Comparing every product match</small>
           </span>
         </div>
       </div>
-      <p class="workflow-checkout" data-workflow-item>
+      <p class="workflow-checkout" data-trolley-checkout hidden>
         Trolley ready for your review <span>Checkout stays yours</span>
       </p>
     </section>
@@ -185,28 +258,59 @@ const meals = [
         <em>Cooking mode</em>
       </div>
       <div class="workflow-cooking-meta" data-workflow-item>
-        <span>Step 2 of 5</span>
+        <span data-cooking-step>Step 2 of 5</span>
         <span>4 servings · 30 min</span>
       </div>
       <div
         class="workflow-progress workflow-progress--cooking"
         aria-hidden="true"
       >
-        <span data-workflow-progress></span>
+        <span data-cooking-progress></span>
       </div>
-      <div class="workflow-current-step" data-workflow-item>
-        <small>Current step</small>
-        <p>
-          Add the spinach and lemon, then cook until the spinach has just
-          wilted.
+      <div
+        class="workflow-current-step"
+        data-workflow-item
+        data-cooking-current
+        data-state="current"
+      >
+        <div class="workflow-step-heading">
+          <small data-cooking-state>Current step</small>
+          <span class="workflow-step-complete" data-cooking-complete hidden>
+            <i aria-hidden="true">✓</i> Complete
+          </span>
+        </div>
+        <p
+          data-cooking-instruction
+          data-step-two="Add the spinach and lemon, then cook until the spinach has just wilted."
+          data-step-three="Turn the chicken through the pan sauce and simmer until every piece is coated."
+          data-step-four="Divide between bowls, spoon over the pan sauce, and finish with fresh lemon."
+        >
+          <span data-cooking-instruction-text>
+            Add the spinach and lemon, then cook until the spinach has just
+            wilted.
+          </span>
+          <span
+            class="workflow-strike-overlay"
+            data-cooking-strike
+            aria-hidden="true"
+          >
+            Add the spinach and lemon, then cook until the spinach has just
+            wilted.
+          </span>
         </p>
       </div>
       <div class="workflow-cooking-footer" data-workflow-item>
         <span>
           <small>Timer</small>
-          <strong>08:00</strong>
+          <strong
+            data-workflow-timer
+            aria-label="8 minutes remaining"
+            aria-live="off">08:00</strong
+          >
         </span>
-        <span class="workflow-next">Next step <i aria-hidden="true">→</i></span>
+        <span class="workflow-next" data-cooking-action data-state="current">
+          Next step <i aria-hidden="true">→</i>
+        </span>
       </div>
     </section>
   </div>
@@ -356,6 +460,13 @@ const meals = [
     margin-top: 1rem;
   }
 
+  .workflow-response[hidden],
+  .workflow-context[hidden],
+  .workflow-checkout[hidden],
+  .workflow-step-complete[hidden] {
+    display: none;
+  }
+
   .workflow-response > span:last-child {
     display: flex;
     flex-direction: column;
@@ -377,6 +488,33 @@ const meals = [
 
   .workflow-response strong {
     font-size: 0.8125rem;
+  }
+
+  .workflow-thinking-label {
+    align-items: center;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .workflow-spinner {
+    animation: workflow-spin 0.85s linear infinite;
+    border: 2px solid rgb(111 128 106 / 22%);
+    border-radius: 50%;
+    border-top-color: var(--sage-strong);
+    display: inline-block;
+    flex: 0 0 auto;
+    height: 0.875rem;
+    width: 0.875rem;
+  }
+
+  .hero-workflow[data-workflow-paused='true'] .workflow-spinner {
+    animation-play-state: paused;
+  }
+
+  [data-sequence-visible='false'] {
+    opacity: 0;
+    transform: translateY(8px);
+    visibility: hidden;
   }
 
   .workflow-response small {
@@ -462,7 +600,7 @@ const meals = [
     border-bottom: 1px solid var(--border);
     display: grid;
     gap: 0.5rem;
-    grid-template-columns: 4rem 1fr 5.75rem;
+    grid-template-columns: 3.75rem minmax(0, 1fr) auto;
     min-height: 3.25rem;
     padding-inline: 0.875rem;
   }
@@ -479,20 +617,78 @@ const meals = [
     background: rgb(111 128 106 / 8%);
   }
 
-  .workflow-meal span,
-  .workflow-meal small {
+  .workflow-meal > span:first-child,
+  .workflow-meal-copy small {
     color: var(--muted);
     font-size: 0.75rem;
   }
 
-  .workflow-meal strong {
-    font-size: 0.875rem;
-    font-weight: 600;
+  .workflow-meal-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
 
-  .workflow-meal small {
+  .workflow-meal-copy strong {
+    font-size: 0.875rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workflow-meal-copy small {
+    line-height: 1.2;
+    margin-top: 0.1rem;
+  }
+
+  .workflow-meal-status {
+    align-items: center;
+    color: var(--muted);
+    display: flex;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    gap: 0.35rem;
+    justify-content: flex-end;
+    min-width: 4.75rem;
+  }
+
+  .workflow-meal-status > i {
+    align-items: center;
+    display: flex;
+    font-size: 0.75rem;
+    font-style: normal;
+    height: 1rem;
+    justify-content: center;
+    width: 1rem;
+  }
+
+  .workflow-meal-status[data-state='accepted'] {
     color: var(--sage-strong);
-    text-align: right;
+  }
+
+  .workflow-meal-status[data-state='rejected'] {
+    color: var(--paprika);
+  }
+
+  .workflow-meal-status[data-state='replaced'] {
+    color: var(--ink);
+  }
+
+  .workflow-meal-status[data-state='accepted'] > i::before {
+    content: '✓';
+  }
+
+  .workflow-meal-status[data-state='rejected'] > i::before {
+    content: '×';
+  }
+
+  .workflow-meal-status[data-state='replaced'] > i::before {
+    content: '↻';
+  }
+
+  .workflow-meal-status:not([data-state='pending']) .workflow-spinner {
+    display: none;
   }
 
   .workflow-trolley-heading,
@@ -531,7 +727,7 @@ const meals = [
     background: var(--sage);
     display: block;
     height: 100%;
-    transform: scaleX(1);
+    transform: scaleX(0);
     transform-origin: left;
     width: 100%;
   }
@@ -564,6 +760,24 @@ const meals = [
     width: 1.75rem;
   }
 
+  .workflow-trolley-row > i::before {
+    display: none;
+  }
+
+  .workflow-trolley-row[data-state='complete'] > i::before {
+    content: '✓';
+    display: block;
+  }
+
+  .workflow-trolley-row[data-state='attention'] > i::before {
+    content: '1';
+    display: block;
+  }
+
+  .workflow-trolley-row:not([data-state='matching']) > i .workflow-spinner {
+    display: none;
+  }
+
   .workflow-trolley-row > span {
     display: flex;
     flex-direction: column;
@@ -580,6 +794,11 @@ const meals = [
   }
 
   .workflow-trolley-row--attention > i {
+    background: rgb(111 128 106 / 13%);
+    color: var(--sage-strong);
+  }
+
+  .workflow-trolley-row--attention[data-state='attention'] > i {
     background: rgb(201 79 50 / 12%);
     color: var(--paprika);
   }
@@ -608,7 +827,8 @@ const meals = [
 
   .workflow-progress--cooking > span {
     background: var(--paprika);
-    width: 40%;
+    transform: scaleX(0.4);
+    width: 100%;
   }
 
   .workflow-current-step {
@@ -616,6 +836,33 @@ const meals = [
     border-top: 1px solid var(--border);
     margin-top: 1.25rem;
     padding-block: 1.375rem;
+  }
+
+  .workflow-step-heading {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .workflow-step-complete {
+    align-items: center;
+    color: var(--sage-strong);
+    display: flex;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    gap: 0.35rem;
+  }
+
+  .workflow-step-complete i {
+    align-items: center;
+    background: rgb(111 128 106 / 13%);
+    border-radius: 50%;
+    display: flex;
+    font-size: 0.625rem;
+    font-style: normal;
+    height: 1.25rem;
+    justify-content: center;
+    width: 1.25rem;
   }
 
   .workflow-current-step small,
@@ -633,6 +880,26 @@ const meals = [
     line-height: 1.25;
     margin-top: 0.55rem;
     max-width: 31rem;
+    position: relative;
+    transition:
+      color 0.3s ease,
+      opacity 0.3s ease;
+  }
+
+  .workflow-current-step[data-state='complete'] p {
+    color: var(--muted);
+    opacity: 0.72;
+  }
+
+  .workflow-strike-overlay {
+    clip-path: inset(0 100% 0 0);
+    color: transparent;
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    text-decoration-color: var(--sage-strong);
+    text-decoration-line: line-through;
+    text-decoration-thickness: 2px;
   }
 
   .workflow-cooking-footer {
@@ -668,6 +935,10 @@ const meals = [
 
   .workflow-next i {
     font-style: normal;
+  }
+
+  .workflow-next[data-state='complete'] {
+    background: var(--sage-strong);
   }
 
   @media (max-width: 52rem) {
@@ -713,16 +984,15 @@ const meals = [
     }
 
     .workflow-meal {
-      grid-template-columns: 3.125rem 1fr;
+      grid-template-columns: 3.125rem minmax(0, 1fr) auto;
       min-height: 4rem;
     }
 
-    .workflow-meal small {
-      grid-column: 2;
-      text-align: left;
+    .workflow-meal-status {
+      min-width: 4.35rem;
     }
 
-    .workflow-meal:nth-child(n + 4) {
+    .workflow-meal--mobile-hidden {
       display: none;
     }
 
@@ -738,6 +1008,18 @@ const meals = [
       font-family: var(--font-sans);
       font-size: 1.375rem;
       line-height: 1.35;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .workflow-spinner {
+      animation: none;
+    }
+  }
+
+  @keyframes workflow-spin {
+    to {
+      transform: rotate(1turn);
     }
   }
 </style>
