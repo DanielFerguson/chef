@@ -66,3 +66,10 @@ restored and the drill records:
 - authenticated same-team success and cross-team denial;
 - cleanup confirmation;
 - reviewer sign-off and follow-up issues.
+
+After review, store the detailed drill record in the approved private evidence
+system and transfer only the aggregate booleans, HTTPS evidence path, completion
+time, operator, and bundle SHA-256 digest into the `backup_restore` gate from
+`docs/release/M8-EVIDENCE.example.json`. The final approval command rejects a
+restore older than 30 days, a waiver, missing reconciliation, or evidence that
+contains arbitrary fields.

@@ -114,3 +114,17 @@ Then verify:
 Record the environment, release SHA, operator, time, and evidence links in the
 M8 launch record. A passing local command does not stand in for this deployed
 proof.
+
+After every external M8 gate is complete, create and sign the content-free
+manifest described in `docs/release/M8-APPROVAL.md`, then run the final gate on
+the exact production candidate:
+
+```shell
+php artisan chef:release:approve /private/m8-evidence.signed.json
+```
+
+The topology requirements are application constants rather than environment
+expectations, so deployment configuration cannot redefine MySQL/Redis/Reverb/S3
+requirements to make an unsafe local driver pass. The approval command always
+re-probes database, cache, and object storage and refuses stale, waived,
+unsigned, tampered, wrong-release, or wrong-origin external evidence.

@@ -45,3 +45,12 @@ must never be checked from fixtures or a product-owner waiver.
   without authentication; final operator/contact values and legal approval
   remain required.
 - [ ] Version 1 tag points to the exact approved deployment.
+- [x] Final machine gate implemented with the immutable production contract,
+  live database/cache/object-storage probes, a content-free signed evidence
+  manifest, freshness limits, and measured acceptance thresholds.
+- [ ] `chef:release:approve` passes on the exact production candidate and its
+  signed manifest digest/output are stored in the private release record.
+
+The manifest contract, template, and commands are in
+`docs/release/M8-APPROVAL.md`. A signed manifest records evidence; it does not
+replace any real-world check or create the version tag.

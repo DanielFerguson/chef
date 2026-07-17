@@ -77,6 +77,11 @@ external-account evidence listed below is still outstanding.
    Doctor, extension checks, the full application suite, the 86.5% coverage
    gate, and the complete browser suite passed. The exact results are recorded
    in `docs/M8-VERIFICATION.md`; production-like replay is still required.
+6. **Release evidence integrity.** Final approval now uses an HMAC-signed,
+   exact-release/origin, content-free evidence schema. Unknown fields, query
+   credentials, stale evidence, waivers, threshold failures, and post-signing
+   edits are rejected. The key is separate release authority and must remain in
+   protected environment secrets; see `docs/release/M8-APPROVAL.md`.
 
 ## Release rule
 

@@ -8,8 +8,8 @@ or private-beta gates ran.
 
 | Gate | Result |
 | --- | --- |
-| `composer test` | Passed: 239 tests, 1,396 assertions; Pint and PHPStan clean. |
-| `composer test:coverage` | Passed: 239 tests, 1,396 assertions; 86.5% application coverage (minimum 75%). |
+| `composer test` | Passed: 247 tests, 1,431 assertions; Pint and PHPStan clean. |
+| `composer test:coverage` | Passed: 247 tests, 1,431 assertions; 86.5% application coverage (minimum 75%). |
 | `composer test:browser` | Passed: 29 browser tests, 243 assertions across desktop and 390×844 journeys. |
 | Frontend format, ESLint, TypeScript, production build | Passed. |
 | React Doctor | 100/100, no issues in changed React code. |
@@ -21,6 +21,14 @@ or private-beta gates ran.
 The CI workflow also contains a MySQL 8.4 migration/test job. Its hosted run is
 still part of the production-like replay gate rather than evidence from this
 local verification.
+
+The final approval suite proves a complete signed manifest can approve the exact
+configured deployment and rejects waivers, weak retailer/beta results, stale or
+old approval evidence, arbitrary content, strict-type violations, query-string
+secrets, wrong release/origin, signature tampering, restore RPO over 24 hours,
+restore time over four hours, automation failure above 20%, and observed AI
+cost above its configured family ceiling. The example manifest was executed and
+correctly refused signing while pending.
 
 ## Accessibility and responsive evidence
 

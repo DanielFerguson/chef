@@ -1,0 +1,184 @@
+{
+  "schema": "chef.m8-release-evidence.v1",
+  "release": "replace-with-APP_RELEASE",
+  "deployment_origin": "https://replace-with-production-origin.invalid",
+  "approved_by": "",
+  "approved_at": "",
+  "gates": {
+    "staging_probe": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/staging",
+      "evidence_sha256": "",
+      "metrics": {
+        "release_check": false,
+        "database": false,
+        "cache": false,
+        "object_storage": false,
+        "queue_worker": false,
+        "scheduler": false,
+        "broadcast_tenancy": false,
+        "nightwatch_web": false,
+        "nightwatch_worker": false,
+        "mail_delivery": false
+      }
+    },
+    "production_probe": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/production",
+      "evidence_sha256": "",
+      "metrics": {
+        "release_check": false,
+        "database": false,
+        "cache": false,
+        "object_storage": false,
+        "queue_worker": false,
+        "scheduler": false,
+        "broadcast_tenancy": false,
+        "nightwatch_web": false,
+        "nightwatch_worker": false,
+        "mail_delivery": false
+      }
+    },
+    "backup_restore": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/restore",
+      "evidence_sha256": "",
+      "metrics": {
+        "restore_completed": false,
+        "schema_current": false,
+        "row_counts_reconciled": false,
+        "private_files_verified": false,
+        "source_untouched": false,
+        "recovery_point_hours": 0,
+        "recovery_time_minutes": 0
+      }
+    },
+    "privacy_legal": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/legal",
+      "evidence_sha256": "",
+      "metrics": {
+        "privacy_approved": false,
+        "terms_approved": false,
+        "operator_final": false,
+        "processing_countries_final": false,
+        "support_route_tested": false
+      }
+    },
+    "data_controls": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/data-controls",
+      "evidence_sha256": "",
+      "metrics": {
+        "tenant_isolation": false,
+        "team_deletion": false,
+        "account_deletion": false,
+        "account_export": false,
+        "conversation_expiry": false,
+        "screenshot_expiry": false,
+        "audit_expiry": false
+      }
+    },
+    "woolworths_handoff": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/woolworths",
+      "evidence_sha256": "",
+      "metrics": {
+        "cart_persistence": false,
+        "selected_store": false,
+        "pause": false,
+        "takeover": false,
+        "pre_checkout_stop": false,
+        "attempts": 0,
+        "households": 0,
+        "success_rate": 0
+      }
+    },
+    "coles_handoff": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/coles",
+      "evidence_sha256": "",
+      "metrics": {
+        "cart_persistence": false,
+        "selected_store": false,
+        "pause": false,
+        "takeover": false,
+        "pre_checkout_stop": false,
+        "attempts": 0,
+        "households": 0,
+        "success_rate": 0
+      }
+    },
+    "realtime_microphone": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/realtime",
+      "evidence_sha256": "",
+      "metrics": {
+        "permission_disclosure": false,
+        "revocation": false,
+        "interruption": false,
+        "reconnect": false,
+        "mute": false,
+        "transcript": false,
+        "typed_fallback": false,
+        "sessions": 0,
+        "success_rate": 0
+      }
+    },
+    "private_beta": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/beta",
+      "evidence_sha256": "",
+      "metrics": {
+        "medium_issues_decided": false,
+        "support_sla_met": false,
+        "households": 0,
+        "mobile_households": 0,
+        "first_plan_success_rate": 0,
+        "shopping_success_rate": 0,
+        "cooking_success_rate": 0,
+        "first_plan_median_minutes": 0,
+        "critical_open": 0,
+        "high_open": 0
+      }
+    },
+    "production_replay": {
+      "result": "pending",
+      "completed_at": "",
+      "operator": "",
+      "evidence_url": "https://evidence.invalid/replay",
+      "evidence_sha256": "",
+      "metrics": {
+        "previous_milestones_passed": false,
+        "mysql_ci_passed": false,
+        "full_suite_passed": false,
+        "browser_suite_passed": false,
+        "dependency_audits_clear": false,
+        "security_review_clear": false,
+        "cost_ceiling_configured": false,
+        "automation_failure_rate_measured": false,
+        "automation_failure_rate": 0,
+        "monthly_ai_cost_per_active_family_usd": 0,
+        "monthly_ai_cost_ceiling_usd": 0
+      }
+    }
+  }
+}

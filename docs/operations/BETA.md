@@ -79,3 +79,9 @@ all critical/high findings are closed and retested, the production-like release
 probe and restore drill pass, and every deferred retailer/microphone check in
 `docs/M8-LAUNCH.md` has real evidence. Otherwise the beta remains open and M8
 remains incomplete.
+
+Transfer only the aggregate content-free beta metrics into the `private_beta`,
+retailer, and Realtime sections of the final manifest described in
+`docs/release/M8-APPROVAL.md`. Detailed participant evidence stays in the
+approved private system and is represented by an HTTPS evidence path and bundle
+SHA-256 digest, never copied into the repository manifest template.

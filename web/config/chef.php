@@ -2,12 +2,13 @@
 
 return [
     'release' => [
-        'database' => env('CHEF_RELEASE_DATABASE', 'mysql'),
-        'queue' => env('CHEF_RELEASE_QUEUE', 'redis'),
-        'cache' => env('CHEF_RELEASE_CACHE', 'redis'),
-        'session' => env('CHEF_RELEASE_SESSION', 'redis'),
-        'broadcast' => env('CHEF_RELEASE_BROADCAST', 'reverb'),
-        'filesystem' => env('CHEF_RELEASE_FILESYSTEM', 's3'),
+        'database' => 'mysql',
+        'queue' => 'redis',
+        'cache' => 'redis',
+        'session' => 'redis',
+        'broadcast' => 'reverb',
+        'filesystem' => 's3',
+        'evidence_key' => env('RELEASE_EVIDENCE_KEY'),
     ],
 
     'retention' => [

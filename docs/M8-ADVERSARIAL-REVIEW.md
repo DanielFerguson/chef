@@ -32,6 +32,17 @@ unchecked.
    new shared usage dependencies invalidated one direct-construction test. The
    test now resolves the real container boundary and uses a real scoped family;
    the full suite passes.
+7. **External gates were documentation-only:** a release owner could tag a
+   deployment without a machine check tying evidence to the exact release.
+   `chef:release:approve` now requires fresh, measured, content-free evidence
+   for every external gate, a live database/cache/object-storage probe, and a
+   valid HMAC signature. Waivers, fixtures, arbitrary notes, query-string
+   secrets, stale evidence, missed thresholds, and post-signing edits fail.
+8. **The production topology could redefine itself:** `CHEF_RELEASE_*`
+   variables allowed an environment to make SQLite, sync queues, file sessions,
+   null broadcasting, or local storage look like the expected production
+   contract. The MySQL/Redis/Reverb/S3 contract is now immutable application
+   configuration; only credentials and endpoints remain environmental.
 
 ## Open launch blockers
 
@@ -52,7 +63,8 @@ unchecked.
    make an explicit decision on each medium issue.
 5. **Production-like replay and release:** rerun all previously deferred gates
    against the approved deployment, verify the hosted MySQL CI result, record
-   evidence, then tag and publish the exact approved commit.
+   evidence, sign the content-free manifest, pass `chef:release:approve`, then
+   tag and publish the exact approved commit.
 
 ## Hanging-task check
 

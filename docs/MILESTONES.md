@@ -498,7 +498,7 @@ Status: `[ ]`
 
 Code-level evidence:
 
-- `docs/M8-VERIFICATION.md` records 239 passing application tests, 86.5%
+- `docs/M8-VERIFICATION.md` records 247 passing application tests, 86.5%
   coverage, 29 passing browser tests across desktop and 390×844, clean static
   and frontend gates, React Doctor 100/100, extension policy checks, and clean
   Composer/npm vulnerability audits.
@@ -510,6 +510,10 @@ Code-level evidence:
   remains incomplete: production probes/restore, final legal and cost values,
   real retailer/microphone evidence, private beta, production-like replay, and
   tag/publish are still required.
+- `docs/release/M8-APPROVAL.md` defines the final signed evidence manifest and
+  `chef:release:approve` gate. The production topology is immutable policy and
+  the command cannot pass on waivers, stale or tampered evidence, missed beta
+  thresholds, the wrong release/origin, or an unprobed deployment.
 
 Release gates:
 
