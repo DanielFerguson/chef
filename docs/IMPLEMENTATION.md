@@ -4,7 +4,7 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestones 0 through 4.1 are complete. The Laravel 13 React/Inertia application
+Milestones 0 through 5 are complete. The Laravel 13 React/Inertia application
 in `web/` now provides authenticated family tenancy, durable arbitrary-span
 plans and conversations, versioned recipes, streamed Laravel AI SDK responses,
 authorised planning tools, direct calendar and list editing, plan revisions and
@@ -31,8 +31,28 @@ Chef-owned Laravel AI SDK adapter and queued, idempotent application actions.
 Plan readiness and shopping generation refuse unresolved cookable meals, while
 the same plan conversation continues through shopping preparation and list
 editing. The M4 list, revision, budget, catalogue, preference, and
-historical-order capabilities remain the structured foundation. M5 can now
-begin without weakening the recipe or shopping contracts.
+historical-order capabilities remain the structured foundation. M5 builds on
+the recipe and shopping contracts without weakening them.
+
+M5 adds the Cook and learn boundary. Today resolves the family timezone and
+shows the current day's planned meals, falling forward to the next planned meal
+when today is empty. Recipe-backed meals open a focused cooking surface with
+durable step progress, preparation notices, equipment, ingredients, ordered
+products and substitutions, storage guidance, session-persistent timers,
+screen-wake support, and an optional fullscreen mode. Non-recipe meals retain a
+direct outcome path without invented cooking instructions.
+
+`MealOutcome` records one durable result per planned meal: cooked, cooked with
+leftovers, skipped, postponed, replaced, or ate out. `MealFeedback` belongs to
+one participant and one completed cooked outcome; portion, effort, cost,
+leftovers, notes, and recipe adjustments remain attributed rather than becoming
+household consensus. Two consistent ratings for the same recipe may create an
+inspectable `PreferenceCandidate`. Candidates remain separate from preferences
+until a household member accepts them, dismissed candidates do not affect later
+recommendations, and accepting a candidate can create only an ordinary feedback
+preference. The constraint write path is unavailable to this workflow, so meal
+feedback can never infer an allergy or other safety rule. M6 retailer handoff is
+the next implementation milestone.
 
 ## Technical stack
 
@@ -203,6 +223,32 @@ There are no update or delete routes for historical order snapshots.
 
 Freeze a shopping-list revision before starting retailer automation. Record reconciled products and prices as immutable order snapshots rather than rewriting the M4 estimate.
 
+### Cooking, outcomes, and learning
+
+`MealOutcome` is the durable cooking-session and result boundary for one
+`PlannedMeal`. Starting a recipe-backed meal records the cooking-started plan
+milestone and current recipe step idempotently. Completing or directly resolving
+a meal records one of the supported outcome states plus only the context that
+state needs, such as a replacement title, postponed date, or leftover servings.
+An outcome with person feedback cannot later be changed into a non-cooked result
+because that would orphan the evidence.
+
+`MealFeedback` is unique per outcome and participating `Person`. Reusable domain
+actions validate rating dimensions even when invoked outside HTTP. Recipe
+feedback is accepted only for cooked or cooked-with-leftovers outcomes; skipped,
+postponed, replaced, and ate-out results do not accidentally teach Chef about the
+original recipe.
+
+`PreferenceCandidate` stores repeated same-recipe feedback as a reviewable
+inference with evidence identifiers, count, confidence, and pending, accepted,
+or dismissed state. Editing feedback withdraws a pending candidate when the
+repeated pattern no longer exists. Accepted candidates create or link an
+ordinary `Preference` with feedback provenance, while conflicting explicit
+preferences must be resolved directly. Recommendation explanations may cite
+pending candidates as unconfirmed patterns and accepted candidates as reviewed
+signals; dismissed candidates are excluded. No cooking or feedback action can
+write `Constraint` records.
+
 ### Conversations
 
 Chef owns `Conversation` and `Message`. A conversation normally belongs to a `MealPlan`, but onboarding may create both together.
@@ -364,6 +410,26 @@ proposals, preferences, and constraints. Person creation uses a unique
 message-and-name identity, while moves and date updates are naturally
 idempotent. Application lookups remain useful for fast replay, but uniqueness
 constraints are the concurrency backstop.
+
+One conversational request that adds several shopping extras is one domain
+mutation, not several independent tool writes. `AddPlanShoppingItems` validates
+the complete batch before writing, records all new rows in one transaction and
+one shopping-list revision, and derives per-item idempotency keys from the user
+message. Replaying the same turn returns the existing rows without duplicating
+items or revisions. A later retry also reconciles against existing normalised
+item names, so it adds only anything missing after a legacy or interrupted
+partial turn. Additions lock and merge onto the current list because they are
+commutative; destructive or replacement edits continue to require an expected
+revision.
+
+OpenAI models may otherwise emit several function calls from one response. Chef
+sets `parallel_tool_calls` to `false` for the OpenAI-backed mixed read/write
+agent as a defence in depth, while batch tools still preserve the user's full
+intent in a single call. Parallel execution is reserved for independently safe
+read operations, not shared-list mutations. If a provider or stream fails after
+a durable tool write, the conversation engine reconstructs a factual
+acknowledgement from revisions created after the user message began and marks
+the turn complete instead of showing a false failure.
 
 ## Voice boundary
 

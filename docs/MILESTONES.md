@@ -272,22 +272,43 @@ Shopping grouping follow-up evidence recorded 16 July 2026:
 - The complete Composer gate passes 156 backend tests and 855 assertions at 86.6% application coverage. All 21 browser journeys pass with 171 assertions, including grouped Shopping coverage at desktop and 390 × 844.
 - Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, npm audit, Composer audit, and the category migration rollback/reapply pass. React Doctor reports 100/100 with no findings.
 
+Shopping conversation resilience follow-up evidence recorded 17 July 2026:
+
+- A request containing several household extras now invokes one strict `AddPlanShoppingItems` tool and one authorised transactional action. The entire batch validates before writing and creates one shopping-list revision.
+- Each conversational row retains its source user message and a database-unique item idempotency key. Replaying the turn returns the original rows, concurrent retries are serialised by the list lock, and merge-safe additions apply to the latest revision without weakening optimistic concurrency for destructive edits.
+- The OpenAI-backed mixed read/write Chef agent disables parallel tool calls. If the provider fails after a durable mutation, Chef derives a factual acknowledgement from the new list revision and completes the message instead of reporting a false failure.
+- Regressions cover the reported two-item Scrub Daddy and paper-towel request, same-turn replay, a later retry after a legacy partial write, full-batch validation, concurrent-revision merging, cross-household rejection, and provider failure after a committed tool result. The browser happy path adds two extras in one conversation turn.
+- The final Composer and coverage gates pass 163 backend tests and 888 assertions at 87.1% application coverage. All 21 browser journeys pass with 172 assertions.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, npm audit, Composer audit, and the new migration rollback/reapply pass. The migration retained all 35 pre-existing shopping rows; reconciling the reported partial turn then added only the missing paper towels for 36 total rows, with no foreign-key violations.
+
 ## M5 — Cooking and feedback loop
 
-Status: `[ ]`
+Status: `[x]`
 
-- [ ] Build the Today screen and distraction-free cooking mode.
-- [ ] Display ingredients, equipment, preparation warnings, substitutions, and sequential steps.
-- [ ] Support timers or concurrent-task cues where they materially help.
-- [ ] Record cooked, skipped, postponed, replaced, leftovers, and ate-out outcomes.
-- [ ] Capture lightweight person-specific feedback.
-- [ ] Turn repeated feedback into inspectable preference candidates.
-- [ ] Prevent inferred preferences from becoming safety constraints.
+- [x] Build the Today screen and distraction-free cooking mode.
+- [x] Display ingredients, equipment, preparation warnings, substitutions, and sequential steps.
+- [x] Support timers or concurrent-task cues where they materially help.
+- [x] Record cooked, skipped, postponed, replaced, leftovers, and ate-out outcomes.
+- [x] Capture lightweight person-specific feedback.
+- [x] Turn repeated feedback into inspectable preference candidates.
+- [x] Prevent inferred preferences from becoming safety constraints.
 
 Exit evidence:
 
 - A cook can go from the Today screen to completing and rating a meal without reading the planning conversation.
 - The next recommendation can explain how prior feedback affected it.
+
+M5 acceptance evidence recorded 17 July 2026:
+
+- Today uses the family timezone, answers what is being cooked now, and falls forward to the next planned meal when today is empty. Recipe and non-recipe meals both expose one direct next action without requiring the planning conversation.
+- The focused cooking surface shows the exact planned `RecipeVersion`, large sequential steps, ingredients, equipment, preparation notices, storage guidance, and the latest ordered product or substitution. Fullscreen and screen-wake support remain optional browser enhancements with a complete typed fallback.
+- Starting cooking is idempotent and records durable current-step progress plus the cooking milestone. Recipe timers persist while moving between steps in the session, remain independently controllable, and use large arm's-length controls at 390 × 844.
+- One team-scoped `MealOutcome` records cooked, skipped, postponed, replaced, cooked-with-leftovers, or ate-out results with status-specific validation. One attributed `MealFeedback` per participant captures rating, portion, effort, cost, leftovers, notes, and a recipe adjustment.
+- Two consistent same-recipe ratings create an evidence-linked, confidence-labelled preference candidate. Editing the ratings withdraws a stale pending candidate; accepted candidates become ordinary feedback preferences, conflicting explicit preferences require direct resolution, and dismissed candidates do not affect later recommendation explanations.
+- Feedback is accepted only for a meal that was cooked and only from its recorded participants. The feedback and candidate actions have no constraint-writing capability, and regressions prove repeated ratings cannot create or alter allergies or other safety constraints.
+- The adversarial review fixed missing action-level validation, feedback attached to non-cooked outcomes, outcome changes that could orphan feedback, stale candidates after rating edits, conflicting preference acceptance, dismissed signals leaking into recommendations, and an older order line winning over the latest substitution.
+- The complete Composer gate passes 183 backend tests and 996 assertions at 86.3% application coverage. All 23 browser journeys pass with 192 assertions, including the complete Today-to-cooking-to-feedback flow and the 390 × 844 cooking surface.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, isolated SQLite fresh/rollback/reapply, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings.
 
 ## M6 — Woolworths and Coles computer-use handoff
 

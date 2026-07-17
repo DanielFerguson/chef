@@ -8,7 +8,7 @@ Chef is not intended to be another recipe catalogue with an AI chat box attached
 
 ## Status
 
-Milestones 0 through 4.1 are complete. The Laravel 13 web application under
+Milestones 0 through 5 are complete. The Laravel 13 web application under
 [`web/`](web/) now supports authenticated family tenancy, a durable
 conversational first plan, household people and attributed truth, versioned
 recipes, complete arbitrary-span plans, direct plan controls, and private
@@ -16,8 +16,11 @@ testing feedback. The M4/M4.1 shopping journey automatically turns selected
 cookable meals into durable recipe versions, combines their ingredients into a
 traceable list, and continues the same natural conversation for pantry,
 household-item, quantity, and budget changes. Progressive preparation and
-recovery states keep manual ingredient entry out of the normal path. M5 cooking
-and meal feedback is the next product milestone.
+recovery states keep manual ingredient entry out of the normal path. M5 adds a
+Today surface, focused step-by-step cooking with durable progress and timers,
+meal outcomes, person-specific feedback, and inspectable preference candidates
+that can never become safety rules. M6 retailer cart preparation is the next
+product milestone.
 
 The intended stack is:
 
