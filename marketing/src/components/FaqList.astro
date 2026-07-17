@@ -1,0 +1,109 @@
+---
+import { faqs } from '../data/site';
+---
+
+<section class="faq-section section-pad" id="faq" aria-labelledby="faq-title">
+  <div class="page-shell faq-layout">
+    <div class="faq-intro" data-reveal>
+      <p class="eyebrow">Before you start</p>
+      <h2 id="faq-title">A few practical questions.</h2>
+      <p>
+        The offer is deliberately simple. The important details are just as
+        clear.
+      </p>
+    </div>
+
+    <dl class="faq-list">
+      {
+        faqs.map((faq) => (
+          <div class="faq-item" data-reveal>
+            <dt>{faq.question}</dt>
+            <dd>{faq.answer}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+</section>
+
+<style>
+  .faq-layout {
+    display: grid;
+    gap: clamp(3rem, 8vw, 7.5rem);
+    grid-template-columns: minmax(18rem, 27.5rem) minmax(0, 46rem);
+  }
+
+  .faq-intro {
+    align-self: start;
+    position: sticky;
+    top: 8rem;
+  }
+
+  .faq-intro h2 {
+    font-size: clamp(2.45rem, 4vw, 3rem);
+    line-height: 1.08;
+    margin-top: 1rem;
+  }
+
+  .faq-intro > p:last-child {
+    color: var(--muted);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    margin-top: 1rem;
+    max-width: 24rem;
+  }
+
+  .faq-list {
+    border-top: 1px solid var(--border);
+    margin: 0;
+  }
+
+  .faq-item {
+    border-bottom: 1px solid var(--border);
+    padding: 1.375rem 0 1.5rem;
+  }
+
+  .faq-item dt {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .faq-item dd {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    margin: 0.45rem 0 0;
+    max-width: 44rem;
+  }
+
+  @media (max-width: 52rem) {
+    .faq-layout {
+      display: block;
+    }
+
+    .faq-intro {
+      position: static;
+    }
+
+    .faq-list {
+      margin-top: 2.25rem;
+    }
+
+    .faq-intro h2 {
+      font-size: 2rem;
+    }
+
+    .faq-intro > p:last-child {
+      display: none;
+    }
+
+    .faq-item dt {
+      font-size: 1.0625rem;
+    }
+
+    .faq-item dd {
+      font-size: 0.875rem;
+    }
+  }
+</style>

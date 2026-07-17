@@ -1,0 +1,16 @@
+{
+  "name": "Chef",
+  "short_name": "Chef",
+  "description": "A shared meal planner and shopping list for real households.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

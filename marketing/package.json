@@ -1,0 +1,27 @@
+{
+  "name": "chef-marketing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro check && astro build && node scripts/check-build.mjs",
+    "check": "astro check",
+    "preview": "astro preview",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.3",
+    "@fontsource/newsreader": "^5.2.10",
+    "@fontsource/source-sans-3": "^5.2.9",
+    "astro": "^7.0.9",
+    "motion": "^12.42.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "prettier": "^3.9.5",
+    "prettier-plugin-astro": "^0.14.1",
+    "typescript": "^5.9.3"
+  }
+}

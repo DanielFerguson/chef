@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Chef — Plan the week once</title>
+  <desc id="desc">Chef turns one household conversation into a shared meal plan and shopping list.</desc>
+  <rect width="1200" height="630" fill="#FFFFFF"/>
+  <rect x="742" y="58" width="400" height="514" rx="30" fill="#F7F7F6" stroke="#E4E4E1"/>
+  <g transform="translate(76 68)">
+    <rect width="54" height="54" rx="14" fill="#FFFFFF"/>
+    <path d="M14 12C7 17 7 37 14 42" fill="none" stroke="#6F806A" stroke-width="5" stroke-linecap="round"/>
+    <rect x="17" y="18" width="22" height="18" rx="6" fill="#C94F32"/>
+    <path d="M42 12C49 17 49 37 42 42" fill="none" stroke="#DCCFB9" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="145" y="106" fill="#24231F" font-family="Newsreader, Georgia, serif" font-size="38" font-weight="500">Chef</text>
+  <text x="76" y="223" fill="#6F806A" font-family="Source Sans 3, Arial, sans-serif" font-size="16" font-weight="600" letter-spacing="2">MEAL PLANNING FOR REAL HOUSEHOLDS</text>
+  <text x="76" y="303" fill="#24231F" font-family="Source Sans 3, Arial, sans-serif" font-size="62" font-weight="600" letter-spacing="-2">
+    <tspan x="76" dy="0">Plan the week once.</tspan>
+    <tspan x="76" dy="68">Stop deciding dinner</tspan>
+    <tspan x="76" dy="68">every night.</tspan>
+  </text>
+  <text x="76" y="532" fill="#6E6D68" font-family="Source Sans 3, Arial, sans-serif" font-size="24">One conversation. One shared plan. One trusted shop.</text>
+  <rect x="782" y="98" width="320" height="86" rx="18" fill="#24231F"/>
+  <text x="806" y="132" fill="#FFFFFF" font-family="Source Sans 3, Arial, sans-serif" font-size="16">
+    <tspan x="806" dy="0">Plan five dinners for four.</tspan>
+    <tspan x="806" dy="24">Tuesday is only two.</tspan>
+  </text>
+  <text x="782" y="230" fill="#6F806A" font-family="Source Sans 3, Arial, sans-serif" font-size="16" font-weight="600">5 DINNERS SHAPED FROM YOUR WEEK</text>
+  <g font-family="Source Sans 3, Arial, sans-serif">
+    <rect x="782" y="258" width="320" height="72" rx="12" fill="#FFFFFF" stroke="#E4E4E1"/>
+    <text x="802" y="286" fill="#6E6D68" font-size="13">MON 20</text>
+    <text x="802" y="312" fill="#24231F" font-size="17" font-weight="600">Spinach &amp; lemon chicken</text>
+    <rect x="782" y="342" width="320" height="72" rx="12" fill="#F4F0E8" stroke="#E4E4E1"/>
+    <text x="802" y="370" fill="#6E6D68" font-size="13">TUE 21</text>
+    <text x="802" y="396" fill="#24231F" font-size="17" font-weight="600">Tomato gnocchi · 2 people</text>
+    <rect x="782" y="426" width="320" height="72" rx="12" fill="#FFFFFF" stroke="#E4E4E1"/>
+    <text x="802" y="454" fill="#6E6D68" font-size="13">THU 23</text>
+    <text x="802" y="480" fill="#24231F" font-size="17" font-weight="600">Quick beef rice bowls</text>
+  </g>
+  <rect x="782" y="522" width="190" height="4" rx="2" fill="#C94F32"/>
+</svg>

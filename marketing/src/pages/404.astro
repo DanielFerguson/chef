@@ -1,0 +1,56 @@
+---
+import Brand from '../components/Brand.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Page not found — Chef"
+  description="The page you requested could not be found."
+  noindex
+>
+  <main class="not-found" id="main-content">
+    <Brand />
+    <p class="eyebrow">404 · Page not found</p>
+    <h1>This part of the week is still open.</h1>
+    <p>
+      The page may have moved, or the link may be waiting for a future Chef
+      page.
+    </p>
+    <a class="button" href="/">Return to the homepage</a>
+  </main>
+</BaseLayout>
+
+<style>
+  .not-found {
+    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin: 0 auto;
+    max-width: 46rem;
+    min-height: 100svh;
+    padding: clamp(2rem, 8vw, 6rem) 1.25rem;
+  }
+
+  .not-found .eyebrow {
+    margin-top: auto;
+  }
+
+  h1 {
+    font-family: var(--font-editorial);
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    line-height: 1;
+  }
+
+  .not-found > p:not(.eyebrow) {
+    color: var(--muted);
+    font-size: 1.125rem;
+    line-height: 1.6;
+    max-width: 36rem;
+  }
+
+  .not-found .button {
+    margin-bottom: auto;
+    width: auto;
+  }
+</style>

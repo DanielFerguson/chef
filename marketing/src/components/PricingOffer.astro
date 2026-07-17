@@ -1,0 +1,434 @@
+---
+const appUrl =
+  import.meta.env.PUBLIC_APP_URL ?? 'https://app.chef.example/start';
+
+const benefits = [
+  'Unlimited household members',
+  'Unlimited meal plans',
+  'Unlimited recipes',
+  'Unlimited shopping lists',
+  'Woolworths and Coles trolley preparation',
+  'Shared planning and editing',
+  'Household preferences and constraints',
+  'Cooking guidance and household feedback',
+  'Your plan and recipes across laptop and phone',
+  'Plan by typing or voice',
+];
+---
+
+<section
+  class="pricing-section section-pad section-surface"
+  id="pricing"
+  aria-labelledby="pricing-title"
+>
+  <div class="page-shell">
+    <header class="pricing-heading" data-reveal>
+      <div>
+        <p class="eyebrow">Simple household pricing</p>
+        <h2 id="pricing-title">One household. Everything included.</h2>
+      </div>
+      <p>
+        No per-person seats. No separate planning, shopping, or cooking tiers.
+      </p>
+    </header>
+
+    <div class="pricing-layout" data-pricing>
+      <article class="price-card" data-reveal>
+        <header>
+          <h3>Chef Household</h3>
+          <span>Everything included</span>
+        </header>
+
+        <fieldset class="billing-toggle">
+          <legend class="sr-only">Choose a billing period</legend>
+          <label>
+            <input type="radio" name="billing" value="monthly" />
+            <span class="billing-option">
+              <strong>Monthly</strong>
+              <small>$9 / month</small>
+            </span>
+          </label>
+          <label>
+            <input type="radio" name="billing" value="annual" checked />
+            <span class="billing-option">
+              <span class="option-heading"
+                ><strong>Annual</strong><em>Save $19</em></span
+              >
+              <small>$89 / year</small>
+            </span>
+          </label>
+        </fieldset>
+
+        <div class="price-value" aria-live="polite">
+          <div>
+            <strong data-price>$89</strong><span data-period>AUD / year</span>
+          </div>
+          <p data-equivalent>Equivalent to $7.42/month · billed annually</p>
+        </div>
+
+        <ul class="mobile-benefits" aria-label="Included with Chef Household">
+          <li>Unlimited household members</li>
+          <li>Unlimited meal plans</li>
+          <li>Unlimited recipes and shopping lists</li>
+          <li>Shared planning, preferences, and feedback</li>
+        </ul>
+
+        <div class="price-action">
+          <a class="button" href={appUrl}>Start your first plan</a>
+          <small>14 days free · No card required</small>
+        </div>
+      </article>
+
+      <div class="offer-details" data-reveal>
+        <header>
+          <p class="eyebrow">Your whole week, in one subscription</p>
+          <h3>Unlimited planning for everyone in your household.</h3>
+        </header>
+        <ul>
+          {benefits.map((benefit) => <li>{benefit}</li>)}
+        </ul>
+        <p class="control-note">
+          Chef can prepare the trolley in your Woolworths or Coles account. Your
+          household keeps control of retailer review, delivery details,
+          checkout, and payment.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const pricingBlocks =
+    document.querySelectorAll<HTMLElement>('[data-pricing]');
+
+  for (const pricing of pricingBlocks) {
+    const inputs = pricing.querySelectorAll<HTMLInputElement>(
+      'input[name="billing"]',
+    );
+    const price = pricing.querySelector<HTMLElement>('[data-price]');
+    const period = pricing.querySelector<HTMLElement>('[data-period]');
+    const equivalent = pricing.querySelector<HTMLElement>('[data-equivalent]');
+
+    const updatePrice = (value: string) => {
+      if (!price || !period || !equivalent) return;
+
+      const isAnnual = value === 'annual';
+      price.textContent = isAnnual ? '$89' : '$9';
+      period.textContent = isAnnual ? 'AUD / year' : 'AUD / month';
+      equivalent.textContent = isAnnual
+        ? 'Equivalent to $7.42/month · billed annually'
+        : 'Billed monthly · cancel any time';
+    };
+
+    for (const input of inputs) {
+      input.addEventListener('change', () => updatePrice(input.value));
+    }
+  }
+</script>
+
+<style>
+  .pricing-heading {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .pricing-heading h2 {
+    font-size: clamp(2.8rem, 4vw, 3.2rem);
+    line-height: 1.05;
+    margin-top: 1.125rem;
+  }
+
+  .pricing-heading > p {
+    color: var(--muted);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    max-width: 24rem;
+  }
+
+  .pricing-layout {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: minmax(23rem, 26.875rem) minmax(0, 1fr);
+    margin-top: 3.375rem;
+  }
+
+  .price-card {
+    background: var(--canvas);
+    border: 1px solid #dddcd6;
+    border-radius: 1.125rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.125rem;
+    min-height: 26.25rem;
+    padding: 1.875rem;
+  }
+
+  .price-card > header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .price-card h3 {
+    font-size: 1.0625rem;
+    font-weight: 600;
+  }
+
+  .price-card > header span {
+    background: #eff1ec;
+    border-radius: 999px;
+    color: #657663;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 0.3rem 0.6rem;
+    text-transform: uppercase;
+  }
+
+  .billing-toggle {
+    background: #f1f0eb;
+    border: 0;
+    border-radius: 0.75rem;
+    display: grid;
+    gap: 0.25rem;
+    grid-template-columns: 1fr 1fr;
+    margin: 0;
+    padding: 0.25rem;
+  }
+
+  .billing-toggle label {
+    cursor: pointer;
+    position: relative;
+  }
+
+  .billing-toggle input {
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    width: 1px;
+  }
+
+  .billing-option {
+    border: 1px solid transparent;
+    border-radius: 0.6rem;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-height: 3.75rem;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .billing-toggle input:checked + .billing-option {
+    background: var(--canvas);
+    border-color: #d8d6ce;
+    box-shadow: 0 1px 3px rgb(36 35 31 / 8%);
+    color: var(--ink);
+  }
+
+  .billing-toggle input:focus-visible + .billing-option {
+    outline: 3px solid color-mix(in srgb, var(--paprika) 34%, transparent);
+    outline-offset: 2px;
+  }
+
+  .billing-option strong,
+  .billing-option small {
+    font-size: 0.8rem;
+    line-height: 1.25;
+  }
+
+  .billing-option small {
+    font-size: 0.875rem;
+  }
+
+  .option-heading {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .option-heading em {
+    background: #e8eee5;
+    border-radius: 999px;
+    color: #657663;
+    font-size: 0.57rem;
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.4rem;
+    text-transform: uppercase;
+  }
+
+  .price-value {
+    flex: 1;
+  }
+
+  .price-value > div {
+    align-items: end;
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .price-value strong {
+    font-size: 3.25rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    letter-spacing: -0.05em;
+    line-height: 1;
+  }
+
+  .price-value span {
+    color: var(--muted);
+    padding-bottom: 0.35rem;
+  }
+
+  .price-value p {
+    color: var(--sage-strong);
+    font-size: 0.8125rem;
+    margin-top: 0.25rem;
+  }
+
+  .price-action {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    text-align: center;
+  }
+
+  .mobile-benefits {
+    display: none;
+  }
+
+  .price-action small {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .offer-details {
+    border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 2.125rem 2.375rem;
+  }
+
+  .offer-details h3 {
+    font-size: 1.875rem;
+    font-weight: 500;
+    line-height: 1.16;
+    margin-top: 0.8rem;
+  }
+
+  .offer-details ul {
+    column-gap: 2.75rem;
+    columns: 2;
+    list-style: none;
+    margin: 2rem 0;
+    padding: 0;
+  }
+
+  .offer-details li {
+    break-inside: avoid;
+    font-size: 1rem;
+    line-height: 1.45;
+    margin-bottom: 1rem;
+    padding-left: 1.3rem;
+    position: relative;
+  }
+
+  .offer-details li::before {
+    color: var(--sage);
+    content: '✓';
+    left: 0;
+    position: absolute;
+  }
+
+  .control-note {
+    background: var(--canvas);
+    border-left: 3px solid var(--sage);
+    color: var(--muted);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    padding: 1rem 1.125rem;
+  }
+
+  @media (max-width: 64rem) {
+    .pricing-layout {
+      grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+    }
+
+    .offer-details ul {
+      columns: 1;
+    }
+  }
+
+  @media (max-width: 52rem) {
+    .pricing-heading {
+      align-items: start;
+      display: block;
+    }
+
+    .pricing-heading h2 {
+      font-size: 2.1rem;
+    }
+
+    .pricing-heading > p {
+      font-size: 0.9375rem;
+      margin-top: 1rem;
+    }
+
+    .pricing-layout {
+      display: block;
+      margin-top: 2rem;
+    }
+
+    .price-card {
+      min-height: 0;
+      padding: 1.25rem;
+    }
+
+    .price-value {
+      flex: none;
+    }
+
+    .mobile-benefits {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      list-style: none;
+      margin: 0.25rem 0;
+      padding: 0;
+    }
+
+    .mobile-benefits li {
+      font-size: 0.9375rem;
+      line-height: 1.45;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+
+    .mobile-benefits li::before {
+      color: var(--sage);
+      content: '✓';
+      left: 0;
+      position: absolute;
+    }
+
+    .offer-details {
+      border-bottom: 0;
+      margin-top: 1.5rem;
+      padding: 1rem 0 0;
+    }
+
+    .offer-details header,
+    .offer-details ul {
+      display: none;
+    }
+
+    .price-card > header span {
+      font-size: 0.53rem;
+    }
+  }
+</style>

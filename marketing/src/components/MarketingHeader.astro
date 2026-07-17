@@ -1,0 +1,168 @@
+---
+import Brand from './Brand.astro';
+import { primaryNavigation } from '../data/site';
+
+const appUrl =
+  import.meta.env.PUBLIC_APP_URL ?? 'https://app.chef.example/start';
+const loginUrl =
+  import.meta.env.PUBLIC_LOGIN_URL ?? 'https://app.chef.example/login';
+---
+
+<header class="site-header">
+  <div class="header-inner page-shell">
+    <Brand />
+
+    <nav class="desktop-nav" aria-label="Primary navigation">
+      {primaryNavigation.map((item) => <a href={item.href}>{item.label}</a>)}
+    </nav>
+
+    <div class="desktop-actions">
+      <a class="login-link" href={loginUrl}>Log in</a>
+      <a class="button button--small" href={appUrl}>Start your first plan</a>
+    </div>
+
+    <details class="mobile-menu">
+      <summary aria-label="Open navigation">
+        <span></span><span></span>
+      </summary>
+      <nav aria-label="Mobile navigation">
+        {primaryNavigation.map((item) => <a href={item.href}>{item.label}</a>)}
+        <a href={loginUrl}>Log in</a>
+        <a class="button" href={appUrl}>Start your first plan</a>
+      </nav>
+    </details>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    background: color-mix(in srgb, var(--canvas) 92%, transparent);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+
+  .header-inner {
+    align-items: center;
+    display: flex;
+    height: 5.5rem;
+    justify-content: space-between;
+  }
+
+  .desktop-nav,
+  .desktop-actions {
+    align-items: center;
+    display: flex;
+  }
+
+  .desktop-nav {
+    gap: 2.125rem;
+  }
+
+  .desktop-actions {
+    gap: 1.25rem;
+  }
+
+  .desktop-nav a,
+  .login-link {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    text-decoration: none;
+    transition: color 160ms ease;
+  }
+
+  .desktop-nav a:hover,
+  .desktop-nav a:focus-visible,
+  .login-link:hover,
+  .login-link:focus-visible {
+    color: var(--ink);
+  }
+
+  .login-link {
+    color: var(--ink);
+  }
+
+  .mobile-menu {
+    display: none;
+    position: relative;
+  }
+
+  .mobile-menu summary {
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 0.625rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    height: 2.375rem;
+    justify-content: center;
+    list-style: none;
+    width: 2.375rem;
+  }
+
+  .mobile-menu summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobile-menu summary span {
+    background: var(--ink);
+    display: block;
+    height: 1px;
+    transition: transform 160ms ease;
+    width: 0.95rem;
+  }
+
+  .mobile-menu[open] summary span:first-child {
+    transform: translateY(3px) rotate(45deg);
+  }
+
+  .mobile-menu[open] summary span:last-child {
+    transform: translateY(-3px) rotate(-45deg);
+  }
+
+  .mobile-menu nav {
+    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 18px 50px rgb(36 35 31 / 12%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.75rem;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.75rem);
+    width: min(19rem, calc(100vw - 2.5rem));
+  }
+
+  .mobile-menu nav > a:not(.button) {
+    border-radius: 0.5rem;
+    color: var(--ink);
+    padding: 0.75rem;
+    text-decoration: none;
+  }
+
+  .mobile-menu nav > a:not(.button):hover {
+    background: var(--surface);
+  }
+
+  @media (max-width: 52rem) {
+    .header-inner {
+      height: 4.25rem;
+    }
+
+    .desktop-nav,
+    .desktop-actions {
+      display: none;
+    }
+
+    .mobile-menu {
+      display: block;
+    }
+  }
+</style>

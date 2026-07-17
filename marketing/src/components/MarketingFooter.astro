@@ -1,0 +1,248 @@
+---
+import Brand from './Brand.astro';
+
+const appUrl =
+  import.meta.env.PUBLIC_APP_URL ?? 'https://app.chef.example/start';
+const loginUrl =
+  import.meta.env.PUBLIC_LOGIN_URL ?? 'https://app.chef.example/login';
+
+const groups = [
+  {
+    title: 'Product',
+    links: [
+      ['How it works', '/how-it-works'],
+      ['Meal planning', '/meal-planning'],
+      ['Shopping', '/shopping'],
+      ['Pricing', '/pricing'],
+    ],
+  },
+  {
+    title: 'Trust',
+    links: [
+      ['Household memory', '/household-memory'],
+      ['Security & privacy', '/security-and-privacy'],
+      ['Human checkout', '/human-checkout'],
+      ['Accessibility', '/accessibility'],
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      ['About', '/about'],
+      ['Billing & cancellation', '/billing'],
+      ['Help & support', '/help'],
+      ['Log in', loginUrl],
+    ],
+  },
+] as const;
+---
+
+<footer class="site-footer">
+  <div class="page-shell footer-main">
+    <div class="footer-promise">
+      <Brand inverted />
+      <div>
+        <p class="footer-heading">A calmer week starts with one shared plan.</p>
+        <p class="footer-copy">
+          Plan meals, prepare the grocery trolley, and keep every household
+          decision ready on the device in front of you.
+        </p>
+      </div>
+      <a class="footer-cta" href={appUrl}
+        >Start your first plan <span aria-hidden="true">→</span></a
+      >
+    </div>
+
+    <nav class="footer-navigation" aria-label="Footer navigation">
+      {
+        groups.map((group) => (
+          <div>
+            <h2>{group.title}</h2>
+            <ul>
+              {group.links.map(([label, href]) => (
+                <li>
+                  <a href={href}>{label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </nav>
+  </div>
+
+  <div class="page-shell footer-bottom">
+    <p>© 2026 Chef · Made for real households in Australia.</p>
+    <nav aria-label="Legal">
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/cookies">Cookies</a>
+    </nav>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    background: var(--ink);
+    color: #fff;
+    padding: 4rem 0 2rem;
+  }
+
+  .footer-main {
+    align-items: start;
+    display: grid;
+    gap: 6rem;
+    grid-template-columns: minmax(20rem, 29.5rem) minmax(30rem, 35rem);
+    justify-content: space-between;
+  }
+
+  .footer-promise {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .footer-promise > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .footer-heading {
+    font-family: var(--font-editorial);
+    font-size: 1.875rem;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+    max-width: 25rem;
+  }
+
+  .footer-copy {
+    color: #b9b8b2;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    max-width: 27.5rem;
+  }
+
+  .footer-cta {
+    color: #f2a58f;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    text-decoration: none;
+    width: fit-content;
+  }
+
+  .footer-cta span {
+    display: inline-block;
+    margin-left: 0.35rem;
+    transition: transform 160ms ease;
+  }
+
+  .footer-cta:hover span {
+    transform: translateX(0.25rem);
+  }
+
+  .footer-navigation {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: 1fr 1.2fr 1fr;
+  }
+
+  .footer-navigation h2 {
+    color: #8f9e8b;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .footer-navigation ul {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    list-style: none;
+    margin: 0.875rem 0 0;
+    padding: 0;
+  }
+
+  .footer-navigation a,
+  .footer-bottom a {
+    color: #d5d4cf;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    text-decoration: none;
+  }
+
+  .footer-navigation a:hover,
+  .footer-navigation a:focus-visible,
+  .footer-bottom a:hover,
+  .footer-bottom a:focus-visible {
+    color: #fff;
+  }
+
+  .footer-bottom {
+    align-items: center;
+    border-top: 1px solid #45443f;
+    color: #92918c;
+    display: flex;
+    font-size: 0.8125rem;
+    justify-content: space-between;
+    margin-top: 2.75rem;
+    padding-top: 1.5rem;
+  }
+
+  .footer-bottom nav {
+    display: flex;
+    gap: 1.75rem;
+  }
+
+  .footer-bottom a {
+    color: #b9b8b2;
+    font-size: 0.8125rem;
+  }
+
+  @media (max-width: 64rem) {
+    .footer-main {
+      gap: 4rem;
+      grid-template-columns: minmax(18rem, 24rem) minmax(27rem, 1fr);
+    }
+  }
+
+  @media (max-width: 52rem) {
+    .site-footer {
+      padding-top: 2.75rem;
+    }
+
+    .footer-main {
+      display: block;
+    }
+
+    .footer-heading {
+      font-size: 1.7rem;
+    }
+
+    .footer-navigation {
+      border-top: 1px solid #45443f;
+      gap: 2.625rem;
+      grid-template-columns: 1fr 1.1fr;
+      margin-top: 1.875rem;
+      padding-top: 1.875rem;
+    }
+
+    .footer-navigation > div:nth-child(2) {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+    }
+
+    .footer-bottom {
+      align-items: start;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .footer-bottom nav {
+      flex-wrap: wrap;
+      gap: 0.75rem 1.35rem;
+    }
+  }
+</style>
