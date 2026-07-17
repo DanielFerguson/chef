@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Extension\AutomationStepControlController;
 use App\Http\Controllers\Extension\AutomationStepResultController;
 use App\Http\Controllers\Extension\AutomationTabController;
 use App\Http\Controllers\Extension\AwaitingAutomationRunController;
@@ -14,6 +15,7 @@ Route::prefix('extension')->group(function () {
         Route::get('runs/awaiting', AwaitingAutomationRunController::class);
         Route::post('runs/{run}/attach', AutomationTabController::class);
         Route::get('steps/next', NextAutomationStepController::class);
+        Route::get('steps/{step}/control', AutomationStepControlController::class);
         Route::post('steps/{step}/result', AutomationStepResultController::class);
     });
 });

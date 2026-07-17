@@ -486,6 +486,11 @@ before taking a screenshot, checks the origin after every action, blocks direct
 checkout/account/payment controls, and stops the remaining batch as soon as a
 takeover URL appears. A missing extension result is treated as uncertain after
 five minutes and handed back for manual review rather than being replayed.
+While a step is executing, the extension checks its server-authoritative control
+state before every action and at least every 500 ms during waits. Pause and
+cancel invalidate the executing step in the same locked mutation, so a rapid
+resume can only request a fresh model continuation and never restart the stale
+batch. Overlapping alarm and manual polls are serialized inside the extension.
 Resuming after takeover starts a fresh model observation from the re-selected
 retailer tab instead of trusting a stale screenshot or pending action.
 

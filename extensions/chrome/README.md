@@ -34,6 +34,9 @@ review.
   selected retailer tab, so an unrelated tab is never captured.
 - Chef expires retained screenshots and stalled execution leases. The household
   can pause, cancel, revoke the connection, or take manual control at any time.
+- The extension checks for pause or cancellation between every action and every
+  500 ms during a wait. It serializes overlapping polls so one selected tab never
+  receives two concurrent Chef batches.
 
 Run the extension checks with:
 

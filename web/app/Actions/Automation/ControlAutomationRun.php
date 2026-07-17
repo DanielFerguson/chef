@@ -45,7 +45,7 @@ class ControlAutomationRun
             match ($control) {
                 'pause' => $this->pause($run),
                 'resume' => $dispatch = $this->resume($run),
-                'cancel' => $run->update(['status' => AutomationRunStatus::Cancelled, 'finished_at' => now(), 'pause_reason' => 'Cancelled by the household.']),
+                'cancel' => $this->cancel($run),
                 'takeover' => $this->takeover($run),
                 'complete' => $this->complete($run),
             };
@@ -68,7 +68,26 @@ class ControlAutomationRun
             throw ValidationException::withMessages(['automation_run' => 'This run cannot be paused in its current state.']);
         }
 
+        $this->failExecutingSteps($run, 'The household paused this run before the browser step completed.');
         $run->update(['status' => AutomationRunStatus::Paused, 'pause_reason' => 'Paused by the household.']);
+    }
+
+    private function cancel(AutomationRun $run): void
+    {
+        $run->approvals()
+            ->where('status', AutomationApprovalStatus::Pending)
+            ->update(['status' => AutomationApprovalStatus::Expired]);
+        $run->steps()
+            ->whereIn('status', [AutomationStepStatus::Ready, AutomationStepStatus::AwaitingApproval, AutomationStepStatus::Executing])
+            ->update([
+                'status' => AutomationStepStatus::Failed,
+                'error_message' => 'The household cancelled this run before the browser step completed.',
+            ]);
+        $run->update([
+            'status' => AutomationRunStatus::Cancelled,
+            'finished_at' => now(),
+            'pause_reason' => 'Cancelled by the household.',
+        ]);
     }
 
     private function resume(AutomationRun $run): bool
@@ -138,6 +157,16 @@ class ControlAutomationRun
             'takeover_at' => now(),
             'pause_reason' => 'The household took manual control of the selected retailer tab.',
         ]);
+    }
+
+    private function failExecutingSteps(AutomationRun $run, string $message): void
+    {
+        $run->steps()
+            ->where('status', AutomationStepStatus::Executing)
+            ->update([
+                'status' => AutomationStepStatus::Failed,
+                'error_message' => $message,
+            ]);
     }
 
     private function complete(AutomationRun $run): void

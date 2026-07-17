@@ -1,6 +1,7 @@
 importScripts('policy.js');
 
 const POLL_ALARM = 'chef-automation-poll';
+let pollInProgress = false;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(POLL_ALARM, { periodInMinutes: 0.5 });
@@ -52,6 +53,19 @@ async function api(path, options = {}) {
 }
 
 async function poll() {
+  if (pollInProgress) return;
+
+  pollInProgress = true;
+
+  try {
+    await pollOnce();
+  } finally {
+    pollInProgress = false;
+    await setIndicator(false).catch(() => {});
+  }
+}
+
+async function pollOnce() {
   const config = await settings();
   if (!config.apiBase || !config.connectionToken || !config.activeTabId) return;
 
@@ -62,8 +76,9 @@ async function poll() {
     return;
   }
 
+  // Capture before claiming work so a visibility race cannot strand a server step.
+  // The image stays local unless a step is actually returned below.
   const beforeScreenshot = await captureSelectedTab(selectedTabId);
-
   const payload = await api('/api/extension/steps/next');
   if (!payload.step) {
     await setIndicator(false);
@@ -79,7 +94,21 @@ async function poll() {
     await setIndicator(true);
 
     for (const action of step.actions) {
-      await executeAction(selectedTabId, action);
+      if (!await stepMayContinue(step.id)) {
+        await setIndicator(false);
+        return;
+      }
+
+      const completed = await executeAction(
+        selectedTabId,
+        action,
+        () => stepMayContinue(step.id),
+      );
+      if (!completed) {
+        await setIndicator(false);
+        return;
+      }
+
       result.executed += 1;
 
       const afterAction = await chrome.tabs.get(selectedTabId);
@@ -96,10 +125,12 @@ async function poll() {
     result = { ok: false, executed: result.executed, error: String(error.message || error) };
   }
 
-  const currentTab = await chrome.tabs.get(selectedTabId);
+  let currentUrl = tab.url;
   let screenshot = beforeScreenshot;
 
   try {
+    const currentTab = await chrome.tabs.get(selectedTabId);
+    currentUrl = currentTab.url;
     screenshot = await captureSelectedTab(selectedTabId);
   } catch (error) {
     result = {
@@ -109,15 +140,24 @@ async function poll() {
     };
   }
 
-  await api(`/api/extension/steps/${step.id}/result`, {
-    method: 'POST',
-    body: JSON.stringify({
-      current_url: currentTab.url,
-      screenshot,
-      result,
-    }),
-  });
-  await setIndicator(false);
+  try {
+    await api(`/api/extension/steps/${step.id}/result`, {
+      method: 'POST',
+      body: JSON.stringify({
+        current_url: currentUrl,
+        screenshot,
+        result,
+      }),
+    });
+  } finally {
+    await setIndicator(false);
+  }
+}
+
+async function stepMayContinue(stepId) {
+  const state = await api(`/api/extension/steps/${stepId}/control`);
+
+  return state.continue === true;
 }
 
 async function captureSelectedTab(tabId) {
@@ -131,13 +171,22 @@ async function captureSelectedTab(tabId) {
   return chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
 }
 
-async function executeAction(tabId, action) {
+async function executeAction(tabId, action, mayContinue) {
   if (action.type === 'wait') {
-    await new Promise((resolve) => setTimeout(resolve, Math.min(Number(action.duration_ms || 1000), 10000)));
-    return;
+    let remaining = Math.min(Number(action.duration_ms || 1000), 10000);
+
+    while (remaining > 0) {
+      const duration = Math.min(remaining, 500);
+      await new Promise((resolve) => setTimeout(resolve, duration));
+      remaining -= duration;
+
+      if (!await mayContinue()) return false;
+    }
+
+    return true;
   }
 
-  if (action.type === 'screenshot') return;
+  if (action.type === 'screenshot') return true;
 
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
@@ -147,6 +196,8 @@ async function executeAction(tabId, action) {
   });
 
   if (!result?.ok) throw new Error(result?.error || 'The page rejected the action.');
+
+  return true;
 }
 
 function runPageAction(action) {

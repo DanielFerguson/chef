@@ -357,10 +357,14 @@ M6 implementation evidence recorded 17 July 2026:
   on racing submissions, ineffective computer-use retries, lost extension
   results that could hang forever, incomplete broadcast payloads, React-controlled
   input updates, continued action batches after boundary navigation, and a Coles
-  label that combined safe trolley review with the word “checkout”.
-- Twenty-three focused M6 feature scenarios pass with 106 assertions. The full
-  Composer and coverage gates pass 206 backend tests with 1,102 assertions at
-  84.8% application coverage. The complete
+  label that combined safe trolley review with the word “checkout”. A final
+  control-path pass also made pause and cancellation invalidate the active step,
+  added extension control checks between every action and every 500 ms of a
+  wait, serialized overlapping polls, and preserved a five-minute watchdog as
+  the last-resort recovery path.
+- Twenty-four focused M6 feature scenarios pass with 116 assertions. The full
+  Composer and coverage gates pass 207 backend tests with 1,112 assertions at
+  84.9% application coverage. The complete
   browser suite passes 25 journeys with 209 assertions, including desktop run
   controls and explicit approval/reconciliation at 390 × 844. Extension policy
   checks pass four scenarios.
@@ -370,10 +374,11 @@ M6 implementation evidence recorded 17 July 2026:
   origins. Both expose the expected product search, retailer product, cart or
   trolley, account, address, and delivery controls. Search reached current 2 L
   full-cream-milk products at both retailers without transmitting credentials.
-  The anonymous sessions did not retain an add-to-cart mutation without shopping
-  setup, so the final signed-in, unpacked-extension cart run remains the one open
-  M6 exit check. Chef will not store or request the retailer credentials for that
-  check.
+  Anonymous sessions did not retain an add-to-cart mutation without shopping
+  setup, and a follow-up check of the existing Chrome profile found Woolworths
+  signed out. The final signed-in, unpacked-extension cart run therefore remains
+  the one open M6 exit check. Chef will not store or request the retailer
+  credentials for that check.
 
 ## M7 — Native voice experience
 

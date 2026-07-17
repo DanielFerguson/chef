@@ -365,6 +365,49 @@ it('supports pause, safe resume, takeover, completion, cancellation, and expiry'
     expect($result['runs'])->toBe(1)->and($expired->refresh()->status)->toBe(AutomationRunStatus::Expired);
 });
 
+it('interrupts an executing extension step when the household pauses or cancels', function () {
+    Queue::fake();
+    $workspace = m6Workspace();
+    $claimed = m6Connection($workspace);
+    $run = m6Run($workspace, $claimed['connection']);
+    $run->update(['status' => AutomationRunStatus::Executing, 'current_tab_id' => '42']);
+    $step = $run->steps()->create([
+        'team_id' => $run->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::Executing,
+        'actions' => [['type' => 'wait', 'duration_ms' => 10_000]],
+    ]);
+
+    $this->withHeader('X-Chef-Connection-Token', $claimed['token'])
+        ->getJson("/api/extension/steps/{$step->id}/control")
+        ->assertOk()
+        ->assertJsonPath('continue', true);
+
+    app(ControlAutomationRun::class)->handle($run, $workspace['user'], 'pause');
+
+    $this->withHeader('X-Chef-Connection-Token', $claimed['token'])
+        ->getJson("/api/extension/steps/{$step->id}/control")
+        ->assertOk()
+        ->assertJsonPath('continue', false)
+        ->assertJsonPath('run_status', AutomationRunStatus::Paused->value)
+        ->assertJsonPath('step_status', AutomationStepStatus::Failed->value);
+
+    app(ControlAutomationRun::class)->handle($run->refresh(), $workspace['user'], 'resume');
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Queued);
+
+    $run->update(['status' => AutomationRunStatus::Executing]);
+    $secondStep = $run->steps()->create([
+        'team_id' => $run->team_id,
+        'sequence' => 1,
+        'status' => AutomationStepStatus::Executing,
+        'actions' => [['type' => 'click', 'x' => 1, 'y' => 1]],
+    ]);
+    app(ControlAutomationRun::class)->handle($run->refresh(), $workspace['user'], 'cancel');
+
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Cancelled)
+        ->and($secondStep->refresh()->status)->toBe(AutomationStepStatus::Failed);
+});
+
 it('requires review for budget overruns and disallowed substitutions', function () {
     $workspace = m6Workspace(['Milk']);
     Budget::query()->create([
@@ -609,7 +652,16 @@ it('rejects foreign extension tokens even when run and step identifiers are know
     $workspace = m6Workspace();
     $claimed = m6Connection($workspace);
     $run = m6Run($workspace, $claimed['connection']);
+    $step = $run->steps()->create([
+        'team_id' => $run->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::Executing,
+    ]);
     $foreign = m6Connection(m6Workspace(['Bread']));
+
+    $this->withHeader('X-Chef-Connection-Token', $foreign['token'])
+        ->getJson("/api/extension/steps/{$step->id}/control")
+        ->assertForbidden();
 
     $this->withHeader('X-Chef-Connection-Token', $foreign['token'])
         ->postJson("/api/extension/runs/{$run->uuid}/attach", [
