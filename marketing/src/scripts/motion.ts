@@ -25,19 +25,6 @@ if (!prefersReducedMotion) {
     { margin: '0px 0px -8% 0px' },
   );
 
-  const planRows = document.querySelectorAll('[data-plan-row]');
-  if (planRows.length) {
-    animate(
-      planRows,
-      { opacity: [0.35, 1], transform: ['translateX(10px)', 'translateX(0)'] },
-      {
-        delay: stagger(0.07, { startDelay: 0.18 }),
-        duration: 0.45,
-        ease: [0.22, 1, 0.36, 1],
-      },
-    );
-  }
-
   const connectors = document.querySelectorAll('[data-connector]');
   if (connectors.length) {
     animate(
