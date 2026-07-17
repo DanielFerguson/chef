@@ -3,7 +3,12 @@
 use App\Http\Controllers\ConstraintController;
 use App\Http\Controllers\ConversationFeedbackController;
 use App\Http\Controllers\ConversationMessageStreamController;
+use App\Http\Controllers\CookingController;
+use App\Http\Controllers\CookingProgressController;
+use App\Http\Controllers\CookingStartController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MealFeedbackController;
+use App\Http\Controllers\MealOutcomeController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\MealPlanMilestoneController;
 use App\Http\Controllers\MealPlanRecipePreparationController;
@@ -15,6 +20,7 @@ use App\Http\Controllers\MessageFeedbackController;
 use App\Http\Controllers\OrderSnapshotController;
 use App\Http\Controllers\PlannedMealController;
 use App\Http\Controllers\PlannedMealMoveController;
+use App\Http\Controllers\PreferenceCandidateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\ProductMatchController;
 use App\Http\Controllers\RecipeController;
@@ -34,6 +40,12 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('planned-meals/{plannedMeal}/cook', [CookingController::class, 'show'])->name('planned-meals.cook.show');
+    Route::post('planned-meals/{plannedMeal}/cook', CookingStartController::class)->name('planned-meals.cook.start');
+    Route::put('meal-outcomes/{mealOutcome}/progress', CookingProgressController::class)->name('meal-outcomes.progress.update');
+    Route::put('planned-meals/{plannedMeal}/outcome', [MealOutcomeController::class, 'update'])->name('planned-meals.outcome.update');
+    Route::put('meal-outcomes/{mealOutcome}/people/{person}/feedback', [MealFeedbackController::class, 'update'])->name('meal-outcomes.feedback.update');
+    Route::put('preference-candidates/{preferenceCandidate}', [PreferenceCandidateController::class, 'update'])->name('preference-candidates.update');
     Route::post('meal-plans', [MealPlanController::class, 'store'])->name('meal-plans.store');
     Route::get('meal-plans/{mealPlan}', [MealPlanController::class, 'show'])->name('meal-plans.show');
     Route::put('meal-plans/{mealPlan}', [MealPlanController::class, 'update'])->name('meal-plans.update');

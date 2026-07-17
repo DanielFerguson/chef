@@ -96,6 +96,12 @@ class MealPlan extends Model
         return $this->hasOne(Budget::class);
     }
 
+    /** @return HasMany<MealOutcome, $this> */
+    public function outcomes(): HasMany
+    {
+        return $this->hasMany(MealOutcome::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

@@ -2,8 +2,10 @@
 
 namespace App\Actions\Planning;
 
+use App\Enums\PreferenceCandidateStatus;
 use App\Models\MealPlan;
 use App\Models\PlannedMeal;
+use App\Models\PreferenceCandidate;
 use App\Models\RecipeVersion;
 
 class BuildRecommendationExplanation
@@ -28,12 +30,37 @@ class BuildRecommendationExplanation
             ->latest('id')
             ->first();
         $totalMinutes = ($recipeVersion->prep_minutes ?? 0) + ($recipeVersion->cook_minutes ?? 0);
+        $candidates = PreferenceCandidate::query()
+            ->where('team_id', $mealPlan->team_id)
+            ->where('recipe_id', $recipeVersion->recipe_id)
+            ->whereIn('status', [PreferenceCandidateStatus::Pending, PreferenceCandidateStatus::Accepted])
+            ->with('person:id,name')
+            ->get();
+        $feedbackSignals = [];
+
+        foreach ($candidates as $candidate) {
+            $feedbackSignals[] = [
+                'person' => $candidate->person->name,
+                'sentiment' => $candidate->sentiment->value,
+                'evidence_count' => $candidate->evidence_count,
+                'confidence' => $candidate->confidence,
+                'status' => $candidate->status->value,
+                'explanation' => sprintf(
+                    '%s rated this meal %s across %d recorded meals%s.',
+                    $candidate->person->name,
+                    $candidate->sentiment->value === 'like' ? 'positively' : 'negatively',
+                    $candidate->evidence_count,
+                    $candidate->status->value === 'pending' ? '; this remains a preference candidate for review' : '',
+                ),
+            ];
+        }
 
         return [
             'safety' => $constraints->isEmpty()
                 ? 'No recorded safety constraint matched this recipe’s ingredients.'
                 : 'Review before selecting: '.implode(', ', $constraints->all()).'.',
             'preferences' => $preferences->all(),
+            'feedback' => $feedbackSignals,
             'recency' => $previous === null
                 ? 'Not found in earlier plans.'
                 : 'Last planned on '.$previous->mealSlot->date->toDateString().'.',

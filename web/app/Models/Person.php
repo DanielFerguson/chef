@@ -70,6 +70,18 @@ class Person extends Model
         return $this->hasMany(Constraint::class);
     }
 
+    /** @return HasMany<MealFeedback, $this> */
+    public function mealFeedback(): HasMany
+    {
+        return $this->hasMany(MealFeedback::class);
+    }
+
+    /** @return HasMany<PreferenceCandidate, $this> */
+    public function preferenceCandidates(): HasMany
+    {
+        return $this->hasMany(PreferenceCandidate::class);
+    }
+
     /**
      * Keep implicit person bindings inside the signed-in user's active family.
      */

@@ -99,4 +99,16 @@ class Team extends Model
     {
         return $this->hasMany(Constraint::class);
     }
+
+    /** @return HasMany<MealOutcome, $this> */
+    public function mealOutcomes(): HasMany
+    {
+        return $this->hasMany(MealOutcome::class);
+    }
+
+    /** @return HasMany<PreferenceCandidate, $this> */
+    public function preferenceCandidates(): HasMany
+    {
+        return $this->hasMany(PreferenceCandidate::class);
+    }
 }

@@ -65,6 +65,12 @@ class PlannedMeal extends Model
         return $this->hasOne(PlannedMealRecipePreparation::class);
     }
 
+    /** @return HasOne<MealOutcome, $this> */
+    public function outcome(): HasOne
+    {
+        return $this->hasOne(MealOutcome::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
