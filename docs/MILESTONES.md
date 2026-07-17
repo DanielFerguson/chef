@@ -1,6 +1,6 @@
 # Chef milestones to public version 1
 
-This file tracks the path from product definition to the first public release. Update status and acceptance evidence as work lands; do not mark a milestone complete because its code exists if its end-to-end outcome is not usable. A product owner may explicitly move an external-account, hardware, or production-environment acceptance check to M9 so development can continue, but the deferred check must remain visible as an unchecked release item and must never be recorded as a test that ran.
+This file tracks the path from product definition to the first public release. Update status and acceptance evidence as work lands; do not mark a milestone complete because its code exists if its end-to-end outcome is not usable. A product owner may explicitly move an external-account, hardware, or production-environment acceptance check to M8 so development can continue, but the deferred check must remain visible as an unchecked release item and must never be recorded as a test that ran.
 
 ## Status legend
 
@@ -324,14 +324,14 @@ Status: `[x]`
 - [x] Require approval at defined risk boundaries.
 - [x] Reconcile intended list items with the prepared cart.
 - [x] Keep checkout, address changes, authentication, and payment human-controlled.
-- [x] Accept recorded-fixture and anonymous live-origin evidence for product development; defer signed-in Woolworths and Coles extension validation to the M9 production-like release gate.
+- [x] Accept recorded-fixture and anonymous live-origin evidence for product development; defer signed-in Woolworths and Coles extension validation to the M8 production-like release gate.
 
 Exit evidence:
 
 - At the M6 product-development boundary, an approved frozen list can drive a
   reviewable Woolworths or Coles cart handoff in the chosen tab, stop safely
   when uncertain, and return control before checkout. Signed-in account
-  persistence remains a required M9 production-like acceptance check rather
+  persistence remains a required M8 production-like acceptance check rather
   than an M6 development blocker.
 
 M6 implementation evidence recorded 17 July 2026:
@@ -384,7 +384,7 @@ M6 implementation evidence recorded 17 July 2026:
   signed out. On 17 July 2026, the product owner accepted the implementation,
   recorded-fixture, automated, and anonymous live-origin evidence as sufficient
   to continue product development. Signed-in, unpacked-extension validation was
-  moved explicitly to M9 and remains truthful release work rather than being
+  moved explicitly to M8 and remains truthful release work rather than being
   recorded as a test that was run. Chef will not store or request retailer
   credentials for that check.
 
@@ -431,22 +431,7 @@ Exit evidence:
 
 - A person can begin or continue an existing plan by voice and see the same structured plan updates that typing would produce.
 
-## M8 — MCP and external-agent access
-
-Status: `[ ]`
-
-- [ ] Implement authenticated Laravel MCP transport.
-- [ ] Expose team context, plans, recipes, lists, budgets, and feedback as narrow read tools.
-- [ ] Add reviewed write tools for planning and feedback.
-- [ ] Add a scoped cart-preparation handoff tool without exposing checkout.
-- [ ] Make writes idempotent where retries are plausible.
-- [ ] Document authentication, scopes, and examples for ChatGPT and other MCP hosts.
-
-Exit evidence:
-
-- An authorised external agent can inspect and update the same Chef plan without scraping the UI or bypassing team policies.
-
-## M9 — Public version 1 hardening and launch
+## M8 — Public version 1 hardening and launch
 
 Status: `[ ]`
 
@@ -465,7 +450,6 @@ Status: `[ ]`
 - [ ] Run a private family beta and close all release-blocking findings.
 - [ ] Validate signed-in Woolworths and Coles extension handoffs using dedicated test or consenting beta accounts; prove account cart persistence, selected-store context, safe pause/takeover, and the boundary before checkout.
 - [ ] Validate native voice with a real microphone and Realtime provider session; prove permission revocation, interruption, reconnect, mute, and typed fallback.
-- [ ] Validate scoped MCP access from at least one real external host; prove authentication, revocation, tenant isolation, idempotent writes, and audit visibility.
 - [ ] Re-run every earlier milestone item deferred from local or fixture evidence in the production-like environment and link its evidence before release approval.
 - [ ] Tag and publish version 1.
 
@@ -478,6 +462,26 @@ Release gates:
 - operating cost and automation failure rates are understood and bounded.
 
 ## After version 1
+
+### Deferred capability — MCP and external-agent access
+
+MCP is not required for the standalone version 1 household experience. It
+remains compatible with Chef's shared domain actions and can be scheduled after
+launch without changing the product model.
+
+- [ ] Implement authenticated Laravel MCP transport.
+- [ ] Expose team context, plans, recipes, lists, budgets, and feedback as narrow read tools.
+- [ ] Add reviewed write tools for planning and feedback.
+- [ ] Add a scoped cart-preparation handoff tool without exposing checkout.
+- [ ] Make writes idempotent where retries are plausible.
+- [ ] Document authentication, scopes, and examples for ChatGPT and other MCP hosts.
+- [ ] Validate scoped access from at least one real external host; prove authentication, revocation, tenant isolation, idempotent writes, and audit visibility.
+
+Exit evidence:
+
+- An authorised external agent can inspect and update the same Chef plan without scraping the UI or bypassing team policies.
+
+### Other candidates
 
 Candidates, not commitments:
 

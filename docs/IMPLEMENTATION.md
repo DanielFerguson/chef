@@ -77,7 +77,7 @@ implementation milestone.
 - OpenAI Realtime API over WebRTC for voice
 - Laravel queues for asynchronous agent and automation work
 - Laravel broadcasting or server-sent events for streamed progress
-- Laravel MCP for exposing reviewed Chef domain capabilities
+- Post-v1 Laravel MCP for exposing reviewed Chef domain capabilities
 - A permissioned Manifest V3 Chrome extension for local retailer-tab execution
 
 SQLite must remain supported for personal and local installations. Before public launch, verify the expected concurrency and operational model; a hosted multi-team service will likely use PostgreSQL in production without changing the Eloquent domain model.
@@ -314,7 +314,7 @@ flowchart LR
     CUA --> RESPONSES
     CUA <--> EXT["Chef Chrome extension"]
     EXT <--> TAB["Approved retailer tab"]
-    APP <--> MCP["Laravel MCP server"]
+    APP -. post-v1 .-> MCP["Laravel MCP server"]
 ```
 
 Repository and application structure:
@@ -366,7 +366,9 @@ while active Tailwind/shadcn semantic tokens live in
 names instead of embedding palette hex values. Native and marketing clients
 translate the same named roles into their platform formats.
 
-Use action classes for meaningful domain mutations. HTTP controllers, AI tools, queued jobs, console commands, and MCP tools should call the same actions rather than duplicating business logic.
+Use action classes for meaningful domain mutations. HTTP controllers, AI tools,
+queued jobs, console commands, and future MCP tools should call the same actions
+rather than duplicating business logic.
 
 ## Laravel AI SDK boundary
 

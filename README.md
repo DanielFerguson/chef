@@ -38,7 +38,7 @@ The intended stack is:
 - A Chef-owned OpenAI Responses API client for native computer-use agents
 - OpenAI Realtime API for native voice conversation
 - A permissioned Chef Chrome extension for local browser execution
-- An MCP server exposing Chef's household, planning, recipe, shopping, and feedback capabilities
+- A post-v1 MCP server exposing reviewed Chef domain capabilities to authorised external agents
 
 ## Product thesis
 
@@ -401,7 +401,8 @@ Chef should remain one Laravel application rather than prematurely splitting int
 - Server-sent events or WebSockets stream assistant and automation progress without making the entire application a detached client-side API product.
 - A permissioned Chef Chrome extension executes computer actions in a user-approved retailer tab and returns screenshots or action results.
 - An automation gateway connects queued Laravel work to the active extension. It may begin inside Laravel and be extracted into a small TypeScript service only when long-running sessions justify it.
-- Domain actions should be reusable from HTTP controllers, queued jobs, console commands, and MCP tools.
+- Domain actions should remain reusable from HTTP controllers, queued jobs,
+  console commands, and future MCP tools.
 
 ```mermaid
 flowchart LR
@@ -413,7 +414,7 @@ flowchart LR
     QUEUE <--> GATEWAY["Automation gateway"]
     GATEWAY <--> EXTENSION["Chef Chrome extension"]
     EXTENSION <--> TAB["User-approved retailer tab"]
-    APP --> MCP["Chef MCP server"]
+    APP -. post-v1 .-> MCP["Chef MCP server"]
     MCP <--> HOSTS["ChatGPT and other MCP hosts"]
 ```
 
@@ -470,11 +471,16 @@ Chef may automatically search, compare, and add ordinary products after the pers
 
 Checkout, payment details, and final order submission always remain under direct human control.
 
-## OpenAI and MCP boundary
+## OpenAI and post-v1 MCP boundary
 
-Chef is OpenAI-native: its own conversational interface uses the OpenAI Responses and Realtime APIs. The MCP server is an additional interface to the same Laravel domain actions, allowing a household to work with Chef from ChatGPT or another authorised MCP host. It is not a replacement for Chef or its system of record.
+Chef is OpenAI-native: its own conversational interface uses the OpenAI
+Responses and Realtime APIs. MCP is deferred until after version 1 because the
+standalone household product does not depend on external-agent access. A future
+MCP server remains an additional interface to the same Laravel domain actions,
+allowing a household to work with Chef from ChatGPT or another authorised MCP
+host. It will not replace Chef or its system of record.
 
-Initial MCP capabilities should be narrow and composable:
+Post-v1 MCP capabilities should be narrow and composable:
 
 - inspect household context and preferences;
 - inspect or create a meal plan;
@@ -519,6 +525,7 @@ The first useful slice should support one family team, multiple collaborating us
 - multi-retailer price optimisation;
 - native mobile applications;
 - complex real-time household collaboration;
+- external-agent access through MCP;
 - a marketplace of community recipes.
 
 ## Proposed delivery sequence
@@ -530,8 +537,11 @@ The first useful slice should support one family team, multiple collaborating us
 5. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
 6. **Retailer handoff** — Chrome extension, Responses API computer use, Woolworths and Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
 7. **Native voice** — Realtime WebRTC input and output over the same durable conversations and domain actions.
-8. **MCP** — Read tools first, then reviewed planning, shopping, and feedback writes for external hosts.
-9. **Public launch** — Operational, privacy, accessibility, security, recovery, and support gates for version 1.
+8. **Public launch** — Operational, privacy, accessibility, security, recovery, and support gates for version 1.
+
+After version 1, MCP can add read tools followed by reviewed planning, shopping,
+and feedback writes for authorised external hosts without changing Chef's domain
+model.
 
 ## Product questions to resolve during discovery
 

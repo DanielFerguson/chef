@@ -138,8 +138,8 @@ Marketing work needs a shared vocabulary for claim maturity.
 | Cooking mode and household learning | Version 1 required through M5 | `Planned for version 1.` | `Cook from tonight's plan and make the next week easier.` |
 | Woolworths and Coles trolley preparation | Version 1 required through M6 | `Planned, with checkout remaining yours.` | `Chef can prepare a Woolworths or Coles trolley for you to review.` |
 | Native voice | Version 1 required through M7 | `Voice is planned; typing is available in testing.` | `Talk or type into the same plan.` |
-| External access through MCP | Version 1 required through M8 | Developer or integration documentation only. | Do not make this a household homepage headline. |
-| Public privacy, operations, and support readiness | Version 1 required through M9 | `Private beta` or `request access`; do not imply public availability. | Public signup only after the M9 gate. |
+| External access through MCP | Deferred until after version 1 | Developer or integration documentation only. | Do not make this a household homepage headline. |
+| Public privacy, operations, and support readiness | Version 1 required through M8 | `Private beta` or `request access`; do not imply public availability. | Public signup only after the M8 gate. |
 | Saves time, money, or food waste | Unproven commercial hypothesis | `Designed to reduce repeated planning and unnecessary re-entry.` | Use quantified claims only after Chef-specific measurement. |
 
 ### Claims that require evidence before publication
@@ -969,7 +969,7 @@ ahead of the product.
 
 ### Mode A: private beta and design partners
 
-Use while M4–M9 remain incomplete.
+Use while M4–M8 remain incomplete.
 
 Primary goal:
 
@@ -1014,7 +1014,7 @@ Do not show them as active navigation or use ambiguous `Get started` copy.
 
 ### Mode B: public version 1
 
-Switch only after M9 exit evidence is satisfied.
+Switch only after M8 exit evidence is satisfied.
 
 Primary goal:
 
@@ -1754,7 +1754,7 @@ These decisions materially affect the first marketing implementation:
 8. Launch in private-beta mode and measure through confirmed plan, usable shop,
    and second-week return.
 9. Replace future-state copy and visuals only as milestone evidence is completed.
-10. Switch to public version 1 acquisition mode only after the M9 release gate.
+10. Switch to public version 1 acquisition mode only after the M8 release gate.
 
 The durable commercial principle is simple: **Chef earns the right to sell the
 whole week by proving that each household decision survives the handoff to the
