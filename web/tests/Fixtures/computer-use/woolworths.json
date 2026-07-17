@@ -1,0 +1,22 @@
+{
+  "retailer": "woolworths",
+  "captured_at": "2026-07-17T10:00:00+10:00",
+  "start_url": "https://www.woolworths.com.au/shop/browse",
+  "steps": [
+    {
+      "response_id": "resp_woolworths_1",
+      "call_id": "call_woolworths_1",
+      "actions": [
+        { "type": "click", "x": 732, "y": 118 },
+        { "type": "type", "x": 732, "y": 118, "text": "milk" },
+        { "type": "keypress", "keys": ["ENTER"] }
+      ]
+    },
+    {
+      "response_id": "resp_woolworths_2",
+      "complete": true,
+      "message": "The Woolworths cart is ready for review before checkout.",
+      "reconciliation": []
+    }
+  ]
+}

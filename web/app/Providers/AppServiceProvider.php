@@ -7,6 +7,9 @@ use App\Ai\Contracts\RecipeDrafter;
 use App\Ai\LaravelAiConversationEngine;
 use App\Ai\LaravelAiRecipeDrafter;
 use App\Ai\Testing\DeterministicRecipeDrafter;
+use App\Automation\Contracts\ComputerUseEngine;
+use App\Automation\ResponsesComputerUseEngine;
+use App\Automation\Testing\FakeComputerUseEngine;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +30,12 @@ class AppServiceProvider extends ServiceProvider
                 ? DeterministicRecipeDrafter::class
                 : LaravelAiRecipeDrafter::class,
         );
+        if ($this->app->environment('testing')) {
+            $this->app->singleton(FakeComputerUseEngine::class);
+            $this->app->alias(FakeComputerUseEngine::class, ComputerUseEngine::class);
+        } else {
+            $this->app->singleton(ComputerUseEngine::class, ResponsesComputerUseEngine::class);
+        }
     }
 
     /**

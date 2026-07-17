@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\AutomationApprovalController;
+use App\Http\Controllers\AutomationRunController;
+use App\Http\Controllers\BrowserConnectionController;
 use App\Http\Controllers\ConstraintController;
 use App\Http\Controllers\ConversationFeedbackController;
 use App\Http\Controllers\ConversationMessageStreamController;
@@ -62,6 +65,11 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::put('meal-plans/{mealPlan}/shopping-budget', ShoppingBudgetController::class)->name('meal-plans.shopping-budget.update');
     Route::put('shopping-list-items/{shoppingListItem}/product-match', ProductMatchController::class)->name('shopping-list-items.product-match.update');
     Route::post('shopping-lists/{shoppingList}/orders', OrderSnapshotController::class)->name('shopping-lists.orders.store');
+    Route::post('browser-connections', [BrowserConnectionController::class, 'store'])->name('browser-connections.store');
+    Route::delete('browser-connections/{browserConnection}', [BrowserConnectionController::class, 'destroy'])->name('browser-connections.destroy');
+    Route::post('shopping-lists/{shoppingList}/automation-runs', [AutomationRunController::class, 'store'])->name('shopping-lists.automation-runs.store');
+    Route::put('automation-runs/{automationRun}', [AutomationRunController::class, 'update'])->name('automation-runs.update');
+    Route::put('automation-approvals/{automationApproval}', [AutomationApprovalController::class, 'update'])->name('automation-approvals.update');
     Route::post('meal-plans/{mealPlan}/slots', [MealSlotController::class, 'store'])->name('meal-plans.slots.store');
     Route::post('meal-plans/{mealPlan}/milestones', [MealPlanMilestoneController::class, 'store'])->name('meal-plans.milestones.store');
     Route::post('meal-slots/{mealSlot}/planned-meal', [MealSlotPlannedMealController::class, 'store'])->name('meal-slots.planned-meal.store');

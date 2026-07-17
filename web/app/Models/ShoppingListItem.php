@@ -43,6 +43,12 @@ class ShoppingListItem extends Model
         return $this->hasMany(ShoppingListItemSource::class);
     }
 
+    /** @return HasMany<AutomationReconciliation, $this> */
+    public function automationReconciliations(): HasMany
+    {
+        return $this->hasMany(AutomationReconciliation::class);
+    }
+
     /** @return HasOne<ProductMatch, $this> */
     public function productMatch(): HasOne
     {

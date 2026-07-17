@@ -111,4 +111,16 @@ class Team extends Model
     {
         return $this->hasMany(PreferenceCandidate::class);
     }
+
+    /** @return HasMany<BrowserConnection, $this> */
+    public function browserConnections(): HasMany
+    {
+        return $this->hasMany(BrowserConnection::class);
+    }
+
+    /** @return HasMany<AutomationRun, $this> */
+    public function automationRuns(): HasMany
+    {
+        return $this->hasMany(AutomationRun::class);
+    }
 }

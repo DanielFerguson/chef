@@ -1,0 +1,22 @@
+{
+  "retailer": "coles",
+  "captured_at": "2026-07-17T10:00:00+10:00",
+  "start_url": "https://www.coles.com.au/browse",
+  "steps": [
+    {
+      "response_id": "resp_coles_1",
+      "call_id": "call_coles_1",
+      "actions": [
+        { "type": "click", "x": 604, "y": 104 },
+        { "type": "type", "x": 604, "y": 104, "text": "milk" },
+        { "type": "keypress", "keys": ["ENTER"] }
+      ]
+    },
+    {
+      "response_id": "resp_coles_2",
+      "complete": true,
+      "message": "The Coles cart is ready for review before checkout.",
+      "reconciliation": []
+    }
+  ]
+}

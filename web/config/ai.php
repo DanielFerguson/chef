@@ -15,6 +15,13 @@ return [
         ],
     ],
 
+    'computer_use' => [
+        'model' => env('OPENAI_COMPUTER_MODEL', 'gpt-5.6'),
+        'timeout' => env('OPENAI_COMPUTER_TIMEOUT', 90),
+        'screenshot_retention_hours' => env('AUTOMATION_SCREENSHOT_RETENTION_HOURS', 24),
+        'run_expiry_minutes' => env('AUTOMATION_RUN_EXPIRY_MINUTES', 60),
+    ],
+
     'providers' => [
         'openai' => [
             'driver' => 'openai',

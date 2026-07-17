@@ -77,6 +77,18 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(Message::class);
     }
 
+    /** @return HasMany<BrowserConnection, $this> */
+    public function browserConnections(): HasMany
+    {
+        return $this->hasMany(BrowserConnection::class);
+    }
+
+    /** @return HasMany<AutomationRun, $this> */
+    public function requestedAutomationRuns(): HasMany
+    {
+        return $this->hasMany(AutomationRun::class, 'requested_by_user_id');
+    }
+
     /**
      * Get the attributes that should be cast.
      *
