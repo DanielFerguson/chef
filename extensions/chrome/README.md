@@ -15,11 +15,20 @@ in the retailer tab selected by the household.
 5. Start a Woolworths or Coles cart-preparation run in Chef, open that retailer,
    then use **Connect selected retailer tab** in the extension.
 
-`manifest.json` permits `http://localhost/*` for local development and uses
-`https://app.chef.example/*` as the packaged production placeholder. Replace
-that placeholder with the deployed Chef origin before distribution. No other
-application or retailer origins should be added without a product and security
-review.
+`manifest.json` permits `http://localhost/*` and a non-functional example host
+for local development. Never distribute that source manifest. Build a
+production-only directory with the exact deployed HTTPS origin and release
+version:
+
+```bash
+npm run build:production -- --origin=https://your-chef-host --version=1.0.0
+```
+
+The command rejects localhost and reserved placeholder domains, removes all
+development application origins from `dist/manifest.json`, and pre-fills the
+same exact origin in the popup. Load and package `dist/`, record its hash in the
+beta evidence, and add no other application or retailer origin without a
+product and security review.
 
 ## Safety boundary
 
