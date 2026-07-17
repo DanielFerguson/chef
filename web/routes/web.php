@@ -26,6 +26,8 @@ use App\Http\Controllers\PlannedMealMoveController;
 use App\Http\Controllers\PreferenceCandidateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\ProductMatchController;
+use App\Http\Controllers\RealtimeSessionController;
+use App\Http\Controllers\RealtimeToolCallController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\RecipeImportController;
 use App\Http\Controllers\RecipeVersionController;
@@ -76,6 +78,14 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::put('meal-slots/{mealSlot}/participants', [MealSlotParticipantController::class, 'update'])->name('meal-slots.participants.update');
     Route::post('conversations/{conversation}/messages/stream', ConversationMessageStreamController::class)
         ->name('conversations.messages.stream');
+    Route::post('conversations/{conversation}/realtime-sessions', [RealtimeSessionController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('conversations.realtime-sessions.store');
+    Route::post('realtime-sessions/{voiceSession}/tool-calls', RealtimeToolCallController::class)
+        ->middleware('throttle:60,1')
+        ->name('realtime-sessions.tool-calls.store');
+    Route::delete('realtime-sessions/{voiceSession}', [RealtimeSessionController::class, 'destroy'])
+        ->name('realtime-sessions.destroy');
     Route::put('messages/{message}/feedback', [MessageFeedbackController::class, 'update'])->name('messages.feedback.update');
     Route::delete('messages/{message}/feedback', [MessageFeedbackController::class, 'destroy'])->name('messages.feedback.destroy');
     Route::put('conversations/{conversation}/feedback', [ConversationFeedbackController::class, 'update'])->name('conversations.feedback.update');

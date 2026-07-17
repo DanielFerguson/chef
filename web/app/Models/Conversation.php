@@ -56,4 +56,10 @@ class Conversation extends Model
     {
         return $this->hasMany(ConversationFeedback::class);
     }
+
+    /** @return HasMany<VoiceSession, $this> */
+    public function voiceSessions(): HasMany
+    {
+        return $this->hasMany(VoiceSession::class);
+    }
 }

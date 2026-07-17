@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'realtime' => [
+            'endpoint' => env('OPENAI_REALTIME_ENDPOINT', 'https://api.openai.com/v1/realtime/calls'),
+            'model' => env('OPENAI_REALTIME_MODEL', 'gpt-realtime-2.1'),
+            'voice' => env('OPENAI_REALTIME_VOICE', 'marin'),
+            'transcription_model' => env('OPENAI_REALTIME_TRANSCRIPTION_MODEL', 'gpt-4o-mini-transcribe'),
+            'timeout' => (int) env('OPENAI_REALTIME_TIMEOUT', 30),
+        ],
+    ],
+
 ];

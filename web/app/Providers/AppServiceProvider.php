@@ -10,6 +10,9 @@ use App\Ai\Testing\DeterministicRecipeDrafter;
 use App\Automation\Contracts\ComputerUseEngine;
 use App\Automation\ResponsesComputerUseEngine;
 use App\Automation\Testing\FakeComputerUseEngine;
+use App\Voice\Contracts\RealtimeSessionBroker;
+use App\Voice\OpenAiRealtimeSessionBroker;
+use App\Voice\Testing\FakeRealtimeSessionBroker;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -33,8 +36,11 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->environment('testing')) {
             $this->app->singleton(FakeComputerUseEngine::class);
             $this->app->alias(FakeComputerUseEngine::class, ComputerUseEngine::class);
+            $this->app->singleton(FakeRealtimeSessionBroker::class);
+            $this->app->alias(FakeRealtimeSessionBroker::class, RealtimeSessionBroker::class);
         } else {
             $this->app->singleton(ComputerUseEngine::class, ResponsesComputerUseEngine::class);
+            $this->app->singleton(RealtimeSessionBroker::class, OpenAiRealtimeSessionBroker::class);
         }
     }
 
