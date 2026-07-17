@@ -498,7 +498,7 @@ Status: `[ ]`
 
 Code-level evidence:
 
-- `docs/M8-VERIFICATION.md` records 255 passing application tests, 86.7%
+- `docs/M8-VERIFICATION.md` records 257 passing application tests, 86.8%
   coverage, 29 passing browser tests across desktop and 390×844, clean static
   and frontend gates, React Doctor 100/100, extension policy checks, and clean
   Composer/npm/Bun vulnerability audits.

@@ -69,7 +69,9 @@ unchecked.
     minute and dispatches a no-risk job; release checks perform their own
     tokenised queue round-trip, reject a heartbeat older than three minutes,
     clean temporary probe state, and expose per-component JSON results. Final
-    approval cannot pass if either runtime component is missing or stale.
+    approval cannot pass if either runtime component is missing or stale;
+    unavailable cache or storage adapters are contained as failed components
+    rather than terminating the evidence command.
 
 ## Open launch blockers
 

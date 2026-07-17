@@ -101,7 +101,7 @@ external-account evidence listed below is still outstanding.
    not close these conditions.
 5. **Dependency and dynamic verification, passed locally.** Composer, npm, and
    Bun reported no vulnerability advisory; Pint, PHPStan, frontend checks, React
-   Doctor, extension checks, the full application suite, the 86.7% coverage
+   Doctor, extension checks, the full application suite, the 86.8% coverage
    gate, and the complete browser suite passed. The exact results are recorded
    in `docs/M8-VERIFICATION.md`; production-like replay is still required.
 6. **Release evidence integrity.** Final approval now uses an HMAC-signed,

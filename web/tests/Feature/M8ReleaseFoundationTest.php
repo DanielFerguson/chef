@@ -91,6 +91,41 @@ class M8ReleaseFoundationTest extends TestCase
         $this->assertContains('queue_worker', $result['failures']);
     }
 
+    public function test_runtime_probe_contains_an_unavailable_cache_store(): void
+    {
+        config([
+            'cache.default' => 'missing-store',
+            'filesystems.default' => 'local',
+            'queue.default' => 'sync',
+            'chef.release.queue_probe_timeout_seconds' => 1,
+        ]);
+        Storage::fake('local');
+
+        $result = app(ReleaseRuntimeProbe::class)->inspect();
+
+        $this->assertFalse($result['ready']);
+        $this->assertFalse($result['components']['cache']);
+        $this->assertFalse($result['components']['queue_worker']);
+        $this->assertFalse($result['components']['scheduler']);
+        $this->assertContains('cache', $result['failures']);
+    }
+
+    public function test_runtime_probe_contains_an_unavailable_object_storage_disk(): void
+    {
+        config([
+            'filesystems.default' => 'missing-disk',
+            'queue.default' => 'sync',
+            'chef.release.queue_probe_timeout_seconds' => 1,
+        ]);
+        Cache::put('chef:release:scheduler-heartbeat', now()->toIso8601String(), now()->addMinutes(10));
+
+        $result = app(ReleaseRuntimeProbe::class)->inspect();
+
+        $this->assertFalse($result['ready']);
+        $this->assertFalse($result['components']['object_storage']);
+        $this->assertContains('object_storage', $result['failures']);
+    }
+
     public function test_scheduler_heartbeat_dispatches_a_real_queue_job(): void
     {
         Queue::fake();

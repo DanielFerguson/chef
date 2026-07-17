@@ -39,19 +39,22 @@ class ReleaseRuntimeProbe
     private function probeObjectStorage(): bool
     {
         $path = '_health/release-'.str()->uuid().'.txt';
-        $disk = Storage::disk((string) config('filesystems.default'));
+        $disk = null;
 
         try {
+            $disk = Storage::disk((string) config('filesystems.default'));
             $stored = $disk->put($path, 'chef-release-probe');
             $readable = $stored && $disk->get($path) === 'chef-release-probe';
             $deleted = $disk->delete($path);
 
             return $readable && $deleted;
         } catch (Throwable) {
-            try {
-                $disk->delete($path);
-            } catch (Throwable) {
-                // The failed probe is already reported without exposing storage details.
+            if ($disk !== null) {
+                try {
+                    $disk->delete($path);
+                } catch (Throwable) {
+                    // The failed probe is already reported without exposing storage details.
+                }
             }
 
             return false;
@@ -78,7 +81,11 @@ class ReleaseRuntimeProbe
         } catch (Throwable) {
             // Runtime failures are returned as a component status, not leaked.
         } finally {
-            Cache::forget($key);
+            try {
+                Cache::forget($key);
+            } catch (Throwable) {
+                // A cache outage is already represented by failed cache and queue probes.
+            }
         }
 
         return false;
@@ -86,13 +93,13 @@ class ReleaseRuntimeProbe
 
     private function schedulerHeartbeatIsFresh(): bool
     {
-        $heartbeat = Cache::get('chef:release:scheduler-heartbeat');
-
-        if (! is_string($heartbeat)) {
-            return false;
-        }
-
         try {
+            $heartbeat = Cache::get('chef:release:scheduler-heartbeat');
+
+            if (! is_string($heartbeat)) {
+                return false;
+            }
+
             $recordedAt = Carbon::parse($heartbeat);
             $maxAge = max(60, (int) config('chef.release.scheduler_heartbeat_max_age_seconds'));
 
