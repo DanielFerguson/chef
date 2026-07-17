@@ -36,20 +36,19 @@ const benefits = [
       <article class="price-card" data-reveal>
         <header>
           <h3>Chef Household</h3>
-          <span>Everything included</span>
         </header>
 
         <fieldset class="billing-toggle">
           <legend class="sr-only">Choose a billing period</legend>
           <label>
-            <input type="radio" name="billing" value="monthly" />
+            <input type="radio" name="billing" value="monthly" checked />
             <span class="billing-option">
               <strong>Monthly</strong>
               <small>$9 / month</small>
             </span>
           </label>
           <label>
-            <input type="radio" name="billing" value="annual" checked />
+            <input type="radio" name="billing" value="annual" />
             <span class="billing-option">
               <span class="option-heading"
                 ><strong>Annual</strong><em>Save $19</em></span
@@ -61,9 +60,9 @@ const benefits = [
 
         <div class="price-value" aria-live="polite">
           <div>
-            <strong data-price>$89</strong><span data-period>AUD / year</span>
+            <strong data-price>$9</strong><span data-period>AUD / month</span>
           </div>
-          <p data-equivalent>Equivalent to $7.42/month · billed annually</p>
+          <p data-equivalent>Monthly flexibility · cancel any time</p>
         </div>
 
         <ul class="mobile-benefits" aria-label="Included with Chef Household">
@@ -116,8 +115,8 @@ const benefits = [
       price.textContent = isAnnual ? '$89' : '$9';
       period.textContent = isAnnual ? 'AUD / year' : 'AUD / month';
       equivalent.textContent = isAnnual
-        ? 'Equivalent to $7.42/month · billed annually'
-        : 'Billed monthly · cancel any time';
+        ? 'Equivalent to $7.42/month · save $19'
+        : 'Monthly flexibility · cancel any time';
     };
 
     for (const input of inputs) {
@@ -157,6 +156,7 @@ const benefits = [
     background: var(--canvas);
     border: 1px solid #dddcd6;
     border-radius: 1.125rem;
+    box-shadow: 0 1rem 2.5rem rgb(36 35 31 / 5%);
     display: flex;
     flex-direction: column;
     gap: 1.125rem;
@@ -173,17 +173,6 @@ const benefits = [
   .price-card h3 {
     font-size: 1.0625rem;
     font-weight: 600;
-  }
-
-  .price-card > header span {
-    background: #eff1ec;
-    border-radius: 999px;
-    color: #657663;
-    font-size: 0.625rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    padding: 0.3rem 0.6rem;
-    text-transform: uppercase;
   }
 
   .billing-toggle {
@@ -261,7 +250,11 @@ const benefits = [
   }
 
   .price-value {
+    display: flex;
     flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 0.75rem;
   }
 
   .price-value > div {
@@ -271,7 +264,7 @@ const benefits = [
   }
 
   .price-value strong {
-    font-size: 3.25rem;
+    font-size: clamp(4.75rem, 7vw, 5.5rem);
     font-variant-numeric: tabular-nums;
     font-weight: 600;
     letter-spacing: -0.05em;
@@ -286,7 +279,8 @@ const benefits = [
   .price-value p {
     color: var(--sage-strong);
     font-size: 0.8125rem;
-    margin-top: 0.25rem;
+    font-weight: 500;
+    margin-top: 0.4rem;
   }
 
   .price-action {
@@ -391,6 +385,11 @@ const benefits = [
 
     .price-value {
       flex: none;
+      padding-block: 0.75rem;
+    }
+
+    .price-value strong {
+      font-size: 4rem;
     }
 
     .mobile-benefits {
