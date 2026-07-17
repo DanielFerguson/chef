@@ -16,7 +16,10 @@ use Illuminate\Validation\ValidationException;
 
 class ControlAutomationRun
 {
-    public function __construct(private readonly RetailerOriginPolicy $origins) {}
+    public function __construct(
+        private readonly RetailerOriginPolicy $origins,
+        private readonly InvalidateAutomationRunWork $invalidateWork,
+    ) {}
 
     public function handle(AutomationRun $run, User $user, string $control): AutomationRun
     {
@@ -74,15 +77,7 @@ class ControlAutomationRun
 
     private function cancel(AutomationRun $run): void
     {
-        $run->approvals()
-            ->where('status', AutomationApprovalStatus::Pending)
-            ->update(['status' => AutomationApprovalStatus::Expired]);
-        $run->steps()
-            ->whereIn('status', [AutomationStepStatus::Ready, AutomationStepStatus::AwaitingApproval, AutomationStepStatus::Executing])
-            ->update([
-                'status' => AutomationStepStatus::Failed,
-                'error_message' => 'The household cancelled this run before the browser step completed.',
-            ]);
+        $this->invalidateWork->handle($run, 'The household cancelled this run before the browser step completed.');
         $run->update([
             'status' => AutomationRunStatus::Cancelled,
             'finished_at' => now(),
@@ -143,15 +138,7 @@ class ControlAutomationRun
 
     private function takeover(AutomationRun $run): void
     {
-        $run->approvals()
-            ->where('status', AutomationApprovalStatus::Pending)
-            ->update(['status' => AutomationApprovalStatus::Expired]);
-        $run->steps()
-            ->whereIn('status', [AutomationStepStatus::Ready, AutomationStepStatus::AwaitingApproval, AutomationStepStatus::Executing])
-            ->update([
-                'status' => AutomationStepStatus::Failed,
-                'error_message' => 'The household took manual control before this step completed.',
-            ]);
+        $this->invalidateWork->handle($run, 'The household took manual control before this step completed.');
         $run->update([
             'status' => AutomationRunStatus::Takeover,
             'takeover_at' => now(),

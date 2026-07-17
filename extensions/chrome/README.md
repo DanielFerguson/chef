@@ -24,8 +24,11 @@ review.
 ## Safety boundary
 
 - The run is frozen to one shopping-list revision, retailer, connection, and tab.
+- A connection accepts one active run at a time, and every claimed step must
+  match the run attached in the extension.
 - The extension refuses commands outside its local action allowlist and refuses
-  execution when the selected tab is not visible.
+  execution when the selected tab is not visible, including between actions and
+  throughout waits.
 - It stops after any navigation to checkout, authentication, address, delivery,
   or payment paths and blocks page controls that directly request those actions.
 - The cart or trolley review control remains available; order submission does

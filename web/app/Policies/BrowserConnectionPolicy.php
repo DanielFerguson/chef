@@ -14,6 +14,6 @@ class BrowserConnectionPolicy
 
     public function update(User $user, BrowserConnection $connection): bool
     {
-        return $this->view($user, $connection);
+        return $user->can('manageIntegrations', $connection->team);
     }
 }

@@ -21,7 +21,7 @@ class CreateBrowserPairing
     /** @return array{connection: BrowserConnection, pairing_code: string} */
     public function handle(Team $team, User $user): array
     {
-        if (! $user->memberships()->where('team_id', $team->id)->exists()) {
+        if (! $user->can('manageIntegrations', $team)) {
             throw new AuthorizationException('You cannot pair a browser with this household.');
         }
 

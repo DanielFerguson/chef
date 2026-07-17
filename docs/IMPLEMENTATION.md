@@ -488,12 +488,22 @@ revision, intended rows, budget, product matches, substitution preferences,
 retailer, connection, and selected Chrome tab. Screenshots are stored on the
 private local disk, limited to 5 MB, and expire after 24 hours by default.
 
-The extension validates the origin, selected tab, action shapes, and local risk
-boundary again before execution. It requires the selected tab to remain visible
-before taking a screenshot, checks the origin after every action, blocks direct
-checkout/account/payment controls, and stops the remaining batch as soon as a
-takeover URL appears. A missing extension result is treated as uncertain after
-five minutes and handed back for manual review rather than being replayed.
+Browser integrations are owner-managed grants. Once an owner pairs a browser,
+household members may use it for authorised shopping work, but only the owner
+may create or revoke the grant. One connection may have only one non-terminal
+run, and every extension step claim names that run explicitly. Rejecting or
+expiring any approval invalidates the entire pending approval boundary and its
+browser work; a sibling approval can never revive it. Revoking or expiring a
+connection closes its active runs, steps, and approvals in the same locked
+mutation and broadcasts the resulting terminal state.
+
+The extension validates the run, origin, selected tab, complete action shapes,
+and local risk boundary again before execution. It requires the selected tab to
+remain visible before claiming work, before every action, throughout waits, and
+before taking a screenshot. It checks the origin after every action, blocks
+direct checkout/account/payment controls, and stops the remaining batch as soon
+as a takeover URL appears. A missing extension result is treated as uncertain
+after five minutes and handed back for manual review rather than being replayed.
 While a step is executing, the extension checks its server-authoritative control
 state before every action and at least every 500 ms during waits. Pause and
 cancel invalidate the executing step in the same locked mutation, so a rapid

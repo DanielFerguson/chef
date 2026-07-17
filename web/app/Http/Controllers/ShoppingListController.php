@@ -130,6 +130,7 @@ class ShoppingListController extends Controller
                     'currency' => 'AUD',
                 ],
                 'automation' => [
+                    'can_manage_integrations' => $request->user()->can('manageIntegrations', $mealPlan->team),
                     'pairing_code' => $request->session()->get('browser_pairing_code'),
                     'connections' => $mealPlan->team->browserConnections()
                         ->whereIn('status', [BrowserConnectionStatus::Pending, BrowserConnectionStatus::Active])

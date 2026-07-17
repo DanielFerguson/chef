@@ -67,7 +67,7 @@ async function poll() {
 
 async function pollOnce() {
   const config = await settings();
-  if (!config.apiBase || !config.connectionToken || !config.activeTabId) return;
+  if (!config.apiBase || !config.connectionToken || !config.activeRunUuid || !config.activeTabId) return;
 
   const selectedTabId = Number(config.activeTabId);
   const selectedTab = await chrome.tabs.get(selectedTabId).catch(() => null);
@@ -79,7 +79,7 @@ async function pollOnce() {
   // Capture before claiming work so a visibility race cannot strand a server step.
   // The image stays local unless a step is actually returned below.
   const beforeScreenshot = await captureSelectedTab(selectedTabId);
-  const payload = await api('/api/extension/steps/next');
+  const payload = await api(`/api/extension/runs/${encodeURIComponent(config.activeRunUuid)}/steps/next`);
   if (!payload.step) {
     await setIndicator(false);
     return;
@@ -90,10 +90,12 @@ async function pollOnce() {
   let result = { ok: true, executed: 0 };
 
   try {
-    ChefExtensionPolicy.assertStep(step, tab.url, config.activeTabId);
+    ChefExtensionPolicy.assertStep(step, tab.url, config.activeTabId, config.activeRunUuid);
     await setIndicator(true);
 
     for (const action of step.actions) {
+      await assertSelectedTabVisible(selectedTabId);
+
       if (!await stepMayContinue(step.id)) {
         await setIndicator(false);
         return;
@@ -102,7 +104,10 @@ async function pollOnce() {
       const completed = await executeAction(
         selectedTabId,
         action,
-        () => stepMayContinue(step.id),
+        async () => {
+          await assertSelectedTabVisible(selectedTabId);
+          return stepMayContinue(step.id);
+        },
       );
       if (!completed) {
         await setIndicator(false);
@@ -161,14 +166,16 @@ async function stepMayContinue(stepId) {
 }
 
 async function captureSelectedTab(tabId) {
+  await assertSelectedTabVisible(tabId);
   const tab = await chrome.tabs.get(tabId);
-  const [activeTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
-
-  if (!tab.active || activeTab?.id !== tabId) {
-    throw new Error('Keep the selected retailer tab visible while Chef is preparing the cart.');
-  }
 
   return chrome.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
+}
+
+async function assertSelectedTabVisible(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  const [activeTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+  ChefExtensionPolicy.assertVisibleTab(tab, activeTab, tabId);
 }
 
 async function executeAction(tabId, action, mayContinue) {

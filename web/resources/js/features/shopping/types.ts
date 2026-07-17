@@ -226,6 +226,7 @@ export type AutomationRun = {
 };
 
 export type AutomationWorkspace = {
+    can_manage_integrations: boolean;
     pairing_code: string | null;
     connections: AutomationConnection[];
     runs: AutomationRun[];

@@ -7,10 +7,12 @@ use App\Actions\Automation\ControlAutomationRun;
 use App\Actions\Automation\CreateBrowserPairing;
 use App\Actions\Automation\DecideAutomationApproval;
 use App\Actions\Automation\ExpireAutomationArtifacts;
+use App\Actions\Automation\RevokeBrowserConnection;
 use App\Actions\Automation\StartCartPreparation;
 use App\Actions\Automation\SubmitAutomationStepResult;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Teams\CreateTeamForUser;
+use App\Automation\ComputerActionPolicy;
 use App\Automation\Data\ComputerUseStep;
 use App\Automation\ResponsesComputerUseEngine;
 use App\Automation\Testing\FakeComputerUseEngine;
@@ -22,6 +24,7 @@ use App\Enums\BrowserConnectionStatus;
 use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListItemSourceKind;
 use App\Enums\ShoppingListStatus;
+use App\Enums\TeamRole;
 use App\Events\AutomationRunUpdated;
 use App\Models\AutomationRun;
 use App\Models\BrowserConnection;
@@ -33,14 +36,17 @@ use App\Models\ShoppingList;
 use App\Models\ShoppingListItem;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 
 uses(RefreshDatabase::class);
 
@@ -210,7 +216,7 @@ it('runs a recorded computer loop through an explicitly selected retailer tab', 
     expect($run->status)->toBe(AutomationRunStatus::Executing)
         ->and($run->current_tab_id)->toBe('42');
 
-    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection']);
+    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection'], $run);
     expect($step)->not->toBeNull()->and($step->status)->toBe(AutomationStepStatus::Executing);
 
     app(SubmitAutomationStepResult::class)->handle(
@@ -252,7 +258,7 @@ it('restricts attachment and execution to the selected tab and retailer origin',
         'status' => AutomationStepStatus::Ready,
         'actions' => [['type' => 'click', 'x' => 1, 'y' => 1]],
     ]);
-    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection']);
+    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection'], $run);
 
     expect(fn () => app(SubmitAutomationStepResult::class)->handle(
         $step, $claimed['connection'], 'https://www.coles.com.au/cart', m6Png(), ['ok' => true],
@@ -277,7 +283,7 @@ it('pauses computer actions for explicit model safety approval', function () {
     expect($run->status)->toBe(AutomationRunStatus::AwaitingApproval)
         ->and($approval->status)->toBe(AutomationApprovalStatus::Pending)
         ->and($run->steps()->where('sequence', 1)->sole()->status)->toBe(AutomationStepStatus::AwaitingApproval)
-        ->and(app(ClaimNextAutomationStep::class)->handle($claimed['connection']))->toBeNull();
+        ->and(app(ClaimNextAutomationStep::class)->handle($claimed['connection'], $run))->toBeNull();
 
     app(DecideAutomationApproval::class)->handle($approval, $workspace['user'], true);
 
@@ -311,7 +317,7 @@ it('stops immediately on checkout, authentication, address, delivery, and paymen
     app(AttachBrowserTab::class)->handle(
         $run->load('retailer'), $claimed['connection'], '7', 'https://www.woolworths.com.au/shop/cart', m6Png(),
     );
-    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection']);
+    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection'], $run);
 
     app(SubmitAutomationStepResult::class)->handle(
         $step, $claimed['connection'], "https://www.woolworths.com.au/$path", m6Png(), ['ok' => true],
@@ -329,7 +335,7 @@ it('fails safely when the extension cannot execute a validated action', function
     app(AttachBrowserTab::class)->handle(
         $run->load('retailer'), $claimed['connection'], '7', 'https://www.woolworths.com.au/shop/cart', m6Png(),
     );
-    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection']);
+    $step = app(ClaimNextAutomationStep::class)->handle($claimed['connection'], $run);
 
     app(SubmitAutomationStepResult::class)->handle(
         $step, $claimed['connection'], 'https://www.woolworths.com.au/shop/cart', m6Png(), ['ok' => false, 'error' => 'Element disappeared'],
@@ -458,6 +464,105 @@ it('requires review for budget overruns and disallowed substitutions', function 
     expect($run->refresh()->status)->toBe(AutomationRunStatus::Completed);
 });
 
+it('cannot revive a rejected approval boundary by approving a sibling', function () {
+    $workspace = m6Workspace(['Milk']);
+    $claimed = m6Connection($workspace);
+    $run = m6Run($workspace, $claimed['connection']);
+    $run->update(['status' => AutomationRunStatus::AwaitingApproval]);
+    $step = $run->steps()->create([
+        'team_id' => $run->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::AwaitingApproval,
+        'actions' => [['type' => 'click', 'x' => 10, 'y' => 10]],
+    ]);
+    $approvals = collect(['first', 'second'])->map(fn (string $kind) => $run->approvals()->create([
+        'team_id' => $run->team_id,
+        'automation_step_id' => $step->id,
+        'risk_kind' => $kind,
+        'proposed_action' => 'Continue',
+        'consequence' => 'The browser will act in the selected tab.',
+        'status' => AutomationApprovalStatus::Pending,
+        'expires_at' => now()->addMinutes(15),
+    ]));
+
+    app(DecideAutomationApproval::class)->handle($approvals->first(), $workspace['user'], false);
+
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Takeover)
+        ->and($step->refresh()->status)->toBe(AutomationStepStatus::Failed)
+        ->and($approvals->last()->refresh()->status)->toBe(AutomationApprovalStatus::Expired);
+
+    app(DecideAutomationApproval::class)->handle($approvals->last(), $workspace['user'], true);
+
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Takeover)
+        ->and($step->refresh()->status)->toBe(AutomationStepStatus::Failed);
+});
+
+it('scopes step claims to the selected run and allows only one active run per connection', function () {
+    $workspace = m6Workspace(['Milk']);
+    $firstConnection = m6Connection($workspace);
+    $secondConnection = m6Connection($workspace);
+    $firstRun = m6Run($workspace, $firstConnection['connection']);
+    $secondRun = m6Run($workspace, $secondConnection['connection'], 'coles');
+    $firstRun->update(['status' => AutomationRunStatus::Executing]);
+    $secondRun->update(['status' => AutomationRunStatus::Executing]);
+    $firstStep = $firstRun->steps()->create([
+        'team_id' => $firstRun->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::Ready,
+        'actions' => [['type' => 'click', 'x' => 1, 'y' => 1]],
+    ]);
+    $secondStep = $secondRun->steps()->create([
+        'team_id' => $secondRun->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::Ready,
+        'actions' => [['type' => 'click', 'x' => 2, 'y' => 2]],
+    ]);
+
+    $this->withHeader('X-Chef-Connection-Token', $secondConnection['token'])
+        ->getJson("/api/extension/runs/{$secondRun->uuid}/steps/next")
+        ->assertOk()
+        ->assertJsonPath('step.id', $secondStep->id)
+        ->assertJsonPath('step.run_uuid', $secondRun->uuid);
+
+    expect($firstStep->refresh()->status)->toBe(AutomationStepStatus::Ready)
+        ->and($secondStep->refresh()->status)->toBe(AutomationStepStatus::Executing)
+        ->and(fn () => app(ClaimNextAutomationStep::class)->handle($firstConnection['connection'], $secondRun))
+        ->toThrow(AuthorizationException::class);
+
+    $this->withHeader('X-Chef-Connection-Token', $firstConnection['token'])
+        ->getJson("/api/extension/runs/{$secondRun->uuid}/steps/next")
+        ->assertNotFound();
+
+    expect(fn () => m6Run($workspace, $firstConnection['connection'], 'coles'))
+        ->toThrow(ValidationException::class);
+});
+
+it('validates every supported computer action payload before creating browser work', function () {
+    $policy = app(ComputerActionPolicy::class);
+    $policy->assertAllowed([
+        ['type' => 'click', 'x' => 1, 'y' => 2],
+        ['type' => 'double_click', 'x' => 1, 'y' => 2],
+        ['type' => 'move', 'x' => 1, 'y' => 2],
+        ['type' => 'scroll', 'x' => 1, 'y' => 2, 'scroll_x' => 0, 'scroll_y' => 500],
+        ['type' => 'type', 'text' => 'milk'],
+        ['type' => 'wait', 'duration_ms' => 500],
+        ['type' => 'keypress', 'keys' => ['ENTER']],
+        ['type' => 'drag', 'path' => [['x' => 1, 'y' => 2], ['x' => 3, 'y' => 4]]],
+        ['type' => 'screenshot'],
+    ]);
+
+    foreach ([
+        [['type' => 'scroll', 'scroll_x' => INF, 'scroll_y' => 10]],
+        [['type' => 'wait', 'duration_ms' => 10_001]],
+        [['type' => 'keypress', 'keys' => []]],
+        [['type' => 'drag', 'path' => [['x' => 1, 'y' => 2]]]],
+        [['type' => 'type', 'text' => ['not', 'text']]],
+        [['type' => 'click', 'x' => -1, 'y' => 2]],
+    ] as $actions) {
+        expect(fn () => $policy->assertAllowed($actions))->toThrow(ValidationException::class);
+    }
+});
+
 it('uses the current Responses computer protocol without exposing the key to the extension', function () {
     $workspace = m6Workspace(['Milk']);
     $claimed = m6Connection($workspace);
@@ -523,9 +628,8 @@ it('uses the current Responses computer protocol without exposing the key to the
 
 it('loads recorded Woolworths and Coles continuations without live retailer or OpenAI calls', function () {
     $workspace = m6Workspace();
-    $claimed = m6Connection($workspace);
-    $woolworths = m6Run($workspace, $claimed['connection']);
-    $coles = m6Run($workspace, $claimed['connection'], 'coles');
+    $woolworths = m6Run($workspace, m6Connection($workspace)['connection']);
+    $coles = m6Run($workspace, m6Connection($workspace)['connection'], 'coles');
     $fake = app(FakeComputerUseEngine::class)
         ->loadFixture(base_path('tests/Fixtures/computer-use/woolworths.json'))
         ->loadFixture(base_path('tests/Fixtures/computer-use/coles.json'));
@@ -556,6 +660,9 @@ it('expires retained screenshots and pending approvals', function () {
         'status' => AutomationApprovalStatus::Pending,
         'expires_at' => now()->subMinute(),
     ]);
+    $run->update(['status' => AutomationRunStatus::AwaitingApproval]);
+    $step->update(['status' => AutomationStepStatus::AwaitingApproval]);
+    Event::fake([AutomationRunUpdated::class]);
 
     $result = app(ExpireAutomationArtifacts::class)->handle();
 
@@ -563,7 +670,85 @@ it('expires retained screenshots and pending approvals', function () {
         ->and($result['approvals'])->toBe(1)
         ->and($step->refresh()->screenshot_path)->toBeNull()
         ->and(Storage::disk('local')->exists('automation/old.png'))->toBeFalse()
-        ->and($approval->refresh()->status)->toBe(AutomationApprovalStatus::Expired);
+        ->and($approval->refresh()->status)->toBe(AutomationApprovalStatus::Expired)
+        ->and($step->status)->toBe(AutomationStepStatus::Failed)
+        ->and($run->refresh()->status)->toBe(AutomationRunStatus::Takeover)
+        ->and($run->pause_reason)->toContain('approval expired');
+    Event::assertDispatched(AutomationRunUpdated::class, fn (AutomationRunUpdated $event) => $event->run->is($run));
+});
+
+it('allows only owners to manage browser integrations and revocation closes active work', function () {
+    $workspace = m6Workspace(['Milk']);
+    $claimed = m6Connection($workspace);
+    $member = User::factory()->create();
+    $workspace['team']->memberships()->create(['user_id' => $member->id, 'role' => TeamRole::Member]);
+    $member->update(['current_team_id' => $workspace['team']->id]);
+    $admin = User::factory()->create();
+    $workspace['team']->memberships()->create(['user_id' => $admin->id, 'role' => TeamRole::Admin]);
+    $admin->update(['current_team_id' => $workspace['team']->id]);
+    $run = m6Run($workspace, $claimed['connection']);
+    $run->update(['status' => AutomationRunStatus::AwaitingApproval]);
+    $step = $run->steps()->create([
+        'team_id' => $run->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::AwaitingApproval,
+        'actions' => [['type' => 'click', 'x' => 1, 'y' => 1]],
+    ]);
+    $approval = $run->approvals()->create([
+        'team_id' => $run->team_id,
+        'automation_step_id' => $step->id,
+        'risk_kind' => 'test',
+        'proposed_action' => 'Continue',
+        'consequence' => 'Continue in the selected retailer tab.',
+        'status' => AutomationApprovalStatus::Pending,
+        'expires_at' => now()->addMinutes(15),
+    ]);
+
+    expect($workspace['user']->can('update', $claimed['connection']))->toBeTrue()
+        ->and($admin->can('update', $claimed['connection']))->toBeFalse()
+        ->and($member->can('update', $claimed['connection']))->toBeFalse()
+        ->and(fn () => app(CreateBrowserPairing::class)->handle($workspace['team'], $member))
+        ->toThrow(AuthorizationException::class);
+
+    $this->withoutVite();
+    $this->actingAs($member)
+        ->get(route('meal-plans.shopping.show', $workspace['plan']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('workspace.automation.can_manage_integrations', false));
+
+    Event::fake([AutomationRunUpdated::class]);
+    app(RevokeBrowserConnection::class)
+        ->handle($claimed['connection'], $workspace['user']);
+
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Cancelled)
+        ->and($step->refresh()->status)->toBe(AutomationStepStatus::Failed)
+        ->and($approval->refresh()->status)->toBe(AutomationApprovalStatus::Expired)
+        ->and($run->error_code)->toBe('browser_revoked');
+    Event::assertDispatched(AutomationRunUpdated::class, fn (AutomationRunUpdated $event) => $event->run->is($run));
+});
+
+it('closes active work when a paired browser connection expires', function () {
+    $workspace = m6Workspace(['Milk']);
+    $claimed = m6Connection($workspace);
+    $run = m6Run($workspace, $claimed['connection']);
+    $run->update(['status' => AutomationRunStatus::Executing]);
+    $step = $run->steps()->create([
+        'team_id' => $run->team_id,
+        'sequence' => 0,
+        'status' => AutomationStepStatus::Ready,
+        'actions' => [['type' => 'click', 'x' => 1, 'y' => 1]],
+    ]);
+    $claimed['connection']->update(['expires_at' => now()->subMinute()]);
+    Event::fake([AutomationRunUpdated::class]);
+
+    $result = app(ExpireAutomationArtifacts::class)->handle();
+
+    expect($result['connections'])->toBe(1)
+        ->and($claimed['connection']->refresh()->status)->toBe(BrowserConnectionStatus::Expired)
+        ->and($run->refresh()->status)->toBe(AutomationRunStatus::Cancelled)
+        ->and($run->error_code)->toBe('browser_connection_expired')
+        ->and($step->refresh()->status)->toBe(AutomationStepStatus::Failed);
+    Event::assertDispatched(AutomationRunUpdated::class, fn (AutomationRunUpdated $event) => $event->run->is($run));
 });
 
 it('hands stalled extension work back for review instead of leaving a hanging step', function () {

@@ -373,7 +373,8 @@ M6 implementation evidence recorded 17 July 2026:
   controls and explicit approval/reconciliation at 390 × 844. Extension policy
   checks pass four scenarios.
 - Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, the
-  Astro marketing build, and React Doctor pass; React Doctor reports 100/100.
+  Astro marketing build, and the then-current React Doctor changed-scope scan
+  passed at original acceptance.
 - Current public Woolworths and Coles sessions were inspected at their live
   origins. Both expose the expected product search, retailer product, cart or
   trolley, account, address, and delivery controls. Search reached current 2 L
@@ -386,6 +387,33 @@ M6 implementation evidence recorded 17 July 2026:
   moved explicitly to M9 and remains truthful release work rather than being
   recorded as a test that was run. Chef will not store or request retailer
   credentials for that check.
+
+M6 adversarial audit remediation recorded 17 July 2026:
+
+- Approval decisions now lock the run before individual approvals. Rejecting or
+  expiring one decision invalidates every pending sibling and browser step, moves
+  the run to manual takeover, and cannot be reversed by a stale approval click.
+- Every extension claim is scoped to the attached run UUID, and each browser
+  connection permits one active run. The local policy also verifies the returned
+  run UUID and selected tab before every action and throughout waits, preventing
+  hidden-tab continuation or work from another shopping list.
+- Server and extension policies validate the complete payload for click, double
+  click, move, scroll, type, wait, keypress, drag, and screenshot actions with
+  bounded coordinates, text, duration, keys, and path sizes.
+- Approval, run, browser-revocation, and browser-expiry lifecycle paths close
+  pending steps and approvals together and broadcast the resulting state rather
+  than leaving a hanging workspace.
+- Browser integrations now follow the documented owner-managed permission
+  boundary. Members can use an already-authorised connection for shopping but
+  cannot create or revoke it. Pending pairing state polls until the extension is
+  active, uses the new connection immediately, and shows its actual expiry time.
+- Twenty-nine focused M6 backend scenarios pass with 162 assertions, and six
+  extension policy scenarios pass. The full Composer and coverage gates pass
+  212 backend tests with 1,158 assertions at 86.2% application coverage. All 25
+  browser journeys pass with 209 assertions.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, the
+  Astro marketing build, npm audit, and Composer audit pass. React Doctor 0.7.8
+  reports 100/100 with no findings for the changed React surface.
 
 ## M7 — Native voice experience
 

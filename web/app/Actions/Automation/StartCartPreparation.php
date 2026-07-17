@@ -73,6 +73,14 @@ class StartCartPreparation
                 return $existing;
             }
 
+            if ($connection->automationRuns()
+                ->whereNotIn('status', [AutomationRunStatus::Completed, AutomationRunStatus::Failed, AutomationRunStatus::Cancelled, AutomationRunStatus::Expired])
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'browser_connection' => 'Finish or cancel the active cart preparation before using this browser for another list.',
+                ]);
+            }
+
             $planBudget = Budget::query()->where('meal_plan_id', $shoppingList->meal_plan_id)->first();
             $householdBudget = Budget::query()->where('team_id', $shoppingList->team_id)->whereNull('meal_plan_id')->latest()->first();
             $preferences = $shoppingList->team->productPreferences()

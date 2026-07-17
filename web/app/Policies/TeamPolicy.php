@@ -28,6 +28,11 @@ class TeamPolicy
         return $this->role($user, $team) === TeamRole::Owner;
     }
 
+    public function manageIntegrations(User $user, Team $team): bool
+    {
+        return $this->role($user, $team) === TeamRole::Owner;
+    }
+
     private function role(User $user, Team $team): ?TeamRole
     {
         $membership = $user->memberships()->whereBelongsTo($team)->first();

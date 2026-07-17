@@ -14,7 +14,7 @@ Route::prefix('extension')->group(function () {
     Route::middleware(['browser-connection', 'throttle:120,1'])->group(function () {
         Route::get('runs/awaiting', AwaitingAutomationRunController::class);
         Route::post('runs/{run}/attach', AutomationTabController::class);
-        Route::get('steps/next', NextAutomationStepController::class);
+        Route::get('runs/{run}/steps/next', NextAutomationStepController::class);
         Route::get('steps/{step}/control', AutomationStepControlController::class);
         Route::post('steps/{step}/result', AutomationStepResultController::class);
     });

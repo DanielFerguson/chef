@@ -12,28 +12,29 @@ use Illuminate\Support\Facades\DB;
 
 class ClaimNextAutomationStep
 {
-    public function handle(BrowserConnection $connection): ?AutomationStep
+    public function handle(BrowserConnection $connection, AutomationRun $run): ?AutomationStep
     {
-        return DB::transaction(function () use ($connection): ?AutomationStep {
+        return DB::transaction(function () use ($connection, $run): ?AutomationStep {
+            $run = AutomationRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
+
+            if ($run->browser_connection_id !== $connection->id || $run->team_id !== $connection->team_id) {
+                throw new AuthorizationException('This browser cannot claim work for that automation run.');
+            }
+
+            if ($run->status !== AutomationRunStatus::Executing || $run->expires_at->isPast()) {
+                return null;
+            }
+
             $step = AutomationStep::query()
-                ->where('team_id', $connection->team_id)
+                ->where('automation_run_id', $run->id)
+                ->where('team_id', $run->team_id)
                 ->where('status', AutomationStepStatus::Ready)
-                ->whereHas('automationRun', fn ($query) => $query
-                    ->where('browser_connection_id', $connection->id)
-                    ->where('status', AutomationRunStatus::Executing)
-                    ->where('expires_at', '>', now()))
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->first();
 
             if ($step === null) {
                 return null;
-            }
-
-            $run = AutomationRun::query()->whereKey($step->automation_run_id)->lockForUpdate()->firstOrFail();
-
-            if ($run->browser_connection_id !== $connection->id) {
-                throw new AuthorizationException('This browser cannot claim the automation step.');
             }
 
             $step->update(['status' => AutomationStepStatus::Executing]);
