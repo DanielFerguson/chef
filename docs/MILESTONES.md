@@ -478,22 +478,34 @@ M7 acceptance evidence recorded 17 July 2026:
 
 Status: `[ ]`
 
-- [ ] Decide and validate the production database and hosting topology.
-- [ ] Add production queues, scheduling, broadcasting, object storage, and backups.
+- [x] Decide and encode the production database and hosting topology.
+- [x] Add production queue, scheduler, broadcasting, object-storage, and backup
+  contracts plus machine-verifiable database/cache/storage/worker/scheduler
+  probes.
+- [ ] Provision staging and production in the encoded topology and pass the
+  deployed probes, broadcast, mail, and monitoring checks.
 - [x] Add error reporting, product analytics, AI usage metrics, and automation audit visibility.
 - [x] Establish screenshot and conversation retention controls.
-- [ ] Complete privacy policy, terms, account export, team deletion, and consent management.
+- [x] Implement public privacy/terms pages, account export, team deletion, and
+  consent management.
+- [ ] Finalise the legal entity, contact, processing-country and support values,
+  approve the privacy policy and terms, and prove data controls in production.
 - [x] Complete accessibility review for onboarding, planning, shopping, and cooking.
 - [x] Test desktop and mobile-width core journeys.
 - [x] Test slow, interrupted, failed, and rate-limited AI workflows.
 - [x] Add abuse controls, quotas, rate limits, and cost ceilings.
 - [x] Conduct a security and tenancy review.
-- [ ] Validate backups and document restoration.
+- [x] Document the isolated managed-backup restoration procedure, objectives,
+  reconciliation requirements, and signed evidence gate.
+- [ ] Restore a real managed backup, reconcile it, prove same-team access and
+  cross-team denial, and record recovery point/time evidence.
 - [x] Prepare onboarding help, support flow, release notes, and public landing page.
 - [ ] Run a private family beta and close all release-blocking findings.
 - [ ] Validate signed-in Woolworths and Coles extension handoffs using dedicated test or consenting beta accounts; prove account cart persistence, selected-store context, safe pause/takeover, and the boundary before checkout.
 - [ ] Validate native voice with a real microphone and Realtime provider session; prove permission revocation, interruption, reconnect, mute, and typed fallback.
 - [ ] Re-run every earlier milestone item deferred from local or fixture evidence in the production-like environment and link its evidence before release approval.
+- [ ] Pass `chef:release:approve` against the exact production candidate and
+  store its signed content-free evidence digest and output.
 - [ ] Tag and publish version 1.
 
 Code-level evidence:
