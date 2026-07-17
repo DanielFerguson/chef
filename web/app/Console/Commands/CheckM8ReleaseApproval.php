@@ -2,11 +2,10 @@
 
 namespace App\Console\Commands;
 
-use App\Support\ApplicationReadiness;
 use App\Support\M8LaunchEvidence;
 use App\Support\ReleaseReadiness;
+use App\Support\ReleaseRuntimeProbe;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
 use JsonException;
 use Throwable;
 
@@ -16,17 +15,16 @@ class CheckM8ReleaseApproval extends Command
 
     protected $description = 'Fail unless the deployed release and every M8 launch gate are proven';
 
-    public function handle(ReleaseReadiness $release, ApplicationReadiness $application, M8LaunchEvidence $evidence): int
+    public function handle(ReleaseReadiness $release, ReleaseRuntimeProbe $runtime, M8LaunchEvidence $evidence): int
     {
         $failures = $release->configurationFailures();
-        $readiness = $application->inspect();
+        $readiness = $runtime->inspect();
 
         foreach ($readiness['failures'] as $component) {
-            $failures[] = ['key' => "probe.{$component}", 'message' => ucfirst($component).' probe failed.'];
-        }
-
-        if (! $this->objectStorageProbe()) {
-            $failures[] = ['key' => 'probe.object_storage', 'message' => 'Object storage write/read/delete probe failed.'];
+            $failures[] = [
+                'key' => "probe.{$component}",
+                'message' => str($component)->replace('_', ' ')->ucfirst().' probe failed.',
+            ];
         }
 
         try {
@@ -40,6 +38,7 @@ class CheckM8ReleaseApproval extends Command
             $this->line((string) json_encode([
                 'eligible_to_tag' => $failures === [],
                 'release' => config('app.release'),
+                'probes' => $readiness['components'],
                 'failures' => $failures,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         } elseif ($failures === []) {
@@ -53,21 +52,6 @@ class CheckM8ReleaseApproval extends Command
         }
 
         return $failures === [] ? self::SUCCESS : self::FAILURE;
-    }
-
-    private function objectStorageProbe(): bool
-    {
-        try {
-            $path = '_health/release-approval-'.str()->uuid().'.txt';
-            $disk = Storage::disk((string) config('filesystems.default'));
-            $stored = $disk->put($path, 'chef-release-approval-probe');
-            $readable = $stored && $disk->get($path) === 'chef-release-approval-probe';
-            $deleted = $disk->delete($path);
-
-            return $readable && $deleted;
-        } catch (Throwable) {
-            return false;
-        }
     }
 
     /** @return array<string, mixed> */

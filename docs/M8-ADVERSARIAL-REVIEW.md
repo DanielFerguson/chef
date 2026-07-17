@@ -1,6 +1,6 @@
 # M8 adversarial launch review
 
-Reviewed 17 July 2026 after the full local M8 gate. The code-level candidate has
+Reviewed 17–18 July 2026 after the full local M8 gate. The code-level candidate has
 no known critical or high-severity application defect, but version 1 is **not
 ready to publish** because external launch evidence remains deliberately
 unchecked.
@@ -35,9 +35,10 @@ unchecked.
 7. **External gates were documentation-only:** a release owner could tag a
    deployment without a machine check tying evidence to the exact release.
    `chef:release:approve` now requires fresh, measured, content-free evidence
-   for every external gate, a live database/cache/object-storage probe, and a
-   valid HMAC signature. Waivers, fixtures, arbitrary notes, query-string
-   secrets, stale evidence, missed thresholds, and post-signing edits fail.
+   for every external gate, live database/cache/object-storage/worker/scheduler
+   probes, and a valid HMAC signature. Waivers, fixtures, arbitrary notes,
+   query-string secrets, stale evidence, missed thresholds, and post-signing
+   edits fail.
 8. **The production topology could redefine itself:** `CHEF_RELEASE_*`
    variables allowed an environment to make SQLite, sync queues, file sessions,
    null broadcasting, or local storage look like the expected production
@@ -62,13 +63,21 @@ unchecked.
 13. **The full gate could fail across midnight:** one fourteen-day M3 test
     recalculated `today()` for each slot. It now uses the persisted plan start,
     removing the date-boundary flake without weakening the domain rule.
+14. **Worker and scheduler evidence was self-reported:** the manifest required
+    both components, but the release command proved only database, cache, and
+    object storage. The scheduler now records a shared-cache heartbeat every
+    minute and dispatches a no-risk job; release checks perform their own
+    tokenised queue round-trip, reject a heartbeat older than three minutes,
+    clean temporary probe state, and expose per-component JSON results. Final
+    approval cannot pass if either runtime component is missing or stale.
 
 ## Open launch blockers
 
 1. **Infrastructure and recovery:** provision staging/production in the chosen
-   Sydney topology, pass `chef:release:check --probe`, prove Nightwatch web and
-   worker traces/alerts, verify private object storage, and restore a managed
-   MySQL backup into an isolated environment.
+   Sydney topology, pass `chef:release:check --probe --json` including its real
+   queue round-trip and scheduler heartbeat, prove Nightwatch web and worker
+   traces/alerts, and restore a managed MySQL backup into an isolated
+   environment.
 2. **Final public configuration:** supply the actual app origin, operating legal
    entity, postal contact, support email, processing countries/subprocessor
    assessment, approved OpenAI token prices, and legal approval of the privacy

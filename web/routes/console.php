@@ -27,5 +27,6 @@ Artisan::command('privacy:expire-operational-events', function (ExpireOperationa
 })->purpose('Delete operational metrics and audit events older than the configured retention period');
 
 Schedule::command('automation:expire')->everyMinute()->withoutOverlapping()->onOneServer();
+Schedule::command('chef:release:heartbeat')->everyMinute()->withoutOverlapping(5)->onOneServer();
 Schedule::command('privacy:expire-conversations')->dailyAt('02:00')->withoutOverlapping()->onOneServer();
 Schedule::command('privacy:expire-operational-events')->dailyAt('02:15')->withoutOverlapping()->onOneServer();

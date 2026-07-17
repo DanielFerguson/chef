@@ -8,8 +8,8 @@ or private-beta gates ran.
 
 | Gate | Result |
 | --- | --- |
-| `composer test` | Passed: 248 tests, 1,435 assertions; Pint and PHPStan clean. |
-| `composer test:coverage` | Passed: 248 tests, 1,435 assertions; 86.5% application coverage (minimum 75%). |
+| `composer test` | Passed: 255 tests, 1,456 assertions; Pint and PHPStan clean. |
+| `composer test:coverage` | Passed: 255 tests, 1,456 assertions; 86.7% application coverage (minimum 75%). |
 | `composer test:browser` | Passed: 29 browser tests, 243 assertions across desktop and 390×844 journeys. |
 | Frontend format, ESLint, TypeScript, production build | Passed. |
 | React Doctor | 100/100, no issues in changed React code. |
@@ -19,6 +19,7 @@ or private-beta gates ran.
 | `composer audit --locked` | No security vulnerability advisories. |
 | `npm audit --audit-level=high` | 0 vulnerabilities. |
 | `bun audit --audit-level=high` | No vulnerabilities. |
+| Release runtime probe | Passed in focused tests for database, cache, object-storage cleanup, queue round-trip, and scheduler freshness; negative tests reject a non-processing queue and stale scheduler. A live local database-queue worker also returned all five component probes as `true`; the real Redis/S3 deployment result remains pending. |
 
 The CI workflow now requires backend coverage and Composer audit, MySQL 8.4
 portability, frontend build and npm audit, strict marketing build and Bun audit,
@@ -38,6 +39,14 @@ The public `/start` handoff now routes guests to registration and authenticated
 households to the dashboard. The full gate also exposed a midnight-only M3 test
 flake caused by recalculating `today()` while constructing a fourteen-day plan;
 the test now derives every slot from the persisted plan start date.
+
+The release runtime probe now emits component-level JSON, dispatches a unique
+no-risk job through the configured `default` queue, and requires the scheduled
+shared-cache heartbeat to be no more than three minutes old. Final approval
+re-runs these checks, so signed evidence cannot conceal a stopped worker or
+scheduler. The focused sync-queue coverage and an actual local database-worker
+round-trip prove the protocol; staging and production must still prove it
+through Redis worker compute and private S3-compatible storage.
 
 ## Accessibility and responsive evidence
 

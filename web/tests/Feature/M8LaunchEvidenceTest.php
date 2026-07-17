@@ -1,7 +1,7 @@
 <?php
 
-use App\Support\ApplicationReadiness;
 use App\Support\M8LaunchEvidence;
+use App\Support\ReleaseRuntimeProbe;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
 
@@ -208,9 +208,19 @@ it('signs a valid manifest and approves only the exact ready deployment', functi
     $this->app->detectEnvironment(fn () => 'production');
     Storage::fake('s3');
 
-    $readiness = Mockery::mock(ApplicationReadiness::class);
-    $readiness->shouldReceive('inspect')->once()->andReturn(['ready' => true, 'failures' => []]);
-    $this->app->instance(ApplicationReadiness::class, $readiness);
+    $runtime = Mockery::mock(ReleaseRuntimeProbe::class);
+    $runtime->shouldReceive('inspect')->once()->andReturn([
+        'ready' => true,
+        'components' => [
+            'database' => true,
+            'cache' => true,
+            'object_storage' => true,
+            'queue_worker' => true,
+            'scheduler' => true,
+        ],
+        'failures' => [],
+    ]);
+    $this->app->instance(ReleaseRuntimeProbe::class, $runtime);
 
     $unsignedPath = tempnam(sys_get_temp_dir(), 'chef-m8-unsigned-');
     $signedPath = tempnam(sys_get_temp_dir(), 'chef-m8-signed-');
@@ -224,6 +234,34 @@ it('signs a valid manifest and approves only the exact ready deployment', functi
     $this->artisan('chef:release:approve', ['manifest' => $signedPath])
         ->expectsOutput('Chef M8 evidence is complete. This exact deployment is eligible for the version 1 tag.')
         ->assertSuccessful();
+});
+
+it('refuses final approval when the live queue worker probe fails', function () {
+    configureM8ProductionRelease();
+    $this->app->detectEnvironment(fn () => 'production');
+
+    $runtime = Mockery::mock(ReleaseRuntimeProbe::class);
+    $runtime->shouldReceive('inspect')->once()->andReturn([
+        'ready' => false,
+        'components' => [
+            'database' => true,
+            'cache' => true,
+            'object_storage' => true,
+            'queue_worker' => false,
+            'scheduler' => true,
+        ],
+        'failures' => ['queue_worker'],
+    ]);
+    $this->app->instance(ReleaseRuntimeProbe::class, $runtime);
+
+    $manifest = m8LaunchManifest();
+    $manifest['signature'] = app(M8LaunchEvidence::class)->sign($manifest);
+    $path = tempnam(sys_get_temp_dir(), 'chef-m8-runtime-failure-');
+    file_put_contents($path, json_encode($manifest, JSON_THROW_ON_ERROR));
+
+    $this->artisan('chef:release:approve', ['manifest' => $path])
+        ->expectsOutputToContain('Queue worker probe failed.')
+        ->assertFailed();
 });
 
 it('cannot redefine the encoded production topology through environment expectations', function () {

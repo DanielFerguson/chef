@@ -99,7 +99,10 @@ Valkey, private object storage, managed Reverb, dedicated worker compute, the
 Laravel scheduler, and Nightwatch. The application retains ordinary Eloquent,
 queue, cache, filesystem, and broadcast contracts rather than binding domain
 code to the hosting vendor. The exact topology and release probe are documented
-in `docs/operations/PRODUCTION.md`.
+in `docs/operations/PRODUCTION.md`. The scheduler records a shared-cache
+heartbeat every minute and dispatches a no-risk job; release approval also
+performs a tokenised queue round-trip, so a configured Redis connection cannot
+be mistaken for a functioning scheduler or worker.
 
 ## Product language and tenancy
 

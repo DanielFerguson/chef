@@ -2,44 +2,30 @@
 
 namespace App\Console\Commands;
 
-use App\Support\ApplicationReadiness;
 use App\Support\ReleaseReadiness;
+use App\Support\ReleaseRuntimeProbe;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 class CheckReleaseReadiness extends Command
 {
-    protected $signature = 'chef:release:check {--probe : Probe the configured database, cache, and object storage} {--json : Emit machine-readable JSON}';
+    protected $signature = 'chef:release:check {--probe : Probe database, cache, object storage, queue worker, and scheduler} {--json : Emit machine-readable JSON}';
 
     protected $description = 'Fail unless Chef is configured for a production release';
 
-    public function handle(ReleaseReadiness $release, ApplicationReadiness $application): int
+    public function handle(ReleaseReadiness $release, ReleaseRuntimeProbe $runtime): int
     {
         $failures = $release->configurationFailures();
+        $probes = null;
 
         if ($this->option('probe')) {
-            $readiness = $application->inspect();
+            $readiness = $runtime->inspect();
+            $probes = $readiness['components'];
 
             foreach ($readiness['failures'] as $component) {
                 $failures[] = [
                     'key' => "probe.{$component}",
-                    'message' => ucfirst($component).' probe failed.',
+                    'message' => str($component)->replace('_', ' ')->ucfirst().' probe failed.',
                 ];
-            }
-
-            try {
-                $path = '_health/release-'.str()->uuid().'.txt';
-                $disk = Storage::disk((string) config('filesystems.default'));
-                $stored = $disk->put($path, 'chef-release-probe');
-                $readable = $stored && $disk->get($path) === 'chef-release-probe';
-                $disk->delete($path);
-
-                if (! $readable) {
-                    throw new \RuntimeException('Object storage did not return the probe.');
-                }
-            } catch (Throwable) {
-                $failures[] = ['key' => 'probe.object_storage', 'message' => 'Object storage write/read/delete probe failed.'];
             }
         }
 
@@ -47,6 +33,7 @@ class CheckReleaseReadiness extends Command
             $this->line((string) json_encode([
                 'ready' => $failures === [],
                 'release' => config('app.release'),
+                'probes' => $probes,
                 'failures' => $failures,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         } elseif ($failures === []) {

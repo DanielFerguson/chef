@@ -94,7 +94,7 @@ in object storage.
 Run these from the deployed environment after every candidate deployment:
 
 ```shell
-php artisan chef:release:check --probe
+php artisan chef:release:check --probe --json
 php artisan migrate:status
 php artisan schedule:list
 php artisan queue:monitor automation,ai,default --max=100
@@ -104,9 +104,13 @@ Then verify:
 
 1. `/up` returns 200 for process health and `/ready` returns 200 for database
    and cache readiness.
-2. A deliberately queued no-risk job is processed by worker compute.
+2. The release probe reports `true` for database, cache, object storage,
+   queue worker, and scheduler. The queue result is a tokenised no-risk job
+   processed on `default`; the scheduler result requires the
+   `chef:release:heartbeat` record to be no more than three minutes old.
 3. A private team broadcast is received only by a current team member.
-4. A temporary private object can be written, read, and deleted.
+4. Confirm the temporary private probe object was deleted; a failed probe also
+   attempts cleanup and reports only the component name.
 5. Nightwatch receives one web request and one queued job trace without message
    contents, screenshots, API keys, or retailer credentials.
 6. The backup/restore drill in `RESTORE.md` has current evidence.
@@ -126,8 +130,9 @@ php artisan chef:release:approve /private/m8-evidence.signed.json
 The topology requirements are application constants rather than environment
 expectations, so deployment configuration cannot redefine MySQL/Redis/Reverb/S3
 requirements to make an unsafe local driver pass. The approval command always
-re-probes database, cache, and object storage and refuses stale, waived,
-unsigned, tampered, wrong-release, or wrong-origin external evidence.
+re-probes database, cache, object storage, the queue worker, and scheduler and
+refuses stale, waived, unsigned, tampered, wrong-release, or wrong-origin
+external evidence.
 
 ## Public marketing build
 

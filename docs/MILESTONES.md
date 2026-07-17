@@ -498,7 +498,7 @@ Status: `[ ]`
 
 Code-level evidence:
 
-- `docs/M8-VERIFICATION.md` records 248 passing application tests, 86.5%
+- `docs/M8-VERIFICATION.md` records 255 passing application tests, 86.7%
   coverage, 29 passing browser tests across desktop and 390×844, clean static
   and frontend gates, React Doctor 100/100, extension policy checks, and clean
   Composer/npm/Bun vulnerability audits.
@@ -506,6 +506,10 @@ Code-level evidence:
   frontend build/audit, strict marketing production build, deterministic
   extension package, and browser suite. The signed approval manifest requires
   all hosted jobs plus working marketing `/start` and `/login` probes.
+- The deployed release probe now proves database, cache, private object storage,
+  an actual default-queue worker round-trip, and a scheduler heartbeat less than
+  three minutes old; final approval re-runs all five rather than trusting the
+  manifest booleans.
 - `docs/accessibility/M8-ACCESSIBILITY-REVIEW.md` records the core-journey
   interaction, structure, and responsive review and the defects closed.
 - `docs/security/M8-SECURITY-REVIEW.md` records the security and cross-family

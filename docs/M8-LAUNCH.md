@@ -12,7 +12,9 @@ produced in an authorised production-like environment. `M8` in
 - [x] Valkey, dedicated queue worker, Laravel scheduler, private object storage,
   managed Reverb, and Nightwatch encoded in the production contract.
 - [x] Production configuration and dependency probes implemented by
-  `chef:release:check --probe`.
+  `chef:release:check --probe`; the machine result includes database, cache,
+  private object storage, an on-demand queue-worker round-trip, and a fresh
+  scheduler heartbeat.
 - [x] MySQL migration and test portability added to CI.
 - [x] Required CI jobs enforce backend coverage and Composer audit, MySQL
   portability, frontend build and npm audit, strict marketing build and Bun
@@ -51,8 +53,9 @@ must never be checked from fixtures or a product-owner waiver.
   URLs and targets the tested `/start` and `/login` application handoffs.
 - [ ] Version 1 tag points to the exact approved deployment.
 - [x] Final machine gate implemented with the immutable production contract,
-  live database/cache/object-storage probes, a content-free signed evidence
-  manifest, freshness limits, and measured acceptance thresholds.
+  live database/cache/object-storage/worker/scheduler probes, a content-free
+  signed evidence manifest, freshness limits, and measured acceptance
+  thresholds.
 - [ ] `chef:release:approve` passes on the exact production candidate and its
   signed manifest digest/output are stored in the private release record.
 

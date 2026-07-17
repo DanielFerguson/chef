@@ -2,7 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RecordReleaseQueueProbe;
 use App\Support\ReleaseReadiness;
+use App\Support\ReleaseRuntimeProbe;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class M8ReleaseFoundationTest extends TestCase
@@ -23,6 +28,109 @@ class M8ReleaseFoundationTest extends TestCase
     {
         $this->artisan('chef:release:check')
             ->expectsOutputToContain('Chef release configuration is not ready.')
+            ->assertFailed();
+    }
+
+    public function test_runtime_probe_proves_database_cache_object_storage_queue_and_scheduler(): void
+    {
+        config([
+            'filesystems.default' => 'local',
+            'queue.default' => 'sync',
+            'chef.release.queue_probe_timeout_seconds' => 1,
+            'chef.release.scheduler_heartbeat_max_age_seconds' => 180,
+        ]);
+        Storage::fake('local');
+        Cache::put('chef:release:scheduler-heartbeat', now()->toIso8601String(), now()->addMinutes(10));
+
+        $result = app(ReleaseRuntimeProbe::class)->inspect();
+
+        $this->assertTrue($result['ready']);
+        $this->assertSame([
+            'database' => true,
+            'cache' => true,
+            'object_storage' => true,
+            'queue_worker' => true,
+            'scheduler' => true,
+        ], $result['components']);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_runtime_probe_rejects_a_stale_scheduler_heartbeat(): void
+    {
+        config([
+            'filesystems.default' => 'local',
+            'queue.default' => 'sync',
+            'chef.release.queue_probe_timeout_seconds' => 1,
+            'chef.release.scheduler_heartbeat_max_age_seconds' => 180,
+        ]);
+        Storage::fake('local');
+        Cache::put('chef:release:scheduler-heartbeat', now()->subMinutes(4)->toIso8601String(), now()->addMinutes(10));
+
+        $result = app(ReleaseRuntimeProbe::class)->inspect();
+
+        $this->assertFalse($result['ready']);
+        $this->assertFalse($result['components']['scheduler']);
+        $this->assertContains('scheduler', $result['failures']);
+    }
+
+    public function test_runtime_probe_rejects_a_queue_that_does_not_process_the_probe(): void
+    {
+        Queue::fake();
+        config([
+            'filesystems.default' => 'local',
+            'chef.release.queue_probe_timeout_seconds' => 1,
+            'chef.release.scheduler_heartbeat_max_age_seconds' => 180,
+        ]);
+        Storage::fake('local');
+        Cache::put('chef:release:scheduler-heartbeat', now()->toIso8601String(), now()->addMinutes(10));
+
+        $result = app(ReleaseRuntimeProbe::class)->inspect();
+
+        $this->assertFalse($result['ready']);
+        $this->assertFalse($result['components']['queue_worker']);
+        $this->assertContains('queue_worker', $result['failures']);
+    }
+
+    public function test_scheduler_heartbeat_dispatches_a_real_queue_job(): void
+    {
+        Queue::fake();
+
+        $this->artisan('chef:release:heartbeat')
+            ->expectsOutput('Chef release heartbeats dispatched.')
+            ->assertSuccessful();
+
+        $this->assertIsString(Cache::get('chef:release:scheduler-heartbeat'));
+        Queue::assertPushed(
+            RecordReleaseQueueProbe::class,
+            fn (RecordReleaseQueueProbe $job): bool => $job->token === null,
+        );
+    }
+
+    public function test_release_heartbeat_is_scheduled_every_minute(): void
+    {
+        $this->artisan('schedule:list')
+            ->expectsOutputToContain('chef:release:heartbeat')
+            ->assertSuccessful();
+    }
+
+    public function test_release_check_reports_runtime_component_failures(): void
+    {
+        $runtime = \Mockery::mock(ReleaseRuntimeProbe::class);
+        $runtime->shouldReceive('inspect')->once()->andReturn([
+            'ready' => false,
+            'components' => [
+                'database' => true,
+                'cache' => true,
+                'object_storage' => true,
+                'queue_worker' => false,
+                'scheduler' => true,
+            ],
+            'failures' => ['queue_worker'],
+        ]);
+        $this->app->instance(ReleaseRuntimeProbe::class, $runtime);
+
+        $this->artisan('chef:release:check', ['--probe' => true])
+            ->expectsOutputToContain('Queue worker probe failed.')
             ->assertFailed();
     }
 

@@ -9,6 +9,8 @@ return [
         'broadcast' => 'reverb',
         'filesystem' => 's3',
         'evidence_key' => env('RELEASE_EVIDENCE_KEY'),
+        'queue_probe_timeout_seconds' => 10,
+        'scheduler_heartbeat_max_age_seconds' => 180,
     ],
 
     'retention' => [

@@ -39,9 +39,10 @@ deployed release.
    ```
 
    This re-runs the immutable production configuration contract, live
-   database/cache/object-storage probes, exact release/origin match, all
-   measured thresholds, and HMAC signature verification. Success means the
-   exact deployment is eligible to tag; it does not create or publish the tag.
+   database/cache/object-storage probes, a tokenised queue-worker round-trip, a
+   scheduler-freshness check, exact release/origin match, all measured
+   thresholds, and HMAC signature verification. Success means the exact
+   deployment is eligible to tag; it does not create or publish the tag.
 8. Record the signed manifest digest, command output, deployment identifier,
    and version tag in the private release record. Tag only the commit named by
    `APP_RELEASE`, then update `docs/M8-LAUNCH.md` and `docs/MILESTONES.md` with
