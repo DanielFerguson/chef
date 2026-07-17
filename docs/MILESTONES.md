@@ -314,21 +314,66 @@ M5 acceptance evidence recorded 17 July 2026:
 
 Status: `[ ]`
 
-- [ ] Implement `AutomationRun`, steps, approvals, browser connections, and reconciliation models.
-- [ ] Implement `ComputerUseEngine` with a fake and recorded fixtures.
-- [ ] Build the permissioned Chrome extension and pairing flow.
-- [ ] Restrict execution to an explicitly selected tab and retailer origins.
-- [ ] Implement the Responses API `computer_call` loop.
-- [ ] Broadcast progress, unresolved matches, substitutions, and failures.
-- [ ] Add pause, cancel, expiry, takeover, and safe resume.
-- [ ] Require approval at defined risk boundaries.
-- [ ] Reconcile intended list items with the prepared cart.
-- [ ] Keep checkout, address changes, authentication, and payment human-controlled.
+- [x] Implement `AutomationRun`, steps, approvals, browser connections, and reconciliation models.
+- [x] Implement `ComputerUseEngine` with a fake and recorded fixtures.
+- [x] Build the permissioned Chrome extension and pairing flow.
+- [x] Restrict execution to an explicitly selected tab and retailer origins.
+- [x] Implement the Responses API `computer_call` loop.
+- [x] Broadcast progress, unresolved matches, substitutions, and failures.
+- [x] Add pause, cancel, expiry, takeover, and safe resume.
+- [x] Require approval at defined risk boundaries.
+- [x] Reconcile intended list items with the prepared cart.
+- [x] Keep checkout, address changes, authentication, and payment human-controlled.
 - [ ] Validate the workflow against real Woolworths and Coles sessions without putting credentials in Chef.
 
 Exit evidence:
 
 - From an approved frozen list, Chef can prepare a reviewable Woolworths or Coles cart in the user's chosen tab, preserve the benefits of the user's retailer account, stop safely when uncertain, and hand control back before checkout.
+
+M6 implementation evidence recorded 17 July 2026:
+
+- Five team-scoped automation records now preserve the paired browser grant,
+  frozen run scope, resumable action steps, just-in-time approvals, and the
+  intended-to-actual cart reconciliation. Policies, current-team route binding,
+  hashed one-time credentials, hard origin checks, and cross-household route and
+  token regressions cover every automation resource.
+- A Chef-owned direct Responses client implements the GA `computer` call and
+  screenshot continuation protocol, including batched actions,
+  `previous_response_id`, explicitly acknowledged safety checks, final JSON
+  reconciliation, a fake engine, and recorded Woolworths and Coles fixtures.
+- The Manifest V3 extension uses `activeTab`, exact retailer and Chef host
+  permissions, one explicitly selected tab, a visible run badge, and a second
+  local allowlist. It never receives the OpenAI key. It refuses hidden-tab
+  screenshots, checks the origin after each action, preserves safe cart/trolley
+  review controls, and blocks checkout, order submission, authentication,
+  address, delivery-slot, and payment controls.
+- The Shopping workspace creates and revokes pairings, freezes a selected list
+  revision and retailer, shows calm live progress, explains approval
+  consequences, and provides pause, cancellation, takeover, safe fresh-state
+  resume, reconciliation, and final handoff controls. Checkout is not exposed as
+  a Chef action.
+- The adversarial review fixed stale safety-check acknowledgements, stale-state
+  resume after manual takeover, cross-tab screenshot capture, leaked screenshots
+  on racing submissions, ineffective computer-use retries, lost extension
+  results that could hang forever, incomplete broadcast payloads, React-controlled
+  input updates, continued action batches after boundary navigation, and a Coles
+  label that combined safe trolley review with the word “checkout”.
+- Twenty-three focused M6 feature scenarios pass with 106 assertions. The full
+  Composer and coverage gates pass 206 backend tests with 1,102 assertions at
+  84.8% application coverage. The complete
+  browser suite passes 25 journeys with 209 assertions, including desktop run
+  controls and explicit approval/reconciliation at 390 × 844. Extension policy
+  checks pass four scenarios.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, the
+  Astro marketing build, and React Doctor pass; React Doctor reports 100/100.
+- Current public Woolworths and Coles sessions were inspected at their live
+  origins. Both expose the expected product search, retailer product, cart or
+  trolley, account, address, and delivery controls. Search reached current 2 L
+  full-cream-milk products at both retailers without transmitting credentials.
+  The anonymous sessions did not retain an add-to-cart mutation without shopping
+  setup, so the final signed-in, unpacked-extension cart run remains the one open
+  M6 exit check. Chef will not store or request the retailer credentials for that
+  check.
 
 ## M7 — Native voice experience
 

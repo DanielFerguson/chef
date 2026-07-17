@@ -465,6 +465,30 @@ Required automation properties:
 - reconciliation of intended and actual products;
 - checkout and payment always performed by the person.
 
+The first implementation uses the GA Responses API `computer` tool through a
+Chef-owned client (default model `gpt-5.6`). Continuations send the browser's
+latest PNG or JPEG as `computer_call_output`, retain the preceding
+`previous_response_id`, and echo only explicitly approved pending safety checks
+as `acknowledged_safety_checks`. Normal tests use `FakeComputerUseEngine` and
+recorded Woolworths and Coles continuations; they never call OpenAI or a
+retailer.
+
+Browser pairing codes are HMAC-hashed and valid for ten minutes. The claimed
+connection token is returned once, stored only as a SHA-256 hash by Chef, and
+expires after thirty days unless revoked earlier. A run freezes the exact list
+revision, intended rows, budget, product matches, substitution preferences,
+retailer, connection, and selected Chrome tab. Screenshots are stored on the
+private local disk, limited to 5 MB, and expire after 24 hours by default.
+
+The extension validates the origin, selected tab, action shapes, and local risk
+boundary again before execution. It requires the selected tab to remain visible
+before taking a screenshot, checks the origin after every action, blocks direct
+checkout/account/payment controls, and stops the remaining batch as soon as a
+takeover URL appears. A missing extension result is treated as uncertain after
+five minutes and handed back for manual review rather than being replayed.
+Resuming after takeover starts a fresh model observation from the re-selected
+retailer tab instead of trusting a stale screenshot or pending action.
+
 ## Collaboration
 
 The first version needs collaborative data, not Google-Docs-level simultaneous editing.
