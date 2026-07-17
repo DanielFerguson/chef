@@ -4,7 +4,7 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestones 0 through 6 are complete. The Laravel 13 React/Inertia application
+Milestones 0 through 7 are complete. The Laravel 13 React/Inertia application
 in `web/` now provides authenticated family tenancy, durable arbitrary-span
 plans and conversations, versioned recipes, streamed Laravel AI SDK responses,
 authorised planning tools, direct calendar and list editing, plan revisions and
@@ -59,8 +59,21 @@ extension. The household retains explicit pause, approval, takeover, and final
 checkout control. Recorded retailer fixtures, anonymous live-origin inspection,
 and the complete automated gates are accepted as the M6 product-development
 boundary; account-backed extension acceptance is intentionally deferred to the
-version 1 production-like release gates. M7 native voice is the next
-implementation milestone.
+version 1 production-like release gates.
+
+M7 adds native voice without creating a second conversation or planning model.
+The React composer establishes a Realtime WebRTC peer through a team-scoped
+Laravel endpoint. The permanent OpenAI key stays on the server, and the session
+receives one narrow `continue_chef_conversation` function. Each spoken turn is
+submitted to the existing `ChefConversationEngine`, so typed and spoken input
+share the same authorised actions, messages, plan revisions, shopping
+artifacts, and recovery rules. `VoiceSession` and `VoiceToolCall` retain the
+session lifecycle, microphone grant and revocation, provider call identity,
+arguments, message links, before/after artifact revisions, status, and safe
+failure detail. Mute, interruption, reconnect, explicit end, live captions,
+and typed fallback are browser concerns; durable household truth remains on the
+server. M8 is the next implementation milestone and retains the real
+microphone/provider acceptance gate.
 
 ## Technical stack
 
@@ -443,11 +456,38 @@ the turn complete instead of showing a false failure.
 
 ## Voice boundary
 
-The browser connects to the OpenAI Realtime API over WebRTC. Laravel creates the session or ephemeral credential using the server-held API key.
+The browser connects to the OpenAI Realtime API over WebRTC through OpenAI's
+unified session interface. It sends its SDP offer to an authenticated,
+team-scoped Laravel route; Laravel forwards the offer and session configuration
+with the server-held API key and returns only the SDP answer and Chef voice
+session identifier. The browser never receives the permanent key.
 
-Realtime tool requests must call authenticated Chef endpoints or a server-side control channel that invokes the same domain actions as the typed agent. Persist the resulting user transcript, assistant response, tool actions, and structured artifacts into Chef's conversation model.
+Realtime receives one required function, `continue_chef_conversation`. Its
+authenticated Chef endpoint verifies the current team, session owner, active
+status, expiry, tool name, provider call identifier, and transcript. The action
+then creates an idempotent voice-attributed user message and runs the existing
+`ChefConversationEngine`; ordinary Chef tools continue to call their existing
+authorised domain actions. The assistant reply and before/after plan and
+shopping revisions are linked to the same `VoiceToolCall`. A completed provider
+call replays its prior result, while an overlapping duplicate returns a
+conflict rather than executing twice.
 
-Voice is an input and response mode, not a separate product state. A plan started by typing can continue by voice and vice versa.
+Realtime input transcription is preferred over the model's function argument
+when available, with the function argument retained as a fallback. The durable
+transcript, response, tool audit, and structured artifacts therefore remain in
+Chef's conversation model. Browser output speaks only the server's returned
+assistant response.
+
+The composer asks for microphone access only after a person opens the voice
+disclosure. It exposes listening, thinking, speaking, reconnecting, muted, and
+error states; VAD interruption, an explicit stop-output control, fresh-session
+reconnect attempts, mute, end/revocation, captions, and the typed composer all
+remain available. Normal tests bind a fake Realtime broker and use a signed,
+test-environment-only active-state seam; they never call OpenAI or request a
+microphone. Real microphone/provider acceptance remains an unchecked M8 gate.
+
+Voice is an input and response mode, not a separate product state. A plan
+started by typing can continue by voice and vice versa.
 
 ## Computer-use boundary
 

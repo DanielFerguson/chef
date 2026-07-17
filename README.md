@@ -8,7 +8,7 @@ Chef is not intended to be another recipe catalogue with an AI chat box attached
 
 ## Status
 
-Milestones 0 through 6 are complete. The Laravel 13 web application under
+Milestones 0 through 7 are complete. The Laravel 13 web application under
 [`web/`](web/) now supports authenticated family tenancy, a durable
 conversational first plan, household people and attributed truth, versioned
 recipes, complete arbitrary-span plans, direct plan controls, and private
@@ -23,7 +23,15 @@ that can never become safety rules. M6 adds a permissioned Woolworths and Coles
 cart-preparation handoff with frozen list scope, explicit approvals,
 reconciliation, pause and takeover controls, and a hard human boundary before
 checkout. Account-backed retailer acceptance is deferred to the version 1
-production-like release gates. M7 native voice is the next product milestone.
+production-like release gates. M7 adds native Realtime WebRTC voice to the
+existing plan conversation: the browser receives audio while Laravel retains
+the permanent provider credential, authorises each turn, invokes the same Chef
+domain actions as typing, and persists the transcript, reply, tool audit, and
+structured plan revision together. Voice includes just-in-time microphone
+disclosure, captions, mute, interruption, reconnect, explicit stop, and an
+always-available typed fallback. Real microphone and provider acceptance
+remains an explicit M8 production-like release check; M8 public hardening is
+the next milestone.
 
 The intended stack is:
 

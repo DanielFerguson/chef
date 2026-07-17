@@ -417,19 +417,62 @@ M6 adversarial audit remediation recorded 17 July 2026:
 
 ## M7 — Native voice experience
 
-Status: `[ ]`
+Status: `[x]`
 
-- [ ] Implement a Laravel endpoint for scoped Realtime session creation.
-- [ ] Connect the React composer to OpenAI Realtime over WebRTC.
-- [ ] Route voice-triggered tools through authorised Chef domain actions.
-- [ ] Persist transcripts, tool actions, and artifacts into the same conversation as typed messages.
-- [ ] Support interruption, reconnect, mute, and graceful typed fallback.
-- [ ] Make microphone permission just-in-time and revocable.
-- [ ] Test voice states without requiring live API calls in the normal suite.
+- [x] Implement a Laravel endpoint for scoped Realtime session creation.
+- [x] Connect the React composer to OpenAI Realtime over WebRTC.
+- [x] Route voice-triggered tools through authorised Chef domain actions.
+- [x] Persist transcripts, tool actions, and artifacts into the same conversation as typed messages.
+- [x] Support interruption, reconnect, mute, and graceful typed fallback.
+- [x] Make microphone permission just-in-time and revocable.
+- [x] Test voice states without requiring live API calls in the normal suite.
 
 Exit evidence:
 
 - A person can begin or continue an existing plan by voice and see the same structured plan updates that typing would produce.
+
+M7 acceptance evidence recorded 17 July 2026:
+
+- One authenticated, team-scoped Laravel route brokers the browser SDP offer to
+  OpenAI's unified Realtime WebRTC endpoint. The permanent API key remains on
+  the server, the session carries a privacy-preserving safety identifier, and
+  the browser receives only the SDP answer, a Chef session UUID, and expiry.
+- Realtime receives one narrow required function. Every spoken turn returns to
+  `ChefConversationEngine`, which invokes the same authorised Laravel AI tools
+  and domain actions used by typing. A deterministic voice turn selected a
+  dinner through the real `SelectPlanMeal` tool, updated the visible plan, and
+  retained voice-attributed user and assistant messages in the existing
+  conversation.
+- `VoiceSession` records scope, owner, model, permission grant/revocation,
+  connection, expiry, failure, and end state. `VoiceToolCall` records the
+  provider call, persisted turn text, linked messages, status, safe
+  failure, and before/after plan and shopping revisions. Completed calls replay
+  idempotently; concurrent duplicates return a conflict and do not create a
+  second message or mutation.
+- The composer provides just-in-time microphone disclosure, captions,
+  listening/thinking/speaking status, mute, VAD and explicit interruption,
+  bounded fresh-session reconnect, end/revocation, safe error copy, and a typed
+  composer that never disappears. Realtime transcription is preferred for the
+  durable turn when available, with the function argument as a fallback.
+- The adversarial review fixed an over-broad browser test seam, a duplicate
+  processing path that could return an internal error, loss of accumulated
+  transcription deltas, unsafe provider-detail exposure risk, and redundant
+  React memoisation. The fake broker, signed test-only active state, failure
+  regression, and narrow-screen disclosure keep normal tests deterministic and
+  free of live provider and microphone access.
+- Nine focused M7 feature and browser scenarios pass with 105 assertions. The
+  full Composer and coverage gates pass 219 tests with 1,243 assertions at
+  86.3% application coverage. The complete browser suite passes 27 journeys
+  with 229 assertions;
+  M7 includes a 390 x 844 disclosure and typed-fallback proof plus desktop
+  active mute, unmute, end, and fallback controls.
+- Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build,
+  isolated SQLite fresh/rollback/reapply, npm audit, and Composer audit pass.
+  React Doctor's changed-scope finding was resolved and its final scan is part
+  of the completion gate.
+- Real microphone and OpenAI Realtime provider validation was not run locally.
+  It remains explicitly unchecked under M8, including real interruption,
+  reconnect, mute, revocation, and typed-fallback acceptance.
 
 ## M8 — Public version 1 hardening and launch
 
