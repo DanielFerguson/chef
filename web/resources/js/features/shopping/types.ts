@@ -148,6 +148,87 @@ export type ShoppingWorkspace = {
         unmatched_items: number;
         currency: string;
     };
+    automation: AutomationWorkspace;
+};
+
+export type AutomationConnection = {
+    uuid: string;
+    name: string | null;
+    status: 'pending' | 'active';
+    paired_at: string | null;
+    last_seen_at: string | null;
+    expires_at: string;
+};
+
+export type AutomationRunStatus =
+    | 'awaiting_browser'
+    | 'queued'
+    | 'processing'
+    | 'executing'
+    | 'awaiting_approval'
+    | 'paused'
+    | 'takeover'
+    | 'awaiting_review'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'expired';
+
+export type AutomationRun = {
+    uuid: string;
+    status: AutomationRunStatus;
+    shopping_list_revision: number;
+    retailer: { id: number; name: string; slug: string };
+    browser_connection: {
+        uuid: string;
+        name: string | null;
+        status: string;
+        last_seen_at: string | null;
+    };
+    progress: { total: number; added: number; unresolved: number };
+    pause_reason: string | null;
+    error_message: string | null;
+    current_url: string | null;
+    expires_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+    approvals: {
+        id: number;
+        risk_kind: string;
+        proposed_action: string;
+        consequence: string;
+        status: 'pending' | 'approved' | 'rejected' | 'expired';
+        expires_at: string;
+    }[];
+    steps: {
+        id: number;
+        sequence: number;
+        status: string;
+        action_count: number;
+        error_message: string | null;
+        requested_at: string | null;
+        executed_at: string | null;
+    }[];
+    reconciliations: {
+        id: number;
+        shopping_list_item_id: number | null;
+        status:
+            'matched' | 'substituted' | 'unresolved' | 'unavailable' | 'extra';
+        intended_name: string;
+        product_name: string | null;
+        brand: string | null;
+        pack: string | null;
+        quantity: number | null;
+        unit_price: number | null;
+        total_price: number | null;
+        substitution_reason: string | null;
+    }[];
+};
+
+export type AutomationWorkspace = {
+    pairing_code: string | null;
+    connections: AutomationConnection[];
+    runs: AutomationRun[];
 };
 import type {
     ConversationFeedback,

@@ -39,6 +39,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { AutomationActivity } from '@/features/automation/automation-activity';
 import { AssistantMessage } from '@/features/meal-plans/assistant-message';
 import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
 import type {
@@ -1018,6 +1019,7 @@ function ReadyShoppingList({
     retailers,
     shoppingCategories,
     shoppingList,
+    automation,
 }: {
     budget: ShoppingWorkspace['budget'];
     failedMeals: MissingMeal[];
@@ -1030,6 +1032,7 @@ function ReadyShoppingList({
     retailers: ShoppingWorkspace['retailers'];
     shoppingCategories: ShoppingWorkspace['shopping_categories'];
     shoppingList: PreparedShoppingList;
+    automation: ShoppingWorkspace['automation'];
 }) {
     const active = recipePreparation.preparing > 0;
     const groupedItems: {
@@ -1191,6 +1194,14 @@ function ReadyShoppingList({
                     <BudgetEditor planId={planId} budget={budget} />
                 </details>
             )}
+            {shoppingList.items.length > 0 && !shoppingList.stale_at && (
+                <AutomationActivity
+                    automation={automation}
+                    listId={shoppingList.id}
+                    revision={shoppingList.revision}
+                    retailers={retailers}
+                />
+            )}
             {shoppingList.status === 'completed' && (
                 <OrderRecorder
                     listId={shoppingList.id}
@@ -1217,6 +1228,7 @@ export default function ShoppingShow({
         retailers,
         product_preferences: productPreferences,
         budget,
+        automation,
     } = workspace;
     const remaining =
         shoppingList?.items.filter(
@@ -1360,6 +1372,7 @@ export default function ShoppingShow({
                     ) : (
                         <ReadyShoppingList
                             budget={budget}
+                            automation={automation}
                             failedMeals={failedMeals}
                             included={included}
                             missingMeals={missingMeals}

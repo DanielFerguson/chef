@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BrowserConnectionStatus;
 use App\Enums\PlannedMealRecipePreparationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
@@ -41,6 +42,12 @@ class ShoppingListController extends Controller
             'shoppingList.revisions' => fn ($query) => $query->limit(10),
             'shoppingList.mealResolutions',
             'shoppingList.orders.retailer',
+            'shoppingList.automationRuns' => fn ($query) => $query->latest()->limit(5),
+            'shoppingList.automationRuns.retailer:id,name,slug',
+            'shoppingList.automationRuns.browserConnection:id,uuid,name,status,last_seen_at',
+            'shoppingList.automationRuns.approvals',
+            'shoppingList.automationRuns.reconciliations',
+            'shoppingList.automationRuns.steps',
             'plannedMeals.mealSlot',
             'plannedMeals.recipePreparation',
             'plannedMeals.recipeVersion:id,team_id,recipe_id,title,servings',
@@ -121,6 +128,66 @@ class ShoppingListController extends Controller
                     'projected_total' => round($projectedTotal, 2),
                     'unmatched_items' => $unmatchedItems,
                     'currency' => 'AUD',
+                ],
+                'automation' => [
+                    'pairing_code' => $request->session()->get('browser_pairing_code'),
+                    'connections' => $mealPlan->team->browserConnections()
+                        ->whereIn('status', [BrowserConnectionStatus::Pending, BrowserConnectionStatus::Active])
+                        ->where('expires_at', '>', now())
+                        ->latest()
+                        ->get()
+                        ->map(fn ($connection) => [
+                            'uuid' => $connection->uuid,
+                            'name' => $connection->name,
+                            'status' => $connection->status->value,
+                            'paired_at' => $connection->paired_at?->toIso8601String(),
+                            'last_seen_at' => $connection->last_seen_at?->toIso8601String(),
+                            'expires_at' => $connection->expires_at->toIso8601String(),
+                        ]),
+                    'runs' => $shoppingList?->automationRuns->map(fn ($run) => [
+                        'uuid' => $run->uuid,
+                        'status' => $run->status->value,
+                        'shopping_list_revision' => $run->shopping_list_revision,
+                        'retailer' => $run->retailer,
+                        'browser_connection' => $run->browserConnection,
+                        'progress' => $run->progress,
+                        'pause_reason' => $run->pause_reason,
+                        'error_message' => $run->error_message,
+                        'current_url' => $run->current_url,
+                        'expires_at' => $run->expires_at->toIso8601String(),
+                        'started_at' => $run->started_at?->toIso8601String(),
+                        'finished_at' => $run->finished_at?->toIso8601String(),
+                        'approvals' => $run->approvals->map(fn ($approval) => [
+                            'id' => $approval->id,
+                            'risk_kind' => $approval->risk_kind,
+                            'proposed_action' => $approval->proposed_action,
+                            'consequence' => $approval->consequence,
+                            'status' => $approval->status->value,
+                            'expires_at' => $approval->expires_at->toIso8601String(),
+                        ])->values()->all(),
+                        'steps' => $run->steps->map(fn ($step) => [
+                            'id' => $step->id,
+                            'sequence' => $step->sequence,
+                            'status' => $step->status->value,
+                            'action_count' => count($step->actions ?? []),
+                            'error_message' => $step->error_message,
+                            'requested_at' => $step->requested_at?->toIso8601String(),
+                            'executed_at' => $step->executed_at?->toIso8601String(),
+                        ])->values()->all(),
+                        'reconciliations' => $run->reconciliations->map(fn ($line) => [
+                            'id' => $line->id,
+                            'shopping_list_item_id' => $line->shopping_list_item_id,
+                            'status' => $line->status->value,
+                            'intended_name' => $line->intended_name,
+                            'product_name' => $line->product_name,
+                            'brand' => $line->brand,
+                            'pack' => $line->pack,
+                            'quantity' => $line->quantity,
+                            'unit_price' => $line->unit_price,
+                            'total_price' => $line->total_price,
+                            'substitution_reason' => $line->substitution_reason,
+                        ])->values()->all(),
+                    ])->values()->all() ?? [],
                 ],
             ],
         ]);
