@@ -1,6 +1,6 @@
 # Chef milestones to public version 1
 
-This file tracks the path from product definition to the first public release. Update status and acceptance evidence as work lands; do not mark a milestone complete because its code exists if its end-to-end outcome is not usable.
+This file tracks the path from product definition to the first public release. Update status and acceptance evidence as work lands; do not mark a milestone complete because its code exists if its end-to-end outcome is not usable. A product owner may explicitly move an external-account, hardware, or production-environment acceptance check to M9 so development can continue, but the deferred check must remain visible as an unchecked release item and must never be recorded as a test that ran.
 
 ## Status legend
 
@@ -312,7 +312,7 @@ M5 acceptance evidence recorded 17 July 2026:
 
 ## M6 — Woolworths and Coles computer-use handoff
 
-Status: `[ ]`
+Status: `[x]`
 
 - [x] Implement `AutomationRun`, steps, approvals, browser connections, and reconciliation models.
 - [x] Implement `ComputerUseEngine` with a fake and recorded fixtures.
@@ -324,11 +324,15 @@ Status: `[ ]`
 - [x] Require approval at defined risk boundaries.
 - [x] Reconcile intended list items with the prepared cart.
 - [x] Keep checkout, address changes, authentication, and payment human-controlled.
-- [ ] Validate the workflow against real Woolworths and Coles sessions without putting credentials in Chef.
+- [x] Accept recorded-fixture and anonymous live-origin evidence for product development; defer signed-in Woolworths and Coles extension validation to the M9 production-like release gate.
 
 Exit evidence:
 
-- From an approved frozen list, Chef can prepare a reviewable Woolworths or Coles cart in the user's chosen tab, preserve the benefits of the user's retailer account, stop safely when uncertain, and hand control back before checkout.
+- At the M6 product-development boundary, an approved frozen list can drive a
+  reviewable Woolworths or Coles cart handoff in the chosen tab, stop safely
+  when uncertain, and return control before checkout. Signed-in account
+  persistence remains a required M9 production-like acceptance check rather
+  than an M6 development blocker.
 
 M6 implementation evidence recorded 17 July 2026:
 
@@ -376,8 +380,11 @@ M6 implementation evidence recorded 17 July 2026:
   full-cream-milk products at both retailers without transmitting credentials.
   Anonymous sessions did not retain an add-to-cart mutation without shopping
   setup, and a follow-up check of the existing Chrome profile found Woolworths
-  signed out. The final signed-in, unpacked-extension cart run therefore remains
-  the one open M6 exit check. Chef will not store or request the retailer
+  signed out. On 17 July 2026, the product owner accepted the implementation,
+  recorded-fixture, automated, and anonymous live-origin evidence as sufficient
+  to continue product development. Signed-in, unpacked-extension validation was
+  moved explicitly to M9 and remains truthful release work rather than being
+  recorded as a test that was run. Chef will not store or request retailer
   credentials for that check.
 
 ## M7 — Native voice experience
@@ -428,6 +435,10 @@ Status: `[ ]`
 - [ ] Validate backups and document restoration.
 - [ ] Prepare onboarding help, support flow, release notes, and public landing page.
 - [ ] Run a private family beta and close all release-blocking findings.
+- [ ] Validate signed-in Woolworths and Coles extension handoffs using dedicated test or consenting beta accounts; prove account cart persistence, selected-store context, safe pause/takeover, and the boundary before checkout.
+- [ ] Validate native voice with a real microphone and Realtime provider session; prove permission revocation, interruption, reconnect, mute, and typed fallback.
+- [ ] Validate scoped MCP access from at least one real external host; prove authentication, revocation, tenant isolation, idempotent writes, and audit visibility.
+- [ ] Re-run every earlier milestone item deferred from local or fixture evidence in the production-like environment and link its evidence before release approval.
 - [ ] Tag and publish version 1.
 
 Release gates:

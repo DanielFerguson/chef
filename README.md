@@ -8,7 +8,7 @@ Chef is not intended to be another recipe catalogue with an AI chat box attached
 
 ## Status
 
-Milestones 0 through 5 are complete. The Laravel 13 web application under
+Milestones 0 through 6 are complete. The Laravel 13 web application under
 [`web/`](web/) now supports authenticated family tenancy, a durable
 conversational first plan, household people and attributed truth, versioned
 recipes, complete arbitrary-span plans, direct plan controls, and private
@@ -19,8 +19,11 @@ household-item, quantity, and budget changes. Progressive preparation and
 recovery states keep manual ingredient entry out of the normal path. M5 adds a
 Today surface, focused step-by-step cooking with durable progress and timers,
 meal outcomes, person-specific feedback, and inspectable preference candidates
-that can never become safety rules. M6 retailer cart preparation is the next
-product milestone.
+that can never become safety rules. M6 adds a permissioned Woolworths and Coles
+cart-preparation handoff with frozen list scope, explicit approvals,
+reconciliation, pause and takeover controls, and a hard human boundary before
+checkout. Account-backed retailer acceptance is deferred to the version 1
+production-like release gates. M7 native voice is the next product milestone.
 
 The intended stack is:
 

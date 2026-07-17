@@ -4,7 +4,7 @@ This document translates Chef's product thesis into an implementable architectur
 
 ## Current status
 
-Milestones 0 through 5 are complete. The Laravel 13 React/Inertia application
+Milestones 0 through 6 are complete. The Laravel 13 React/Inertia application
 in `web/` now provides authenticated family tenancy, durable arbitrary-span
 plans and conversations, versioned recipes, streamed Laravel AI SDK responses,
 authorised planning tools, direct calendar and list editing, plan revisions and
@@ -51,8 +51,16 @@ inspectable `PreferenceCandidate`. Candidates remain separate from preferences
 until a household member accepts them, dismissed candidates do not affect later
 recommendations, and accepting a candidate can create only an ordinary feedback
 preference. The constraint write path is unavailable to this workflow, so meal
-feedback can never infer an allergy or other safety rule. M6 retailer handoff is
-the next implementation milestone.
+feedback can never infer an allergy or other safety rule.
+
+M6 adds a team-scoped, permissioned Woolworths and Coles cart-preparation
+handoff using a Chef-owned Responses computer-use loop and a local Chrome
+extension. The household retains explicit pause, approval, takeover, and final
+checkout control. Recorded retailer fixtures, anonymous live-origin inspection,
+and the complete automated gates are accepted as the M6 product-development
+boundary; account-backed extension acceptance is intentionally deferred to the
+version 1 production-like release gates. M7 native voice is the next
+implementation milestone.
 
 ## Technical stack
 
