@@ -1,0 +1,42 @@
+# Chef retailer handoff extension
+
+This Manifest V3 extension is the local execution surface for Chef's Woolworths
+and Coles cart-preparation runs. It receives short-lived Chef connection
+credentials, never the permanent OpenAI key, and executes validated actions only
+in the retailer tab selected by the household.
+
+## Local installation
+
+1. In Chrome, open `chrome://extensions` and enable **Developer mode**.
+2. Choose **Load unpacked** and select this `extensions/chrome` directory.
+3. In Chef's Shopping workspace, create a temporary pairing code.
+4. Open the extension, use the Chef application origin as **Chef API URL**, and
+   enter the pairing code.
+5. Start a Woolworths or Coles cart-preparation run in Chef, open that retailer,
+   then use **Connect selected retailer tab** in the extension.
+
+`manifest.json` permits `http://localhost/*` for local development and uses
+`https://app.chef.example/*` as the packaged production placeholder. Replace
+that placeholder with the deployed Chef origin before distribution. No other
+application or retailer origins should be added without a product and security
+review.
+
+## Safety boundary
+
+- The run is frozen to one shopping-list revision, retailer, connection, and tab.
+- The extension refuses commands outside its local action allowlist and refuses
+  execution when the selected tab is not visible.
+- It stops after any navigation to checkout, authentication, address, delivery,
+  or payment paths and blocks page controls that directly request those actions.
+- The cart or trolley review control remains available; order submission does
+  not.
+- Switching tabs during a batch fails the run with the last screenshot from the
+  selected retailer tab, so an unrelated tab is never captured.
+- Chef expires retained screenshots and stalled execution leases. The household
+  can pause, cancel, revoke the connection, or take manual control at any time.
+
+Run the extension checks with:
+
+```bash
+npm run check
+```

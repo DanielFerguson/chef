@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chef retailer handoff</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="mark">C</span>
+        <div><strong>Chef</strong><small>Retailer handoff</small></div>
+      </header>
+      <p id="status" role="status">Pair this extension from Chef Shopping.</p>
+      <form id="pairing-form">
+        <label>Chef address<input id="api-base" type="url" value="http://localhost:8000" required /></label>
+        <label>Pairing code<input id="pairing-code" autocomplete="one-time-code" required /></label>
+        <label>This browser<input id="connection-name" value="My Chrome" maxlength="100" required /></label>
+        <button type="submit">Pair browser</button>
+      </form>
+      <section id="paired" hidden>
+        <p><strong id="connection-label">Paired browser</strong></p>
+        <button id="attach-tab" type="button">Use this retailer tab</button>
+        <button id="disconnect" class="quiet" type="button">Forget this connection</button>
+      </section>
+      <footer>Only Woolworths and Coles tabs are allowed. Checkout and payment are never automated.</footer>
+    </main>
+    <script src="policy.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

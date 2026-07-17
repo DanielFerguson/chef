@@ -1,0 +1,8 @@
+{
+  "name": "chef-retailer-handoff-extension",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "check": "node --check background.js && node --check popup.js && node --check policy.js && node --test tests/*.test.js"
+  }
+}
