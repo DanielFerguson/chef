@@ -45,6 +45,28 @@ if (!html.includes('Checkout stays yours')) {
   throw new Error('Hero workflow is missing the human checkout boundary.');
 }
 
+for (const marker of [
+  'Thinking through your week…',
+  'data-approved-label="Approved"',
+  'data-rejected-label="Rejected"',
+  'data-replaced-label="Replaced"',
+  'Mushroom risotto',
+  'Quick beef rice bowls',
+  'Matching meal ingredients',
+  '18 meal ingredients matched',
+  'One substitution needs you',
+  'data-workflow-timer',
+  'data-plan-context-list',
+  'data-cooking-current',
+  'data-cooking-strike',
+  'Turn the chicken through the pan sauce',
+  'Divide between bowls, spoon over the pan sauce',
+]) {
+  if (!html.includes(marker)) {
+    throw new Error(`Hero workflow is missing required state: ${marker}`);
+  }
+}
+
 for (const required of [
   '<link rel="canonical"',
   '<meta name="description"',
