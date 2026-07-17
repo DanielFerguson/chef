@@ -75,6 +75,9 @@ class MealPlanController extends Controller
                 'household' => $mealPlan->team,
                 'recipes' => $mealPlan->team->recipes,
                 'readiness' => $assessReadiness->handle($mealPlan),
+                'voice_test_mode' => app()->environment('testing')
+                    && $request->boolean('_voice_test')
+                    && $request->hasValidRelativeSignature(),
             ],
         ]);
     }

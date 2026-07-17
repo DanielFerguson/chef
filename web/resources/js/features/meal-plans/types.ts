@@ -178,6 +178,7 @@ export type MealPlanWorkspace = {
             | 'begin_shopping'
             | 'continue_planning';
     };
+    voice_test_mode: boolean;
 };
 
 export type StreamEvent = {

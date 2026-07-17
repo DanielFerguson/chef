@@ -38,6 +38,13 @@ import {
 import { formatDay } from './format-day';
 import type { MealPlanWorkspace } from './types';
 import { useChefConversation } from './use-chef-conversation';
+import { VoiceControls } from './voice-controls';
+
+function refreshConversation() {
+    router.reload({
+        only: ['workspace'],
+    });
+}
 
 function ProposalCards({ workspace }: { workspace: MealPlanWorkspace }) {
     const slotsById = new Map(
@@ -450,10 +457,17 @@ export function ConversationPanel({
                                 {error}
                             </p>
                         )}
-                        <div className="flex items-center justify-between">
-                            <p className="px-2 text-xs text-muted-foreground">
-                                Shift + Enter for a new line
-                            </p>
+                        <div className="flex items-end justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                                <VoiceControls
+                                    conversationId={workspace.conversation.id}
+                                    onConversationChanged={refreshConversation}
+                                    testMode={workspace.voice_test_mode}
+                                />
+                                <p className="hidden px-2 text-xs text-muted-foreground sm:block">
+                                    Shift + Enter for a new line
+                                </p>
+                            </div>
                             <Button
                                 size="icon"
                                 type="submit"
