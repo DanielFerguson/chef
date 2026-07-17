@@ -480,21 +480,36 @@ Status: `[ ]`
 
 - [ ] Decide and validate the production database and hosting topology.
 - [ ] Add production queues, scheduling, broadcasting, object storage, and backups.
-- [ ] Add error reporting, product analytics, AI usage metrics, and automation audit visibility.
-- [ ] Establish screenshot and conversation retention controls.
+- [x] Add error reporting, product analytics, AI usage metrics, and automation audit visibility.
+- [x] Establish screenshot and conversation retention controls.
 - [ ] Complete privacy policy, terms, account export, team deletion, and consent management.
-- [ ] Complete accessibility review for onboarding, planning, shopping, and cooking.
-- [ ] Test desktop and mobile-width core journeys.
-- [ ] Test slow, interrupted, failed, and rate-limited AI workflows.
-- [ ] Add abuse controls, quotas, rate limits, and cost ceilings.
-- [ ] Conduct a security and tenancy review.
+- [x] Complete accessibility review for onboarding, planning, shopping, and cooking.
+- [x] Test desktop and mobile-width core journeys.
+- [x] Test slow, interrupted, failed, and rate-limited AI workflows.
+- [x] Add abuse controls, quotas, rate limits, and cost ceilings.
+- [x] Conduct a security and tenancy review.
 - [ ] Validate backups and document restoration.
-- [ ] Prepare onboarding help, support flow, release notes, and public landing page.
+- [x] Prepare onboarding help, support flow, release notes, and public landing page.
 - [ ] Run a private family beta and close all release-blocking findings.
 - [ ] Validate signed-in Woolworths and Coles extension handoffs using dedicated test or consenting beta accounts; prove account cart persistence, selected-store context, safe pause/takeover, and the boundary before checkout.
 - [ ] Validate native voice with a real microphone and Realtime provider session; prove permission revocation, interruption, reconnect, mute, and typed fallback.
 - [ ] Re-run every earlier milestone item deferred from local or fixture evidence in the production-like environment and link its evidence before release approval.
 - [ ] Tag and publish version 1.
+
+Code-level evidence:
+
+- `docs/M8-VERIFICATION.md` records 239 passing application tests, 86.5%
+  coverage, 29 passing browser tests across desktop and 390×844, clean static
+  and frontend gates, React Doctor 100/100, extension policy checks, and clean
+  Composer/npm vulnerability audits.
+- `docs/accessibility/M8-ACCESSIBILITY-REVIEW.md` records the core-journey
+  interaction, structure, and responsive review and the defects closed.
+- `docs/security/M8-SECURITY-REVIEW.md` records the security and cross-family
+  isolation review; no known critical/high application issue remains open.
+- `docs/M8-ADVERSARIAL-REVIEW.md` records the final challenge pass and why M8
+  remains incomplete: production probes/restore, final legal and cost values,
+  real retailer/microphone evidence, private beta, production-like replay, and
+  tag/publish are still required.
 
 Release gates:
 
