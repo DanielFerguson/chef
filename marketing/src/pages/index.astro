@@ -1,5 +1,6 @@
 ---
 import FaqList from '../components/FaqList.astro';
+import HeroWorkflow from '../components/HeroWorkflow.astro';
 import MarketingFooter from '../components/MarketingFooter.astro';
 import MarketingHeader from '../components/MarketingHeader.astro';
 import PricingOffer from '../components/PricingOffer.astro';
@@ -9,14 +10,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 const appUrl =
   import.meta.env.PUBLIC_APP_URL ?? 'https://app.chef.example/start';
 const siteUrl = Astro.site?.toString() ?? 'https://chef.example/';
-
-const mealPlan = [
-  ['MON 20', 'Spinach & lemon chicken', '4 people · 30m', ''],
-  ['TUE 21', 'Tomato gnocchi', '2 people · 25m', 'oat'],
-  ['WED 22', 'Leftover lemon chicken', '4 people · 10m', ''],
-  ['THU 23', 'Quick beef rice bowls', '4 people · 20m', 'sage'],
-  ['FRI 24', 'Takeaway night', 'Open choice', ''],
-] as const;
 
 const stages = [
   {
@@ -155,19 +148,13 @@ const structuredData = [
     <section class="hero" id="meal-planning" aria-labelledby="hero-title">
       <div class="page-shell hero-grid">
         <div class="hero-copy" data-reveal>
-          <p class="eyebrow eyebrow-dot">Meal planning for real households</p>
           <h1 id="hero-title">
-            Plan the week once. Let Chef prepare the trolley.
+            Plan the week once. Let Chef carry it through to dinner.
           </h1>
           <p class="hero-lead">
-            Tell Chef who’s eating, what everyone likes, and how the week looks.
-            Chef turns it into a shared meal plan, shopping list, and a
-            ready-to-review Woolworths or Coles trolley—while checkout stays
-            yours.
-          </p>
-          <p class="time-promise">
-            The goal: your week planned and trolley ready to review in one
-            focused 5–10 minute session.
+            One focused 5–10 minute conversation becomes a shared meal plan,
+            shopping list, and ready-to-review trolley—with every recipe ready
+            when it’s time to cook.
           </p>
           <div class="hero-actions">
             <div>
@@ -180,50 +167,7 @@ const structuredData = [
           </div>
         </div>
 
-        <div
-          class="plan-demo"
-          aria-label="Example plan created from a household conversation"
-          data-reveal
-        >
-          <header>
-            <span><i></i>Winter weeknight plan</span>
-            <small>Mon 20 – Sun 26 Jul</small>
-          </header>
-          <div class="plan-demo-body">
-            <p class="request-bubble">
-              Plan five dinners for four. Tuesday is only two of us, Mia won’t
-              eat mushrooms, Thursday needs to be quick, and use the spinach
-              first.
-            </p>
-            <div class="plan-summary">
-              <strong><i></i>5 dinners shaped from your week</strong>
-              <span>
-                <span class="desktop-label">Review before confirming</span>
-                <span class="mobile-label">Review</span>
-              </span>
-            </div>
-            <div class="meal-list">
-              {
-                mealPlan.map(([day, meal, meta, tone]) => (
-                  <div
-                    class:list={['meal-row', tone && `meal-row--${tone}`]}
-                    data-plan-row
-                  >
-                    <span>{day}</span>
-                    <strong>{meal}</strong>
-                    <small>{meta}</small>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="page-shell trust-line" aria-label="Chef product principles">
-        <span>One shared plan for the household</span>
-        <span>Allergies stay explicit and editable</span>
-        <span>Checkout stays yours at every shop</span>
+        <HeroWorkflow />
       </div>
     </section>
 
@@ -729,28 +673,10 @@ const structuredData = [
     justify-content: space-between;
   }
 
-  .eyebrow-dot {
-    align-items: center;
-    display: flex;
-    gap: 0.55rem;
-  }
-
-  .eyebrow-dot::before,
-  .plan-demo header i,
-  .plan-summary i {
-    background: var(--sage);
-    border-radius: 50%;
-    content: '';
-    display: inline-block;
-    height: 0.5rem;
-    width: 0.5rem;
-  }
-
   .hero-copy h1 {
     font-family: var(--font-editorial);
     font-size: clamp(3.5rem, 5.4vw, 4.25rem);
     line-height: 1.03;
-    margin-top: 1.5rem;
   }
 
   .hero-lead {
@@ -759,17 +685,6 @@ const structuredData = [
     line-height: 1.52;
     margin-top: 1.55rem;
     max-width: 31rem;
-  }
-
-  .time-promise {
-    border-left: 3px solid var(--sage);
-    color: var(--sage-strong);
-    font-size: 0.9375rem;
-    font-weight: 600;
-    line-height: 1.45;
-    margin-top: 1.25rem;
-    max-width: 31rem;
-    padding-left: 0.875rem;
   }
 
   .hero-actions {
@@ -795,133 +710,8 @@ const structuredData = [
     font-size: 0.8125rem;
   }
 
-  .plan-demo {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-  }
-
-  .plan-demo > header {
-    align-items: center;
-    background: var(--canvas);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    min-height: 3.625rem;
-    padding-inline: 1.25rem;
-  }
-
-  .plan-demo > header span,
-  .plan-summary strong {
-    align-items: center;
-    display: flex;
-    font-size: 0.875rem;
-    font-weight: 600;
-    gap: 0.55rem;
-  }
-
-  .plan-demo > header i {
-    background: var(--paprika);
-  }
-
-  .plan-demo > header small,
-  .plan-summary span {
-    color: var(--muted);
-    font-size: 0.8125rem;
-  }
-
-  .mobile-label,
   .problem-mobile {
     display: none;
-  }
-
-  .plan-demo-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1.125rem;
-    padding: 1.25rem;
-  }
-
-  .request-bubble {
-    align-self: end;
-    background: var(--ink);
-    border-radius: 1rem 1rem 0.25rem 1rem;
-    color: #fff;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    max-width: 29.375rem;
-    padding: 0.875rem 1rem;
-  }
-
-  .plan-summary {
-    align-items: center;
-    display: flex;
-    justify-content: space-between;
-    padding-inline: 0.125rem;
-  }
-
-  .plan-summary strong {
-    color: var(--sage-strong);
-    font-size: 0.8125rem;
-  }
-
-  .meal-list {
-    background: var(--canvas);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-  }
-
-  .meal-row {
-    align-items: center;
-    border-bottom: 1px solid var(--border);
-    display: grid;
-    gap: 0.5rem;
-    grid-template-columns: 4rem 1fr 5.75rem;
-    min-height: 3.25rem;
-    padding-inline: 0.875rem;
-  }
-
-  .meal-row:last-child {
-    border-bottom: 0;
-  }
-
-  .meal-row--oat {
-    background: rgb(220 207 185 / 28%);
-  }
-
-  .meal-row--sage {
-    background: rgb(111 128 106 / 8%);
-  }
-
-  .meal-row span,
-  .meal-row small {
-    color: var(--muted);
-    font-size: 0.75rem;
-  }
-
-  .meal-row strong {
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .meal-row small {
-    color: var(--sage-strong);
-    text-align: right;
-  }
-
-  .trust-line {
-    border-top: 1px solid var(--border);
-    display: flex;
-    font-size: 0.875rem;
-    justify-content: space-between;
-    margin-top: 2.625rem;
-    padding-top: 1.375rem;
-  }
-
-  .trust-line span:first-child {
-    color: var(--muted);
   }
 
   .problem-section {
@@ -2114,7 +1904,7 @@ const structuredData = [
 
   @media (max-width: 52rem) {
     .hero {
-      padding: 3.25rem 0 0;
+      padding: 3.25rem 0 2.75rem;
     }
 
     .hero-grid,
@@ -2139,7 +1929,6 @@ const structuredData = [
       font-family: var(--font-sans);
       font-size: clamp(2.7rem, 12vw, 3.2rem);
       line-height: 1.04;
-      margin-top: 1.25rem;
     }
 
     .hero-lead {
@@ -2165,65 +1954,12 @@ const structuredData = [
       min-height: 0;
     }
 
-    .plan-demo {
-      align-self: stretch;
-      background: var(--surface);
-      border: 0;
-      border-radius: 0;
-      margin-inline: calc(var(--page-gutter) * -1);
-      max-width: none;
-      padding: 1.5rem var(--page-gutter) 2rem;
-      width: calc(100% + (var(--page-gutter) * 2));
-    }
-
-    .plan-demo > header {
-      display: none;
-    }
-
-    .plan-demo-body {
-      padding: 0;
-    }
-
-    .request-bubble {
-      font-size: 0.8125rem;
-      max-width: 19.875rem;
-    }
-
-    .plan-summary span {
-      font-size: 0.75rem;
-    }
-
-    .desktop-label,
     .problem-desktop {
       display: none;
     }
 
-    .mobile-label,
     .problem-mobile {
       display: block;
-    }
-
-    .meal-row {
-      grid-template-columns: 3.125rem 1fr;
-      min-height: 4rem;
-    }
-
-    .meal-row small {
-      grid-column: 2;
-      text-align: left;
-    }
-
-    .meal-row:nth-child(n + 4) {
-      display: none;
-    }
-
-    .trust-line {
-      align-items: start;
-      border: 0;
-      flex-direction: column;
-      gap: 0.625rem;
-      margin: 0;
-      padding-block: 1rem 2.75rem;
     }
 
     .problem-section {

@@ -23,6 +23,28 @@ if (h1Count !== 1) {
   throw new Error(`Expected exactly one homepage H1; found ${h1Count}.`);
 }
 
+const workflowCount = (html.match(/data-hero-workflow(?:\s|>)/g) ?? []).length;
+const workflowControls = (html.match(/data-workflow-control(?:\s|>)/g) ?? [])
+  .length;
+const workflowPanels = (html.match(/data-workflow-panel(?:\s|>)/g) ?? [])
+  .length;
+
+if (workflowCount !== 1) {
+  throw new Error(
+    `Expected one hero workflow container; found ${workflowCount}.`,
+  );
+}
+
+if (workflowControls !== 4 || workflowPanels !== 4) {
+  throw new Error(
+    `Expected four hero workflow controls and panels; found ${workflowControls} controls and ${workflowPanels} panels.`,
+  );
+}
+
+if (!html.includes('Checkout stays yours')) {
+  throw new Error('Hero workflow is missing the human checkout boundary.');
+}
+
 for (const required of [
   '<link rel="canonical"',
   '<meta name="description"',
