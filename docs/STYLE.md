@@ -43,6 +43,12 @@ Distinguish:
 - planned items from ordered products;
 - background activity from actions awaiting approval.
 
+Safety has three visible states: not reviewed, reviewed with no restrictions
+reported, and reviewed with explicit rules. Never render an empty constraint
+list as proof that no allergies exist. A plan stores the reviewed safety
+context separately from confirmation and requires another review whenever its
+participants or explicit constraints change.
+
 ### Feedback stays lightweight
 
 Assistant responses expose quiet thumbs-up/down controls after the response is
@@ -84,16 +90,20 @@ Plan titles should be human and date-aware, for example `Winter weeknight plan` 
 
 ### Top bar
 
-The top bar communicates context rather than duplicating navigation:
+The top bar communicates context and owns compact controls for switching views
+within the current artifact. Do not repeat those controls in a second local
+toolbar beneath it:
 
 - editable plan title;
 - date range;
+- Conversation, Calendar, and List views for a meal plan;
 - current phase or important milestone;
 - participant summary;
 - share or invite action;
 - contextual overflow actions.
 
-Keep it one quiet row on desktop. On small screens, collapse secondary metadata.
+Keep it one quiet row on desktop. On small screens, collapse secondary metadata
+and retain icon-labelled view controls with accessible names.
 
 ### Main workspace
 
@@ -153,7 +163,10 @@ Permission prompts appear only at the moment of use and explain the benefit, sco
 - Changes caused by conversation animate subtly in the inspector so the connection is legible.
 - Unresolved decisions are explicit and actionable.
 - A stale shopping list shows a compact change summary rather than a generic warning.
-- Filling the final slot reveals one calm review-and-confirm action and explains that shopping follows; do not leave the household to ask what happens next.
+- Do not show recipe-generation progress while the household is still choosing meals. Individual selections update the plan only.
+- Filling the final slot starts one whole-plan recipe batch. Show one calm plan-level preparation or retry state, then reveal safety review and confirmation when every recipe is ready.
+- Describe the number of remaining recipes in migrated or partially prepared plans; do not imply already-complete recipes are being regenerated.
+- Explain that shopping follows confirmation; do not leave the household to ask what happens next.
 
 Avoid gamified progress, excessive recommendation carousels, or a dense project-management board.
 
@@ -181,6 +194,13 @@ ingredient entry is a recovery path, not the default experience.
 - reveal product and substitution detail on demand;
 - keep estimated and actual totals visually distinct.
 
+Default list rows stay compact enough for in-store use: one large completion
+control, item name, quantity and unit, and quiet actions. Editing notes and
+other fields is progressive. Pantry review is an explicit pass over likely
+staples, never a bulk assumption that they are already available. Alternate
+table views keep completion controls at least 20 by 20 CSS pixels and may
+scroll horizontally rather than compressing controls into unusable targets.
+
 These are progressive capabilities rather than permission to invent missing
 catalogue data. M4 shows source meals and state inline in a stable generated
 order. Aisle grouping, rejected-product history, and retailer-informed
@@ -196,6 +216,26 @@ Matching 34 items
 ```
 
 Approval requests state the proposed action and consequence. Do not use vague prompts such as `Allow Chef to continue?`.
+
+Retailer connection appears just in time beneath a ready shopping list. Human
+login uses a dedicated, recording-disabled browser surface with a plain
+explanation that the model is absent. Never mix password/MFA entry with agent
+activity or automatically continue into cart mutation after authentication;
+return to Shopping for a second explicit start action.
+
+If a retailer cart is non-empty, show its observed lines and three concrete
+choices: merge, replace the existing cart, or cancel. Replace must name the
+consequence. Progress stays item-oriented and quiet, while interventions name
+the product, observed consequence, and available recovery. The final review
+separates Chef-added, substituted, unavailable, changed, pre-existing, and
+unresolved lines, and distinguishes the Chef subtotal from the whole-cart
+total. The only checkout handoff is `Open Woolworths cart` in the household's
+normal retailer experience.
+
+Active runs offer `Pause and take over` only to the connection owner. The
+manual surface must plainly say that the model is disconnected and recording
+is disabled. Returning to automation is labelled `Reconcile and resume`, so it
+does not imply that unverified manual cart edits are already accepted.
 
 ## Cooking mode
 

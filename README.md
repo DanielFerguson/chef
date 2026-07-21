@@ -12,15 +12,20 @@ Milestones 0 through 5 are complete. The Laravel 13 web application under
 [`web/`](web/) now supports authenticated family tenancy, a durable
 conversational first plan, household people and attributed truth, versioned
 recipes, complete arbitrary-span plans, direct plan controls, and private
-testing feedback. The M4/M4.1 shopping journey automatically turns selected
-cookable meals into durable recipe versions, combines their ingredients into a
-traceable list, and continues the same natural conversation for pantry,
-household-item, quantity, and budget changes. Progressive preparation and
-recovery states keep manual ingredient entry out of the normal path. M5 adds a
+testing feedback. Once every meal slot is resolved, the M4/M4.1 journey uses
+one Sol/high structured generation job to turn all selected cookable meals into
+durable recipe versions together. The one-shot input combines structured
+household truth with the durable plan conversation so timing and nutrition
+requests are not lost, then combines the recipe ingredients into a
+traceable list and continues the same natural conversation for pantry,
+household-item, quantity, and budget changes. One plan-level preparation and
+retry state keeps manual ingredient entry out of the normal path. M5 adds a
 Today surface, focused step-by-step cooking with durable progress and timers,
 meal outcomes, person-specific feedback, and inspectable preference candidates
-that can never become safety rules. M6 retailer cart preparation is the next
-product milestone.
+that can never become safety rules. The first M6 Woolworths cart-preparation
+slice is now implemented behind disabled release flags; its authenticated live
+trial, retailer review, and normal-app cart-synchronisation evidence remain
+open, so M6 is not complete.
 
 The intended stack is:
 
@@ -34,7 +39,9 @@ The intended stack is:
 - Laravel AI SDK with the OpenAI provider for ordinary planning agents
 - A Chef-owned OpenAI Responses API client for native computer-use agents
 - OpenAI Realtime API for native voice conversation
-- A permissioned Chef Chrome extension for local browser execution
+- Browserbase Contexts and recording-disabled sessions for the first Woolworths execution slice
+- An in-repo TypeScript/Playwright worker behind a versioned JSON-lines protocol
+- A future permissioned Chef Chrome extension behind the same executor contract
 - An MCP server exposing Chef's household, planning, recipe, shopping, and feedback capabilities
 
 ## Product thesis
@@ -379,11 +386,18 @@ Feedback belongs to a person and a specific meal occurrence. Chef may derive pre
 - `Message`
 - `ConsentGrant`
 - `AutomationRun`
+- `AutomationRunItem`
 - `AutomationStep`
-- `AutomationApproval`
-- `BrowserConnection`
+- `AutomationIntervention`
+- `RetailerConnection`
+- `BrowserSession`
+- `CartSnapshot`
+- `CartSnapshotLine`
 
-An automation run records its requested scope, shopping-list revision, retailer, execution surface, status, audit references, unresolved decisions, approvals, and final reconciliation. Sensitive screenshots should have an explicit retention policy rather than becoming permanent household history by default.
+An automation run records its requested scope, exact shopping-list revision,
+retailer connection, item outcomes, redacted audit steps, unresolved decisions,
+and immutable final reconciliation. Screenshots remain transient inputs to the
+next Responses call and are not retained as household history.
 
 ## Application architecture
 
@@ -396,8 +410,10 @@ Chef should remain one Laravel application rather than prematurely splitting int
 - The OpenAI Responses API provides the primary planning, tool-use, and computer-use agent loop.
 - The OpenAI Realtime API provides low-latency speech through WebRTC; Laravel creates the session or short-lived client credential so a permanent API key is never exposed to the browser.
 - Server-sent events or WebSockets stream assistant and automation progress without making the entire application a detached client-side API product.
-- A permissioned Chef Chrome extension executes computer actions in a user-approved retailer tab and returns screenshots or action results.
-- An automation gateway connects queued Laravel work to the active extension. It may begin inside Laravel and be extracted into a small TypeScript service only when long-running sessions justify it.
+- Browserbase supplies one persistent Context per Woolworths login and a fresh recording-disabled session for each login or cart run.
+- An in-repo TypeScript worker connects only to a Laravel-supplied CDP URL, executes validated Playwright actions, and returns sanitised observations through `chef.browser.v1` JSON lines.
+- The worker is an executor, not a policy authority: it has no database access and never receives the permanent OpenAI key.
+- A future Chrome extension can implement the same executor boundary for a user-approved local retailer tab.
 - Domain actions should be reusable from HTTP controllers, queued jobs, console commands, and MCP tools.
 
 ```mermaid
@@ -407,9 +423,9 @@ flowchart LR
     APP --> DB["SQLite"]
     APP --> QUEUE["Laravel queues"]
     QUEUE <--> RESPONSES["OpenAI Responses API"]
-    QUEUE <--> GATEWAY["Automation gateway"]
-    GATEWAY <--> EXTENSION["Chef Chrome extension"]
-    EXTENSION <--> TAB["User-approved retailer tab"]
+    QUEUE <--> WORKER["TypeScript browser worker"]
+    WORKER <--> BROWSERBASE["Browserbase session + Context"]
+    BROWSERBASE <--> RETAILER["Woolworths account"]
     APP --> MCP["Chef MCP server"]
     MCP <--> HOSTS["ChatGPT and other MCP hosts"]
 ```
@@ -422,21 +438,21 @@ The architectural boundary is intentional:
 
 The model does not directly control a person's computer. It returns actions for Chef's harness to validate and execute.
 
-### Local browser execution
+### Browser execution
 
-A normal web application cannot control arbitrary supermarket tabs. For the preferred local experience, the household installs the Chef Chrome extension and explicitly grants a shopping run access to a selected tab.
+The first execution surface is Browserbase, offered just in time after the
+shopping list is ready. The connection owner enters passwords and MFA through
+a writable Live View while no model is attached. The session has persistence
+enabled, recording disabled, an Australian region and proxy, and one Context
+for that Woolworths login. Chef stores only the encrypted Context identifier;
+credentials, cookies, CDP URLs, Live View URLs, screenshots, address history,
+and payment data are not stored.
 
-The extension should:
-
-- activate only for an initiated automation run;
-- limit access to the selected tab and approved retailer origins;
-- show an unmistakable control indicator;
-- execute validated click, type, scroll, navigation, and screenshot requests;
-- support immediate pause, cancellation, and manual takeover;
-- avoid broad filesystem, extension, or unrelated browsing access;
-- release control automatically when the run finishes or expires.
-
-A managed, isolated cloud browser can be added later behind the same automation gateway for asynchronous runs. It is a second execution surface, not a different meal-planning architecture.
+Every cart run opens a fresh session, checks authentication deterministically,
+and obtains an exclusive per-connection lease. Authentication loss stops the
+agent and closes its session before the owner is offered a new Live View. A
+future local Chrome extension can implement the same `ComputerExecutor`
+contract without changing run creation, policy, or reconciliation actions.
 
 ### Computer-use lifecycle
 
@@ -446,10 +462,22 @@ When a household approves a shopping list for cart preparation:
 2. Laravel creates a scoped `AutomationRun` and dispatches it to a queue.
 3. The Responses API examines the current screenshot and returns structured computer actions.
 4. Chef validates the actions against retailer, tab, and risk policy.
-5. The extension executes allowed actions and returns the updated screen.
+5. The worker executes allowed actions in the Browserbase session and returns a sanitised observation.
 6. The loop continues until the cart is prepared, a decision requires approval, or the run fails safely.
 7. Chef presents products, substitutions, unresolved items, estimated total, and material differences for review.
 8. The person takes over for checkout and payment.
+
+Before the first mutation Chef inspects the actual Woolworths cart. A non-empty
+cart always pauses for an explicit merge, replace, or cancel decision. Replace
+is the only decision that authorises removal. Every mutation is followed by a
+cart observation; a click without a verified product and quantity change is not
+success.
+
+The connection owner can pause an active run and take over the same
+recording-disabled browser while the model is disconnected. Resume closes
+human control and reconciles the real cart before Chef attempts only missing
+work. A line changed after earlier verification becomes an intervention rather
+than a successful final snapshot.
 
 Page content, retailer messages, advertisements, and on-screen instructions are untrusted input. They cannot expand an automation run's permission or override household intent.
 
@@ -505,7 +533,7 @@ The first useful slice should support one family team, multiple collaborating us
 - consolidated shopping list with manual items;
 - estimated and actual order totals;
 - meal feedback and recent-meal history;
-- a reviewed computer-use handoff for one retailer through the Chef Chrome extension.
+- a reviewed Browserbase computer-use handoff for Woolworths, after its gated authenticated release evidence passes.
 
 ### Not initially included
 
@@ -525,7 +553,7 @@ The first useful slice should support one family team, multiple collaborating us
 3. **Recipes and complete planning** — Recipe versions, imports, richer meal occasions, calendar and list views, revisions, and explainable recommendations.
 4. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
 5. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
-6. **Retailer handoff** — Chrome extension, Responses API computer use, Woolworths and Coles cart preparation, risk-scoped approvals, reconciliation, and human checkout.
+6. **Retailer handoff** — Browserbase-first Woolworths preparation, Responses API computer use, risk-scoped interventions, reconciliation, normal-app handoff, and human checkout; Coles and the Chrome extension follow as adapters.
 7. **Native voice** — Realtime WebRTC input and output over the same durable conversations and domain actions.
 8. **MCP** — Read tools first, then reviewed planning, shopping, and feedback writes for external hosts.
 9. **Public launch** — Operational, privacy, accessibility, security, recovery, and support gates for version 1.
@@ -539,8 +567,9 @@ The first useful slice should support one family team, multiple collaborating us
 - How much product matching should happen before the shopping-review screen?
 - Which actions can an assistant take immediately, and which require staged confirmation?
 - Which onboarding questions materially improve the first plan, and which should wait until context makes them relevant?
-- Which Chrome extension permissions provide the narrowest reliable retailer-tab control?
-- When should a managed browser become an alternative to the local extension?
+- Does an authorised authenticated Woolworths trial prove five-plus-item cart persistence and visibility in the ordinary app/site?
+- What retailer terms, privacy controls, automation tolerance, and operating cost are acceptable for release?
+- Which Chrome extension permissions would provide the narrowest reliable local-tab alternative later?
 - What is the smallest useful recipe-import workflow?
 
 ## Repository layout
@@ -549,6 +578,7 @@ Chef is a monorepo so each client can share one product model without forcing th
 
 ```text
 web/                 Laravel, Inertia, and React application
+web/automation/      TypeScript Browserbase CDP worker
 docs/                Product, architecture, milestones, and style
 extensions/chrome/   Future permissioned retailer-tab executor
 ios/                 Future native iOS client

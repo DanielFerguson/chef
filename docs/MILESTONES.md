@@ -96,7 +96,7 @@ Status: `[x]`
 - [x] Create non-account household people through an authorised conversational tool and retain the source message.
 - [x] Link invitations to existing people without losing their household history.
 - [x] Retain user-authored message provenance for every conversational safety constraint.
-- [x] Make message turns, assistant replies, and retryable tool writes idempotent with database concurrency backstops.
+- [x] Make message turns, assistant replies, and visibly retryable tool writes idempotent with database concurrency backstops and correlated safe diagnostics.
 - [x] Guard proposal decisions with locked, one-way state transitions.
 - [x] Protect every M2 team-owned mutation with policies and active-team route binding.
 - [x] Refactor the planning workspace into focused typed feature components that reset across plan navigation.
@@ -118,9 +118,11 @@ Acceptance evidence recorded 16 July 2026:
 M2.1 acceptance evidence recorded 16 July 2026:
 
 - Conversational people, preferences, constraints, slots, and proposals retain their user-message source and are safe to replay; safety tools cannot assert their own confirmation.
-- Completed turns replay one durable assistant response, active turns reject duplicate claims, and failed turns retry without duplicating structured side effects.
+- Completed turns replay one durable assistant response, active turns reject duplicate claims, and failed turns expose an in-place retry using the original client identifier without duplicating structured side effects. Safe failure metadata and structured logs share a correlation identifier without exposing prompts or credentials to the client.
+- Correctable tool validation and stale-record arguments return structured internal errors so Chef can inspect and retry within the same response. Escaped tool errors use the safe retry contract, while proposal writes support factual partial-success recovery.
+- Plan-specific meal requests become reviewable slot-bound proposals rather than household memory. Readiness and inspector copy distinguish uncovered slots, pending suggestions, and selected meals.
 - Policy and route-binding tests cover every M2 mutation across family boundaries; proposal accept and reject transitions cannot be replayed or reversed.
-- Five browser journeys cover the first-plan a-ha moment, plan navigation without state leakage, person-linked invitation context, visible safety provenance, direct proposal controls, and a 390 × 844 layout.
+- Focused browser journeys cover the first-plan a-ha moment, plan navigation without state leakage, person-linked invitation context, source-linked household truth, reader-controlled streaming scroll and keyboard focus, direct proposal controls, and a 390 × 844 layout.
 - CI runs backend coverage, frontend checks and production build, plus the real browser suite as independent required jobs.
 - The final M2.1 gate passes 88 tests and 344 assertions at 88.7% application coverage; every team-owned policy is covered, React Doctor reports 100/100 with no findings, and both dependency audits report zero known vulnerabilities.
 
@@ -231,9 +233,9 @@ Status: `[x]`
 Implementation brief:
 [M4.1 — Natural Plan-to-Shop reliability](M4.1-PLAN-TO-SHOP-RELIABILITY.md)
 
-- [x] Generate a structured draft recipe when an ordinary cookable meal is selected.
+- [x] Generate every selected cookable recipe together once all meal slots are filled.
 - [x] Retain the exact generated `RecipeVersion` on the planned meal.
-- [x] Track preparation durably and make retries idempotent and observable.
+- [x] Track one plan-level preparation durably and make its retry idempotent and observable.
 - [x] Extend readiness so Plan review cannot finish with unresolved cookable meals.
 - [x] Prevent shopping generation from silently omitting cookable meals without recipes.
 - [x] Prepare and aggregate recipe ingredients without manual household reconstruction.
@@ -244,25 +246,33 @@ Implementation brief:
 
 Exit evidence:
 
-- A naturally planned ordinary meal has a usable versioned recipe before Plan review can finish.
+- A completed natural-language plan produces all usable versioned recipes through one structured batch before Plan review can finish.
 - A confirmed natural-language plan produces a populated, traceable shopping list without manual ingredient reconstruction.
 - Pantry, quantity, staple, and budget changes can be made conversationally and remain visible as structured list state.
 - Existing confirmed plans can be recovered without database migrations calling OpenAI.
-- Preparation failures are visible and safely retryable without duplicate recipes, revisions, or list rows.
+- The one plan-level preparation failure is visible and safely retryable without duplicate recipes, revisions, or list rows.
 - The complete backend, frontend, browser, migration, audit, coverage, and React Doctor gates pass and are recorded.
 
 M4.1 acceptance evidence recorded 16 July 2026:
 
-- Selected custom meals and accepted Chef proposals invoke one authorised recipe-preparation action. A typed Laravel AI SDK structured-output adapter sits behind Chef's `RecipeDrafter` contract, while deterministic fakes cover normal tests without OpenAI requests.
-- A team-owned preparation record tracks pending, processing, completed, failed, and cancelled work. Fingerprinted recipe creation, locked materialisation, safe provider errors, and stale-job cancellation prevent duplicate or obsolete recipes and plan revisions.
+- Selected custom meals and accepted Chef proposals only update structured plan state. Resolving the final slot invokes one authorised plan-level preparation action and one unique queue job.
+- A typed Laravel AI SDK structured-output adapter sends the complete week to OpenAI `gpt-5.6-sol` with high reasoning and returns every recipe in one response. Deterministic fakes cover normal tests without OpenAI requests.
+- The meal plan itself tracks pending, processing, completed, and failed batch work. Fingerprinted input, exact-once meal coverage, atomic materialisation, safe provider errors, and stale-response rejection prevent partial, duplicate, or obsolete recipe versions and plan revisions.
 - Drafting context includes household-wide truths plus only the people participating in that meal. Person-specific preferences do not leak into meals they are not attending, and explicit safety constraints remain distinct from preferences.
 - Readiness, confirmation, legacy recovery, list generation, completion, and manual-recovery rules agree on the same recipe-required classification. Equivalent units such as `cup` and `cups` aggregate into one traceable row.
-- Shopping exposes one useful state at a time: prepare, wait/retry, review, optional budget, and complete. It retains the plan conversation, hides manual ingredient entry outside advanced failure recovery, polls durable preparation state, and presents a usable narrow-screen layout.
+- Planning shows no recipe-preparation card while meal choices remain open. After the final slot, Shopping exposes one useful state at a time: whole-plan preparation, wait/retry, review, optional budget, and complete. It retains the plan conversation, hides manual ingredient entry outside advanced failure recovery, polls durable preparation state, and presents a usable narrow-screen layout.
 - A real browser journey starts from a typed meal-planning request, accepts the proposed meal, automatically prepares its recipe, confirms the plan, opens its populated list, then uses the same conversation to mark pantry stock, add three litres of milk, and set a $180 budget. No manual recipe reconstruction or live model call is involved.
 - The recovered local meal plan 1 retains seven structured recipe versions and a generated 33-row list. Its combined jasmine-rice requirement has one source-traceable row rather than singular/plural duplicates.
 - Eleven focused M4.1 feature regressions cover proposal and direct selection, participant-scoped truth, explicit non-recipe states, stale queued work, readiness guards, safe failures, malformed output, SDK fakes, authorised legacy recovery and retry, tenancy, and conversational shopping mutations.
 - The final Composer gate passes 145 backend tests and 826 assertions at 86.1% application coverage. All 21 browser journeys pass with 166 assertions, including the natural-language Plan-to-Shop flow and 390 × 844 Shopping coverage.
 - Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, SQLite fresh/rollback/reapply, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings, and the live desktop/narrow inspection reports no browser warnings or errors.
+
+Whole-plan recipe batching follow-up evidence recorded 21 July 2026:
+
+- Plan 2 retained zero queued jobs while six of seven slots were resolved. Selecting the final slot created one plan-level pending job containing all four recipe-less meals in the partially prepared plan.
+- The one live Sol/high batch completed in one attempt in 1 minute 56 seconds, leaving no queued job and atomically attaching four recipes with adjusted titles, 64 ingredients, and 23 steps.
+- The live pass exposed that conversational timing intent was absent from the original batch input. The bounded durable conversation snapshot is now included, while later chat remains outside the structural fingerprint; the focused suite covers both behaviours.
+- Fourteen focused M4.1 regressions now pass with 87 assertions. The full Composer gate passes 268 tests and 1,513 assertions, and all 44 browser journeys pass with 369 assertions, including narrow-screen coverage; TypeScript, ESLint, Prettier, the production build, and PHPStan pass. React Doctor reports 96/100 with two pre-existing large-component maintainability warnings.
 
 Shopping grouping follow-up evidence recorded 16 July 2026:
 
@@ -280,6 +290,14 @@ Shopping conversation resilience follow-up evidence recorded 17 July 2026:
 - Regressions cover the reported two-item Scrub Daddy and paper-towel request, same-turn replay, a later retry after a legacy partial write, full-batch validation, concurrent-revision merging, cross-household rejection, and provider failure after a committed tool result. The browser happy path adds two extras in one conversation turn.
 - The final Composer and coverage gates pass 163 backend tests and 888 assertions at 87.1% application coverage. All 21 browser journeys pass with 172 assertions.
 - Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, npm audit, Composer audit, and the new migration rollback/reapply pass. The migration retained all 35 pre-existing shopping rows; reconciling the reported partial turn then added only the missing paper towels for 36 total rows, with no foreign-key violations.
+
+Ingredient-aware one-shot hardening follow-up recorded 21 July 2026:
+
+- The temporary meal-title authority path has been replaced. One OpenAI-pinned Sol/high structured call now groups ephemeral IDs for Chef's retained, scaled recipe requirements; Chef owns totals, optionality, meal attribution, exact recipe-ingredient provenance, water removal, and deterministic fallback.
+- Conservative canonical identities consolidate reviewed purchase-equivalent names while preserving rice varieties, oils, tomato products, and fresh versus ground spices. Mass, volume, Australian cooking measures, counts, nulls, and incompatible dimensions share one deterministic calculation path for model and fallback results.
+- Confirmed plans retain a stable explicit-safety hash. Participant or constraint changes require household reconfirmation, affected plans and lists are invalidated through reusable actions, and revision, safety, and requirement fingerprints are rechecked after drafting.
+- Shopping generation now has durable pending, processing, ready, and failed states with an expiring transactional claim, safe retry information, attempt and method history, stale-response discard, and queue uniqueness through completion. The Shopping workspace exposes preparation, retry, and safety-review states without model controls.
+- This is a dated hardening follow-up to M4/M4.1; the historical acceptance evidence above remains unchanged.
 
 ## M5 — Cooking and feedback loop
 
@@ -310,25 +328,86 @@ M5 acceptance evidence recorded 17 July 2026:
 - The complete Composer gate passes 183 backend tests and 996 assertions at 86.3% application coverage. All 23 browser journeys pass with 192 assertions, including the complete Today-to-cooking-to-feedback flow and the 390 × 844 cooking surface.
 - Pint, PHPStan, ESLint, Prettier, TypeScript, the production Vite build, isolated SQLite fresh/rollback/reapply, npm audit, and Composer audit pass. React Doctor reports 100/100 with no findings.
 
+Cross-stage UX hardening recorded 21 July 2026:
+
+- Plan safety now distinguishes unreviewed details from an explicit report of
+  no restrictions. The reviewed participant-and-constraint context is durable,
+  invalidates when that context changes, and is required before initial plan
+  confirmation or reconfirmation.
+- Full plans support occupied-slot swaps through both drag-and-drop and the
+  keyboard-accessible move control. Every participant exposes an individual
+  serving amount, including fractional servings and zero to opt out.
+- Plan details use a sheet below the persistent desktop-inspector breakpoint,
+  so safety, current state, and sharing remain reachable at 1004 and 390 pixels.
+- Shopping defaults to compact aisle-grouped rows, adds a focused pantry-review
+  pass, preserves usable completion controls in the optional table view, and
+  derives the recap from current structured list state instead of historical
+  assistant prose.
+- Today normalises the next planned date before querying SQLite. Recipes can be
+  revised into immutable new versions, and storage guidance is distinct from
+  general recipe notes and internal provenance.
+
 ## M6 — Woolworths and Coles computer-use handoff
 
 Status: `[ ]`
 
-- [ ] Implement `AutomationRun`, steps, approvals, browser connections, and reconciliation models.
-- [ ] Implement `ComputerUseEngine` with a fake and recorded fixtures.
+- [x] Implement `AutomationRun`, item outcomes, steps, interventions, retailer connections, browser sessions, and reconciliation models.
+- [x] Implement `ComputerUseEngine` with a fake and recorded fixtures.
 - [ ] Build the permissioned Chrome extension and pairing flow.
 - [ ] Restrict execution to an explicitly selected tab and retailer origins.
-- [ ] Implement the Responses API `computer_call` loop.
+- [x] Implement the Responses API `computer_call` loop.
 - [ ] Broadcast progress, unresolved matches, substitutions, and failures.
-- [ ] Add pause, cancel, expiry, takeover, and safe resume.
-- [ ] Require approval at defined risk boundaries.
-- [ ] Reconcile intended list items with the prepared cart.
-- [ ] Keep checkout, address changes, authentication, and payment human-controlled.
+- [x] Add pause, cancel, expiry, takeover, and safe resume.
+- [x] Require approval at defined risk boundaries.
+- [x] Reconcile intended list items with the prepared cart.
+- [x] Keep checkout, address changes, authentication, and payment human-controlled.
 - [ ] Validate the workflow against real Woolworths and Coles sessions without putting credentials in Chef.
 
 Exit evidence:
 
 - From an approved frozen list, Chef can prepare a reviewable Woolworths or Coles cart in the user's chosen tab, preserve the benefits of the user's retailer account, stop safely when uncertain, and hand control back before checkout.
+
+M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
+
+- The first slice is intentionally Woolworths-only and Browserbase-first. Coles
+  and the permissioned Chrome-extension executor remain later adapters, so the
+  full milestone exit is still open.
+- Owner-only just-in-time login uses one encrypted Browserbase Context reference
+  and recording-disabled persistent sessions. The model is absent during human
+  password/MFA entry. Live View and CDP URLs remain transient, and disconnect
+  closes sessions, deletes the Context, and cancels active work.
+- Cart runs freeze the exact current list revision, reject stale, unresolved,
+  empty, mismatched, cross-family, or non-owner inputs, and use an exclusive
+  connection lease plus idempotent item outcomes. A non-empty cart always
+  pauses for merge, replace, or cancel; only replace invokes removal.
+- Laravel owns a direct Responses `computer_call` loop, action/origin policy,
+  safety interventions, bounded queue checkpoints, redacted steps, and final
+  reconciliation. The TypeScript worker connects to a supplied CDP URL and
+  independently blocks sensitive navigation, fields, pointer targets,
+  downloads, uploads, unsafe keys, CAPTCHA handling, and non-Woolworths origins.
+- The connection owner can pause an active run into the same recording-disabled
+  Live View while the model is disconnected. Resume closes human control,
+  rechecks authentication, inspects the real cart, and retries only missing
+  work. Cancellation and disconnect share the run lock, and final
+  reconciliation pauses again if a previously verified line changed.
+- Provider recovery distinguishes a revoked Context from a lost session. A
+  revoked Context is cleared and routed through owner reauthentication; a lost
+  session or Live View is expired, releases its lease, and resumes only through
+  a fresh authenticated cart inspection.
+- Normal tests use fakes and HTTP protocol fixtures. They cover encrypted
+  provider identifiers, recording-disabled configuration, ownership and
+  tenancy, frozen revisions, idempotency, existing-cart merge/replace,
+  MFA and bot challenges, provider timeouts, Context revocation, session loss,
+  reauthentication resume, price and substitution pauses, disconnect
+  revocation, retry deduplication, direct Responses payloads, policy rejection,
+  and immutable reconciliation without Browserbase, OpenAI, or Woolworths
+  calls.
+- `WOOLWORTHS_CONNECTION_ENABLED`, `WOOLWORTHS_CART_MUTATION_ENABLED`, and
+  `WOOLWORTHS_NORMAL_APP_SYNC_PROVEN` remain false by default. M6 must not be
+  marked complete until an authorised account proves cross-session login,
+  recording-disabled operation, a five-plus-item cart, reauthentication,
+  non-empty-cart decisions, normal-app/site visibility, retailer tolerance,
+  privacy obligations, operating cost, and the human checkout boundary.
 
 ## M7 — Native voice experience
 
