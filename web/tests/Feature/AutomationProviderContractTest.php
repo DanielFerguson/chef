@@ -5,12 +5,14 @@ use App\Actions\Automation\StartRetailerConnection;
 use App\Actions\Automation\VerifyRetailerConnection;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Automation\Browserbase\BrowserbaseBrowserSessionProvider;
+use App\Automation\Browserbase\WoolworthsCatalogueDiscovery;
 use App\Automation\Exceptions\BrowserSessionLostException;
 use App\Automation\Exceptions\RetailerContextRevokedException;
 use App\Automation\OpenAI\OpenAIComputerUseClient;
 use App\Enums\BrowserSessionPurpose;
 use App\Models\BrowserSession;
 use App\Models\MealPlan;
+use App\Models\Retailer;
 use App\Models\RetailerConnection;
 use App\Models\ShoppingList;
 use App\Models\ShoppingListItem;
@@ -24,6 +26,38 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
+
+it('discovers bounded Woolworths candidates without opening an authenticated browser', function () {
+    $retailer = Retailer::query()->firstOrCreate(
+        ['slug' => 'woolworths'],
+        ['name' => 'Woolworths', 'active' => true],
+    );
+    config()->set('services.woolworths.catalogue_search_url', 'https://www.woolworths.com.au/apis/ui/Search/products');
+    config()->set('services.woolworths.discovery_concurrency', 2);
+    Http::fake([
+        'www.woolworths.com.au/apis/ui/Search/products*' => Http::response([
+            'Products' => [[
+                'Stockcode' => 123456,
+                'Name' => 'Woolworths Full Cream Milk 2L',
+                'Price' => 4.5,
+                'CupString' => '2L',
+                'IsInStock' => true,
+            ]],
+        ]),
+    ]);
+
+    $results = app(WoolworthsCatalogueDiscovery::class)->discover($retailer, [[
+        'name' => 'full cream milk',
+        'quantity' => 2,
+        'unit' => 'litre',
+    ]]);
+
+    expect($results)->toHaveCount(1)
+        ->and($results[0][0]['external_id'])->toBe('123456')
+        ->and($results[0][0]['product_url'])->toBe('https://www.woolworths.com.au/shop/productdetails/123456')
+        ->and($results[0][0]['source'])->toBe('woolworths_public_catalogue');
+    Http::assertSentCount(1);
+});
 
 /** @return array<string, mixed> */
 function providerCartWorkspace(): array
@@ -214,6 +248,8 @@ it('uses the direct Responses computer-call protocol without persisting screensh
     config()->set('services.openai.api_key', 'test-openai-key');
     config()->set('services.openai.base_url', 'https://api.openai.test');
     config()->set('services.openai.store', false);
+    config()->set('services.openai.computer_use_model', 'gpt-5.6-sol');
+    config()->set('services.openai.computer_use_reasoning_effort', 'low');
     Queue::fake();
     $run = app(StartCartPreparation::class)->handle(
         $workspace['list'],
@@ -227,23 +263,14 @@ it('uses the direct Responses computer-call protocol without persisting screensh
     $item = $run->items()->sole();
     $screenshot = 'data:image/png;base64,'.base64_encode('transient pixels');
 
+    $fixture = json_decode(
+        file_get_contents(base_path('tests/Fixtures/Automation/openai-computer-ga.json')),
+        true,
+        flags: JSON_THROW_ON_ERROR,
+    );
     Http::fakeSequence('api.openai.test/*')
-        ->push([
-            'id' => 'resp_1',
-            'output' => [[
-                'type' => 'computer_call',
-                'call_id' => 'call_1',
-                'action' => ['type' => 'click', 'x' => 100, 'y' => 120, 'button' => 'left'],
-                'pending_safety_checks' => [],
-            ]],
-        ])
-        ->push([
-            'id' => 'resp_2',
-            'output' => [[
-                'type' => 'message',
-                'content' => [['type' => 'output_text', 'text' => 'Done']],
-            ]],
-        ]);
+        ->push($fixture['initial_response'])
+        ->push($fixture['continuation_response']);
 
     $client = new OpenAIComputerUseClient;
     $first = $client->next($run, $item, $screenshot);
@@ -253,7 +280,9 @@ it('uses the direct Responses computer-call protocol without persisting screensh
         'acknowledged_safety_checks' => [],
     ]);
 
-    expect($first->action['type'])->toBe('click')
+    expect($first->actions)->toHaveCount(2)
+        ->and($first->actions[0]['type'])->toBe('click')
+        ->and($first->actions[1]['type'])->toBe('keypress')
         ->and($first->pendingSafetyChecks)->toBe([])
         ->and($second->complete)->toBeTrue()
         ->and($second->message)->toBe('Done')
@@ -261,13 +290,14 @@ it('uses the direct Responses computer-call protocol without persisting screensh
 
     Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v1/responses')
         && $request['store'] === false
-        && $request['tools'][0]['type'] === 'computer_use_preview'
-        && $request['tools'][0]['display_width'] === 1024
-        && $request['tools'][0]['display_height'] === 768
+        && $request['model'] === 'gpt-5.6-sol'
+        && $request['tools'] === [['type' => 'computer']]
+        && $request['reasoning']['effort'] === 'low'
         && data_get($request->data(), 'input.0.content.1.image_url') === $screenshot);
-    Http::assertSent(fn (Request $request) => ($request['previous_response_id'] ?? null) === 'resp_1'
+    Http::assertSent(fn (Request $request) => ($request['previous_response_id'] ?? null) === 'resp_ga_1'
         && $request['input'][0]['type'] === 'computer_call_output'
-        && $request['input'][0]['call_id'] === 'call_1');
+        && $request['input'][0]['call_id'] === 'call_ga_1'
+        && $request['input'][0]['output']['detail'] === 'original');
 });
 
 it('reports automation readiness and fails closed on incomplete enabled provider configuration', function () {
@@ -276,6 +306,8 @@ it('reports automation readiness and fails closed on incomplete enabled provider
     config()->set('services.browserbase.project_id', 'project-test');
     config()->set('services.openai.api_key', 'secret-openai-key');
     config()->set('services.chef_automation.worker_path', __FILE__);
+    config()->set('services.chef_automation.actor_path', __FILE__);
+    config()->set('services.chef_automation.actor_launcher_path', __FILE__);
     config()->set('automation.connection_enabled', false);
     config()->set('automation.queue', 'automation');
     config()->set('services.browserbase.record_local_cart_sessions', true);
@@ -284,6 +316,7 @@ it('reports automation readiness and fails closed on incomplete enabled provider
         ->expectsOutputToContain('Connection flag: disabled')
         ->expectsOutputToContain('Local cart-session recording: enabled')
         ->expectsOutputToContain('Browser viewport: 1024 × 768')
+        ->expectsOutputToContain('Computer-use model: gpt-5.6-sol')
         ->expectsOutputToContain('Automation queue: automation')
         ->assertSuccessful();
 

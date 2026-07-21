@@ -83,10 +83,20 @@ class AdvanceAutomationRunJob implements ShouldBeUniqueUntilProcessing, ShouldQu
             return;
         }
 
-        $remoteSessionStarted = $run->browserSessions()->exists();
+        $remoteMutationMayHaveStarted = $run->items()->where('attempts', '>', 0)->exists()
+            || $run->steps()->whereIn('action_type', [
+                'clear_existing_cart',
+                'prepare_and_verify_item',
+                'click',
+                'double_click',
+                'drag',
+                'keypress',
+                'scroll',
+                'type',
+            ])->exists();
         $run->update([
             'status' => AutomationRunStatus::Failed,
-            'failure_message' => $remoteSessionStarted
+            'failure_message' => $remoteMutationMayHaveStarted
                 ? 'Cart preparation stopped after repeated safe retries. The remote cart must be reconciled before another run.'
                 : 'Chef could not reach the browser provider after several attempts. No Woolworths cart changes were made; check the automation worker connection and start a new run.',
             'finished_at' => now(),

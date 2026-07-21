@@ -23,7 +23,8 @@ class AutomationRunController extends Controller
             'retailer_connection_id' => ['required', 'integer'],
             'idempotency_key' => ['required', 'uuid'],
             'safety_acknowledged' => ['required', 'accepted'],
-            'allow_automatic_product_search' => ['required', 'boolean'],
+            'product_plan_reviewed' => ['required_without:allow_automatic_product_search', 'boolean'],
+            'allow_automatic_product_search' => ['sometimes', 'boolean'],
         ]);
         $revision = ShoppingListRevision::query()
             ->where('team_id', $shoppingList->team_id)
@@ -40,7 +41,7 @@ class AutomationRunController extends Controller
             $request->user(),
             $request->string('idempotency_key')->toString(),
             $request->boolean('safety_acknowledged'),
-            $request->boolean('allow_automatic_product_search'),
+            $request->boolean('product_plan_reviewed') || $request->boolean('allow_automatic_product_search'),
         );
 
         return to_route('meal-plans.shopping.show', $shoppingList->meal_plan_id);

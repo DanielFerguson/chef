@@ -18,14 +18,13 @@ class OpenAIComputerUseClient implements ComputerUseClient
         string $screenshotDataUrl,
         ?array $previousActionOutput = null,
     ): ComputerUseTurn {
+        $model = (string) config('services.openai.computer_use_model', 'gpt-5.6-sol');
         $payload = [
-            'model' => (string) config('services.openai.computer_use_model', 'computer-use-preview'),
-            'tools' => [[
-                'type' => (string) config('services.openai.computer_tool_type', 'computer_use_preview'),
-                'display_width' => (int) config('services.browserbase.viewport_width', 1024),
-                'display_height' => (int) config('services.browserbase.viewport_height', 768),
-                'environment' => 'browser',
-            ]],
+            'model' => $model,
+            'tools' => [['type' => 'computer']],
+            'reasoning' => [
+                'effort' => (string) config('services.openai.computer_use_reasoning_effort', 'low'),
+            ],
             'store' => (bool) config('services.openai.store', false),
             'safety_identifier' => hash('sha256', 'chef-automation-user:'.$run->started_by_user_id),
         ];
@@ -39,6 +38,7 @@ class OpenAIComputerUseClient implements ComputerUseClient
                 'output' => [
                     'type' => 'computer_screenshot',
                     'image_url' => $screenshotDataUrl,
+                    'detail' => 'original',
                 ],
             ]];
         } else {
@@ -46,12 +46,17 @@ class OpenAIComputerUseClient implements ComputerUseClient
                 'role' => 'user',
                 'content' => [
                     ['type' => 'input_text', 'text' => $this->prompt($item)],
-                    ['type' => 'input_image', 'image_url' => $screenshotDataUrl, 'detail' => 'high'],
+                    ['type' => 'input_image', 'image_url' => $screenshotDataUrl, 'detail' => 'original'],
                 ],
             ]];
         }
 
+        $startedAt = microtime(true);
         $response = $this->client()->post('/v1/responses', $payload)->throw()->json();
+        $diagnostics = [
+            'model' => $model,
+            'openai_response_ms' => round((microtime(true) - $startedAt) * 1000, 2),
+        ];
         $responseId = $response['id'] ?? null;
 
         if (! is_string($responseId) || $responseId === '') {
@@ -65,17 +70,24 @@ class OpenAIComputerUseClient implements ComputerUseClient
             return new ComputerUseTurn(
                 responseId: $responseId,
                 callId: null,
-                action: null,
+                actions: [],
                 complete: true,
                 message: $this->outputText($response),
+                diagnostics: $diagnostics,
             );
         }
+
+        $actions = collect(is_array($computerCall['actions'] ?? null) ? $computerCall['actions'] : [])
+            ->filter(fn ($action): bool => is_array($action) && is_string($action['type'] ?? null))
+            ->values()
+            ->all();
 
         return new ComputerUseTurn(
             responseId: $responseId,
             callId: is_string($computerCall['call_id'] ?? null) ? $computerCall['call_id'] : null,
-            action: is_array($computerCall['action'] ?? null) ? $computerCall['action'] : null,
+            actions: $actions,
             pendingSafetyChecks: $this->safetyChecks($computerCall['pending_safety_checks'] ?? []),
+            diagnostics: [...$diagnostics, 'action_count' => count($actions)],
         );
     }
 

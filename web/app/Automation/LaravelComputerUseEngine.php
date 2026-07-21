@@ -15,6 +15,7 @@ use App\Automation\Data\AutomationAdvanceResult;
 use App\Automation\Data\CartInspection;
 use App\Automation\Data\ItemPreparationResult;
 use App\Automation\Data\WorkerCommand;
+use App\Automation\Exceptions\ActorRecoveryReconciliationRequired;
 use App\Automation\Exceptions\BrowserSessionLostException;
 use App\Automation\Exceptions\RetailerContextRevokedException;
 use App\Automation\Policy\AutomationActionPolicy;
@@ -58,6 +59,8 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             return $this->contextWasRevoked($run->refresh());
         } catch (BrowserSessionLostException) {
             return $this->sessionWasLost($run->refresh());
+        } catch (ActorRecoveryReconciliationRequired) {
+            return $this->actorRecovered($run->refresh());
         }
     }
 
@@ -89,8 +92,6 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             if ($manualTakeoverActive) {
                 return new AutomationAdvanceResult(false, 'manual_takeover');
             }
-
-            $this->closeOpenSessions($run);
 
             return new AutomationAdvanceResult(false, $run->status->value);
         }
@@ -131,6 +132,7 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             'reason' => $authentication->reason,
             'bot_detected' => $authentication->botDetected,
             'sensitive_screen' => $authentication->sensitiveScreen,
+            'diagnostics' => $authentication->diagnostics,
         ]);
 
         if (! $authentication->authenticated || $authentication->botDetected || $authentication->sensitiveScreen) {
@@ -170,7 +172,6 @@ class LaravelComputerUseEngine implements ComputerUseEngine
                 session: $session,
             );
             $this->transition->handle($run->refresh(), AutomationRunStatus::AwaitingExistingCartDecision);
-            $this->closeOpenSessions($run);
 
             return new AutomationAdvanceResult(false, 'awaiting_existing_cart_decision');
         }
@@ -240,24 +241,27 @@ class LaravelComputerUseEngine implements ComputerUseEngine
                 'attempts' => $item->attempts + 1,
                 'failure_message' => null,
             ]);
-            $result = $this->adapter->prepareItem(
+            $prepared = $this->adapter->prepareAndVerifyItem(
                 $session,
                 $item->refresh(),
                 $currentCart,
                 $preExistingLines,
             );
+            $result = $prepared->preparation;
             $workPerformed++;
-            $this->recordStep($run, $item, $session, 'prepare_item', AutomationPolicyDecision::Allowed, [
+            $this->recordStep($run, $item, $session, 'prepare_and_verify_item', AutomationPolicyDecision::Allowed, [
                 'requirement' => $this->requirementSummary($item),
             ], [
                 'status' => $result->status->value,
                 'product' => $this->sanitizeProduct($result->product),
                 'requires_computer_use' => $result->requiresComputerUse,
+                'before' => $this->inspectionSummary($prepared->before),
+                'after' => $this->inspectionSummary($prepared->after),
+                'diagnostics' => $prepared->diagnostics,
             ]);
 
-            $verifiedCart = $this->adapter->inspectCart($session);
+            $verifiedCart = $prepared->after;
             $currentCart = $verifiedCart;
-            $this->recordCartInspection($run, $session, $verifiedCart, 'verify_item_mutation', $item);
             $outcome = $this->applyVerifiedOutcome($run, $item->refresh(), $result, $verifiedCart, $session);
 
             if ($outcome instanceof AutomationAdvanceResult) {
@@ -374,7 +378,20 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             session: $session,
         );
         $this->transition->handle($run, AutomationRunStatus::AwaitingReauthentication);
-        $this->closeOpenSessions($run);
+
+        if ($session !== null && ! $session->recording_enabled) {
+            $this->executor->yieldControl($session);
+            $session->update([
+                'purpose' => BrowserSessionPurpose::Reauthentication,
+                'status' => BrowserSessionStatus::HumanControl,
+                'metadata' => [
+                    ...($session->metadata ?? []),
+                    'yielded_for_reauthentication_at' => now()->toIso8601String(),
+                ],
+            ]);
+        } elseif ($session !== null) {
+            $this->closeSession->handle($session);
+        }
 
         return new AutomationAdvanceResult(false, 'awaiting_reauthentication');
     }
@@ -417,6 +434,22 @@ class LaravelComputerUseEngine implements ComputerUseEngine
         return new AutomationAdvanceResult(true, 'browser_session_lost');
     }
 
+    private function actorRecovered(AutomationRun $run): AutomationAdvanceResult
+    {
+        $session = $this->activeAgentSession($run);
+        $this->recordStep(
+            $run,
+            null,
+            $session,
+            'browser_actor_recovered',
+            AutomationPolicyDecision::Allowed,
+            [],
+            ['next_step' => 'authenticate_and_reconcile_before_mutation'],
+        );
+
+        return new AutomationAdvanceResult(true, 'browser_actor_recovered');
+    }
+
     private function expireLostSessions(AutomationRun $run): void
     {
         $sessions = $run->browserSessions()
@@ -440,7 +473,6 @@ class LaravelComputerUseEngine implements ComputerUseEngine
     ): AutomationAdvanceResult {
         $this->createIntervention->handle($run, $type, ['message' => $message], session: $session);
         $this->transition->handle($run, AutomationRunStatus::AwaitingItemDecision);
-        $this->closeOpenSessions($run);
 
         return new AutomationAdvanceResult(false, $type->value);
     }
@@ -464,7 +496,6 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             'product' => $this->sanitizeProduct($product),
         ], $item, $session);
         $this->transition->handle($run->refresh(), AutomationRunStatus::AwaitingItemDecision);
-        $this->closeOpenSessions($run);
 
         return new AutomationAdvanceResult(false, 'awaiting_item_decision');
     }
@@ -580,7 +611,7 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             );
         }
 
-        if ($turn->complete || $turn->action === null || $turn->callId === null) {
+        if ($turn->complete || $turn->actions === [] || $turn->callId === null) {
             return $this->pauseForItem(
                 $run->refresh(),
                 $session,
@@ -590,60 +621,95 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             );
         }
 
-        $assessment = $this->actionPolicy->assess($turn->action, $capture->payload);
-        if ($assessment->decision === AutomationPolicyDecision::RequiresIntervention) {
-            return $this->pauseForSafety($run->refresh(), $session, AutomationInterventionType::SensitiveScreen, $assessment->reason);
-        }
+        $observation = $capture->payload;
+        $actionCount = count($turn->actions);
 
-        if ($assessment->decision === AutomationPolicyDecision::Blocked) {
-            return $this->pauseForItem($run->refresh(), $session, $item, AutomationInterventionType::ItemDecision, $assessment->reason);
-        }
+        foreach ($turn->actions as $actionIndex => $action) {
+            $run->refresh();
+            if ($run->actions_taken >= (int) ($run->limits['max_actions'] ?? config('automation.max_actions', 40))) {
+                return $this->pauseForItem(
+                    $run,
+                    $session,
+                    $item,
+                    AutomationInterventionType::ItemDecision,
+                    'Chef reached the safe browser-action limit before executing the next ordered computer action.',
+                );
+            }
 
-        $step = $this->recordStep(
-            $run,
-            $item,
-            $session,
-            (string) ($turn->action['type'] ?? 'computer_action'),
-            $assessment->decision,
-            [
-                'action' => $this->sanitizeAction($turn->action),
-                'call_id' => $turn->callId,
-            ],
-            [],
-            complete: false,
-        );
-        $executed = $this->executor->execute($session, new WorkerCommand('execute_action', [
-            'action' => $turn->action,
-        ]));
+            if ($actionIndex > 0) {
+                $freshCapture = $this->executor->execute($session, new WorkerCommand('capture'));
+                if (! $freshCapture->ok || ! is_string($freshCapture->payload['screenshot'] ?? null)) {
+                    return $this->pauseForItem(
+                        $run,
+                        $session,
+                        $item,
+                        AutomationInterventionType::ItemDecision,
+                        'Chef could not safely observe the page before the next ordered computer action.',
+                    );
+                }
 
-        if (! $executed->ok) {
+                $observation = $freshCapture->payload;
+            }
+
+            $assessment = $this->actionPolicy->assess($action, $observation);
+            if ($assessment->decision === AutomationPolicyDecision::RequiresIntervention) {
+                return $this->pauseForSafety($run, $session, AutomationInterventionType::SensitiveScreen, $assessment->reason);
+            }
+
+            if ($assessment->decision === AutomationPolicyDecision::Blocked) {
+                return $this->pauseForItem($run, $session, $item, AutomationInterventionType::ItemDecision, $assessment->reason);
+            }
+
+            $step = $this->recordStep(
+                $run,
+                $item,
+                $session,
+                (string) ($action['type'] ?? 'computer_action'),
+                $assessment->decision,
+                [
+                    'action' => $this->sanitizeAction($action),
+                    'call_id' => $turn->callId,
+                    'action_index' => $actionIndex,
+                    'action_count' => $actionCount,
+                ],
+                ['openai' => $turn->diagnostics],
+                complete: false,
+            );
+            $executed = $this->executor->execute($session, new WorkerCommand('execute_action', [
+                'action' => $action,
+            ]));
+
+            if (! $executed->ok) {
+                $step->update([
+                    'output_summary' => [
+                        'call_id' => $turn->callId,
+                        'action_index' => $actionIndex,
+                        'verified' => false,
+                        'error_code' => $executed->errorCode,
+                    ],
+                    'completed_at' => now(),
+                ]);
+
+                return $this->pauseForItem(
+                    $run->refresh(),
+                    $session,
+                    $item,
+                    AutomationInterventionType::ItemDecision,
+                    $executed->errorMessage ?? 'The browser worker rejected an unsafe or unverifiable action.',
+                );
+            }
+
             $step->update([
                 'output_summary' => [
                     'call_id' => $turn->callId,
-                    'verified' => false,
-                    'error_code' => $executed->errorCode,
+                    'action_index' => $actionIndex,
+                    'verified' => (bool) ($executed->payload['verified'] ?? false),
+                    'url_host' => $this->safeHost($executed->payload['url'] ?? null),
                 ],
                 'completed_at' => now(),
             ]);
-
-            return $this->pauseForItem(
-                $run->refresh(),
-                $session,
-                $item,
-                AutomationInterventionType::ItemDecision,
-                $executed->errorMessage ?? 'The browser worker rejected an unsafe or unverifiable action.',
-            );
+            $run->increment('actions_taken');
         }
-
-        $step->update([
-            'output_summary' => [
-                'call_id' => $turn->callId,
-                'verified' => (bool) ($executed->payload['verified'] ?? false),
-                'url_host' => $this->safeHost($executed->payload['url'] ?? null),
-            ],
-            'completed_at' => now(),
-        ]);
-        $run->increment('actions_taken');
 
         return null;
     }
@@ -661,7 +727,25 @@ class LaravelComputerUseEngine implements ComputerUseEngine
             'currency' => $inspection->currency,
             'bot_detected' => $inspection->botDetected,
             'sensitive_screen' => $inspection->sensitiveScreen,
+            'diagnostics' => $inspection->diagnostics,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function inspectionSummary(CartInspection $inspection): array
+    {
+        return [
+            'line_count' => count($inspection->lines),
+            'total' => $inspection->total,
+            'currency' => $inspection->currency,
+            'diagnostics' => $inspection->diagnostics,
+            'checksum' => hash('sha256', json_encode(
+                array_map($this->sanitizeCartLine(...), $inspection->lines),
+                JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
+            )),
+            'bot_detected' => $inspection->botDetected,
+            'sensitive_screen' => $inspection->sensitiveScreen,
+        ];
     }
 
     /**

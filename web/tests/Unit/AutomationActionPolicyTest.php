@@ -28,6 +28,10 @@ it('blocks forbidden origins actions keys and sensitive fields', function () {
             ['url' => 'https://www.woolworths.com.au/shop/search/products'],
         )->decision)->toBe(AutomationPolicyDecision::Blocked)
         ->and($policy->assess(
+            ['type' => 'click', 'x' => 20, 'y' => 30, 'keys' => ['SHIFT']],
+            ['url' => 'https://www.woolworths.com.au/shop/search/products'],
+        )->decision)->toBe(AutomationPolicyDecision::Blocked)
+        ->and($policy->assess(
             ['type' => 'keypress', 'keys' => ['CTRL', 'L']],
             ['url' => 'https://www.woolworths.com.au/shop/search/products'],
         )->decision)->toBe(AutomationPolicyDecision::Blocked)

@@ -37,6 +37,12 @@ class ShoppingListRevision extends Model
         return $this->hasMany(AutomationRun::class);
     }
 
+    /** @return HasMany<CartProductPlan, $this> */
+    public function cartProductPlans(): HasMany
+    {
+        return $this->hasMany(CartProductPlan::class);
+    }
+
     protected function casts(): array
     {
         return ['snapshot' => 'array'];

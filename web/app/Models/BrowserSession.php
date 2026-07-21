@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
@@ -52,6 +54,18 @@ class BrowserSession extends Model
     public function run(): BelongsTo
     {
         return $this->belongsTo(AutomationRun::class, 'automation_run_id');
+    }
+
+    /** @return HasMany<BrowserActor, $this> */
+    public function actors(): HasMany
+    {
+        return $this->hasMany(BrowserActor::class)->orderByDesc('generation');
+    }
+
+    /** @return HasOne<BrowserActor, $this> */
+    public function latestActor(): HasOne
+    {
+        return $this->hasOne(BrowserActor::class)->ofMany('generation', 'max');
     }
 
     protected function casts(): array

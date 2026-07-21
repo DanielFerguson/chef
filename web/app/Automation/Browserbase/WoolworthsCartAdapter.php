@@ -6,7 +6,7 @@ use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\RetailerCartAdapter;
 use App\Automation\Data\AuthenticationCheck;
 use App\Automation\Data\CartInspection;
-use App\Automation\Data\ItemPreparationResult;
+use App\Automation\Data\PreparedCartItem;
 use App\Automation\Data\WorkerCommand;
 use App\Automation\Data\WorkerResult;
 use App\Models\AutomationRunItem;
@@ -34,27 +34,40 @@ class WoolworthsCartAdapter implements RetailerCartAdapter
 
     public function openLogin(BrowserSession $session): void
     {
-        $this->requireSuccess($this->executor->execute($session, new WorkerCommand('navigate', [
-            'url' => $this->loginUrl(),
-            'mode' => 'human_login',
-        ])));
+        $this->executor->resumeControl($session);
+
+        try {
+            $this->requireSuccess($this->executor->execute($session, new WorkerCommand('navigate', [
+                'url' => $this->loginUrl(),
+                'mode' => 'human_login',
+            ])));
+        } finally {
+            $this->executor->yieldControl($session);
+        }
     }
 
     public function openCart(BrowserSession $session): void
     {
-        $this->requireSuccess($this->executor->execute($session, new WorkerCommand('navigate', [
-            'url' => $this->cartUrl(),
-            'mode' => 'human_takeover',
-        ])));
+        $this->executor->resumeControl($session);
+
+        try {
+            $this->requireSuccess($this->executor->execute($session, new WorkerCommand('navigate', [
+                'url' => $this->cartUrl(),
+                'mode' => 'human_takeover',
+            ])));
+        } finally {
+            $this->executor->yieldControl($session);
+        }
     }
 
     public function checkAuthentication(BrowserSession $session): AuthenticationCheck
     {
-        $result = $this->requireSuccess($this->executor->execute($session, new WorkerCommand('probe_authentication', [
+        $workerResult = $this->executor->execute($session, new WorkerCommand('probe_authentication', [
             'url' => $this->cartUrl(),
-        ])));
+        ]));
+        $result = $this->requireSuccess($workerResult);
 
-        return AuthenticationCheck::fromPayload($result);
+        return AuthenticationCheck::fromPayload($result, $workerResult->diagnostics);
     }
 
     public function inspectCart(BrowserSession $session): CartInspection
@@ -67,12 +80,12 @@ class WoolworthsCartAdapter implements RetailerCartAdapter
         return $this->cartInspection('clear_cart', $session);
     }
 
-    public function prepareItem(
+    public function prepareAndVerifyItem(
         BrowserSession $session,
         AutomationRunItem $item,
         CartInspection $cartBefore,
         array $preExistingLines = [],
-    ): ItemPreparationResult {
+    ): PreparedCartItem {
         $requirement = $item->requirement_snapshot;
         $identity = is_string($requirement['product_match']['product_name'] ?? null)
             ? $requirement['product_match']['product_name']
@@ -83,7 +96,8 @@ class WoolworthsCartAdapter implements RetailerCartAdapter
         $baselineQuantity = is_array($baseline) && is_numeric($baseline['quantity'] ?? null)
             ? (float) $baseline['quantity']
             : 0;
-        $result = $this->requireSuccess($this->executor->execute($session, new WorkerCommand('prepare_item', [
+        $workerResult = $this->executor->execute($session, new WorkerCommand('prepare_and_verify_item', [
+            'url' => $this->cartUrl(),
             'requirement' => [
                 ...$requirement,
                 'pre_existing_quantity' => $baselineQuantity,
@@ -92,9 +106,10 @@ class WoolworthsCartAdapter implements RetailerCartAdapter
                 'line_count' => count($cartBefore->lines),
                 'total' => $cartBefore->total,
             ],
-        ])));
+        ]));
+        $result = $this->requireSuccess($workerResult);
 
-        return ItemPreparationResult::fromPayload($result);
+        return PreparedCartItem::fromPayload($result, $workerResult->diagnostics);
     }
 
     public function reconcile(BrowserSession $session): CartInspection
@@ -114,10 +129,11 @@ class WoolworthsCartAdapter implements RetailerCartAdapter
 
     private function cartInspection(string $command, BrowserSession $session): CartInspection
     {
-        $result = $this->requireSuccess($this->executor->execute($session, new WorkerCommand($command, [
+        $workerResult = $this->executor->execute($session, new WorkerCommand($command, [
             'url' => $this->cartUrl(),
-        ])));
+        ]));
+        $result = $this->requireSuccess($workerResult);
 
-        return CartInspection::fromPayload($result);
+        return CartInspection::fromPayload($result, $workerResult->diagnostics);
     }
 }

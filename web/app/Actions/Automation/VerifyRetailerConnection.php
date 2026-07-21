@@ -2,6 +2,7 @@
 
 namespace App\Actions\Automation;
 
+use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\RetailerCartAdapter;
 use App\Automation\Exceptions\BrowserSessionLostException;
 use App\Enums\AutomationInterventionStatus;
@@ -22,7 +23,7 @@ class VerifyRetailerConnection
 {
     public function __construct(
         private readonly RetailerCartAdapter $adapter,
-        private readonly CloseBrowserSession $closeSession,
+        private readonly ComputerExecutor $executor,
         private readonly ReleaseRetailerConnectionLease $releaseLease,
         private readonly TransitionAutomationRun $transition,
     ) {}
@@ -41,6 +42,7 @@ class VerifyRetailerConnection
         $connection->update(['status' => RetailerConnectionStatus::Checking]);
 
         try {
+            $this->executor->resumeControl($session);
             $check = $this->adapter->checkAuthentication($session);
         } catch (BrowserSessionLostException) {
             $session->update([
@@ -54,6 +56,7 @@ class VerifyRetailerConnection
                 'connection' => 'The secure Woolworths browser ended before Chef could verify it. Return to Shopping and reconnect.',
             ]);
         } catch (RuntimeException $exception) {
+            $this->yieldBackToHuman($session);
             Log::warning('Retailer authentication verification did not reach a safe result.', [
                 'browser_session_id' => $session->id,
                 'retailer_connection_id' => $connection->id,
@@ -67,6 +70,7 @@ class VerifyRetailerConnection
         }
 
         if ($check->botDetected || $check->sensitiveScreen || ! $check->authenticated) {
+            $this->yieldBackToHuman($session);
             $connection->update(['status' => RetailerConnectionStatus::ReauthenticationRequired]);
 
             throw ValidationException::withMessages([
@@ -80,11 +84,14 @@ class VerifyRetailerConnection
             ->first();
 
         if ($run === null) {
-            $this->closeSession->handle($session);
-            $syncDelay = max(0, (int) config('automation.context_sync_delay_milliseconds', 3000));
-            if ($syncDelay > 0) {
-                usleep($syncDelay * 1000);
-            }
+            $session->update([
+                'purpose' => BrowserSessionPurpose::CartPreparation,
+                'status' => BrowserSessionStatus::AgentControl,
+                'metadata' => [
+                    ...($session->metadata ?? []),
+                    'verified_for_cart_preparation_at' => now()->toIso8601String(),
+                ],
+            ]);
         } else {
             $session->update([
                 'automation_run_id' => $run->id,
@@ -116,6 +123,16 @@ class VerifyRetailerConnection
             $this->transition->handle($run, AutomationRunStatus::Queued);
             AdvanceAutomationRunJob::dispatch($run->id)
                 ->onQueue((string) config('automation.queue', 'automation'));
+        }
+    }
+
+    private function yieldBackToHuman(BrowserSession $session): void
+    {
+        try {
+            $this->executor->yieldControl($session);
+        } catch (\Throwable) {
+            // The same bounded provider session remains available until its
+            // expiry even if the local actor cannot acknowledge the yield.
         }
     }
 }

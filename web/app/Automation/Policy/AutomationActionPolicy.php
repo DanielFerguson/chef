@@ -46,6 +46,12 @@ class AutomationActionPolicy
             return $this->blocked('Typing into authentication or sensitive fields is never delegated to the model.');
         }
 
+        if (in_array($type, ['click', 'double_click'], true)
+            && is_array($action['keys'] ?? null)
+            && $action['keys'] !== []) {
+            return $this->blocked('Modifier-assisted clicks are outside Chef’s cart-preparation action policy.');
+        }
+
         if ($type === 'keypress') {
             $keys = is_array($action['keys'] ?? null) ? $action['keys'] : [$action['key'] ?? null];
             $keys = array_map(fn ($key) => is_string($key) ? Str::upper($key) : '', $keys);

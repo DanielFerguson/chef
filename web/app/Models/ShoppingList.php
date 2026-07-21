@@ -78,6 +78,12 @@ class ShoppingList extends Model
         return $this->hasMany(AutomationRun::class)->latest();
     }
 
+    /** @return HasMany<CartProductPlan, $this> */
+    public function cartProductPlans(): HasMany
+    {
+        return $this->hasMany(CartProductPlan::class)->latest();
+    }
+
     protected function casts(): array
     {
         return [

@@ -27,7 +27,9 @@ class CreateBrowserSession
         $reservationOwner = 'reservation:'.$leaseToken;
 
         try {
+            $creationStartedAt = microtime(true);
             $providerSession = $this->provider->createSession($connection->refresh(), $purpose);
+            $creationMilliseconds = round((microtime(true) - $creationStartedAt) * 1000, 2);
             $session = BrowserSession::query()->create([
                 'team_id' => $connection->team_id,
                 'retailer_connection_id' => $connection->id,
@@ -47,7 +49,8 @@ class CreateBrowserSession
                 'metadata' => [
                     'region' => (string) config('services.browserbase.region', 'ap-southeast-1'),
                     'proxy_country' => (string) config('services.browserbase.proxy_country', 'AU'),
-                    'protocol' => 'chef.browser.v1',
+                    'protocol' => 'chef.browser.actor.v1',
+                    'timings' => ['session_creation_ms' => $creationMilliseconds],
                 ],
             ]);
 

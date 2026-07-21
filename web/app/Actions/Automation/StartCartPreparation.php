@@ -4,9 +4,14 @@ namespace App\Actions\Automation;
 
 use App\Enums\AutomationRunItemStatus;
 use App\Enums\AutomationRunStatus;
+use App\Enums\BrowserSessionPurpose;
+use App\Enums\BrowserSessionStatus;
+use App\Enums\CartProductPlanStatus;
 use App\Enums\RetailerConnectionStatus;
 use App\Jobs\AdvanceAutomationRunJob;
 use App\Models\AutomationRun;
+use App\Models\BrowserSession;
+use App\Models\CartProductPlan;
 use App\Models\RetailerConnection;
 use App\Models\ShoppingList;
 use App\Models\ShoppingListRevision;
@@ -18,7 +23,10 @@ use Illuminate\Validation\ValidationException;
 
 class StartCartPreparation
 {
-    public function __construct(private readonly BuildCartPreparationPreflight $buildPreflight) {}
+    public function __construct(
+        private readonly BuildCartPreparationPreflight $buildPreflight,
+        private readonly BuildCartProductPlan $buildProductPlan,
+    ) {}
 
     public function handle(
         ShoppingList $shoppingList,
@@ -27,7 +35,7 @@ class StartCartPreparation
         User $user,
         string $idempotencyKey,
         bool $safetyAcknowledged = false,
-        bool $allowAutomaticProductSearch = false,
+        bool $productPlanReviewed = false,
     ): AutomationRun {
         if (! (bool) config('automation.cart_mutation_enabled')) {
             throw ValidationException::withMessages(['automation' => 'Woolworths cart preparation is not enabled in this environment.']);
@@ -38,7 +46,7 @@ class StartCartPreparation
         }
 
         $idempotencyHash = hash('sha256', implode(':', [
-            'woolworths-cart-v1',
+            'woolworths-cart-v2',
             $shoppingList->id,
             $revision->id,
             $connection->id,
@@ -58,12 +66,18 @@ class StartCartPreparation
             throw ValidationException::withMessages(['safety_acknowledged' => 'Review the household safety context before preparing the cart.']);
         }
 
-        if (! $preflight['can_prepare']) {
-            throw ValidationException::withMessages(['shopping_list' => 'Every included item needs an exact approved Woolworths product while household safety constraints apply.']);
+        $productPlan = $this->buildProductPlan->handle($shoppingList, $revision, $connection, $user);
+
+        if ($productPlan->status !== CartProductPlanStatus::Ready) {
+            throw ValidationException::withMessages([
+                'shopping_list' => 'Finish the Woolworths product plan before opening an authenticated cart run. Ambiguous or unresolved items need an exact product choice.',
+            ]);
         }
 
-        if ($preflight['automatic_search_items'] > 0 && ! $allowAutomaticProductSearch) {
-            throw ValidationException::withMessages(['allow_automatic_product_search' => 'Approve automatic Woolworths search for the unmatched items, or match them before continuing.']);
+        if (! $productPlanReviewed) {
+            throw ValidationException::withMessages([
+                'product_plan_reviewed' => 'Review the exact Woolworths product plan before preparing the cart.',
+            ]);
         }
 
         $snapshotItems = collect($this->includedSnapshotItems($revision));
@@ -76,7 +90,12 @@ class StartCartPreparation
             ->where(fn ($query) => $query->whereNull('retailer_id')->orWhere('retailer_id', $connection->retailer_id))
             ->get()
             ->keyBy(fn ($preference) => Str::lower((string) $preference->normalized_item_name));
-        $frozenItems = $snapshotItems->map(function (array $item) use ($preferences, $preflight): array {
+        $plannedProducts = $productPlan->items->keyBy(
+            fn ($item): string => $item->shopping_list_item_id !== null
+                ? 'item:'.$item->shopping_list_item_id
+                : 'position:'.$item->position,
+        );
+        $frozenItems = $snapshotItems->values()->map(function (array $item, int $position) use ($preferences, $preflight, $plannedProducts): array {
             $normalizedName = Str::of((string) ($item['name'] ?? ''))->squish()->lower()->toString();
             $acceptSubstitutes = true;
             $maximumPrice = null;
@@ -87,6 +106,10 @@ class StartCartPreparation
                 $maximumPrice = $preference->maximum_price;
             }
 
+            $productPlanItem = $plannedProducts->get(is_numeric($item['id'] ?? null)
+                ? 'item:'.(int) $item['id']
+                : 'position:'.($position + 1));
+
             return [
                 'shopping_list_item_id' => $item['id'] ?? null,
                 'name' => $item['name'] ?? null,
@@ -95,7 +118,7 @@ class StartCartPreparation
                 'note' => $item['note'] ?? null,
                 'optional' => (bool) ($item['optional'] ?? false),
                 'estimated_price' => $item['estimated_price'] ?? null,
-                'product_match' => $item['product_match'] ?? null,
+                'product_match' => $productPlanItem?->selected_product,
                 'accept_substitutes' => ! $preflight['requires_exact_matches'] && $acceptSubstitutes,
                 'maximum_price' => $maximumPrice,
                 'source_planned_meal_ids' => $item['source_planned_meal_ids'] ?? [],
@@ -110,7 +133,12 @@ class StartCartPreparation
             'approved_at' => now()->toIso8601String(),
             'approval' => [
                 'safety_acknowledged' => true,
-                'automatic_product_search_approved' => $allowAutomaticProductSearch,
+                'product_plan_reviewed' => true,
+            ],
+            'product_plan' => [
+                'id' => $productPlan->id,
+                'version' => $productPlan->snapshot['version'] ?? 'chef.product-plan.v1',
+                'input_checksum' => $productPlan->input_checksum,
             ],
             'safety_context' => [
                 'fingerprint' => $preflight['safety_fingerprint'],
@@ -121,11 +149,20 @@ class StartCartPreparation
         ];
         $encoded = json_encode($frozenSnapshot, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
 
-        $run = DB::transaction(function () use ($shoppingList, $revision, $connection, $user, $idempotencyHash, $frozenSnapshot, $encoded, $frozenItems): AutomationRun {
+        $run = DB::transaction(function () use ($shoppingList, $revision, $connection, $user, $idempotencyHash, $frozenSnapshot, $encoded, $frozenItems, $productPlan): AutomationRun {
             $lockedConnection = RetailerConnection::query()->lockForUpdate()->findOrFail($connection->id);
+            $lockedProductPlan = CartProductPlan::query()->lockForUpdate()->findOrFail($productPlan->id);
 
             if ($lockedConnection->status !== RetailerConnectionStatus::Connected) {
                 throw ValidationException::withMessages(['connection' => 'Reconnect Woolworths before preparing the cart.']);
+            }
+
+            if ($lockedProductPlan->status !== CartProductPlanStatus::Ready
+                || $lockedProductPlan->shopping_list_revision_id !== $revision->id
+                || $lockedProductPlan->retailer_id !== $connection->retailer_id) {
+                throw ValidationException::withMessages([
+                    'product_plan' => 'The reviewed Woolworths product plan changed before it could be frozen.',
+                ]);
             }
 
             $activeStatuses = collect(AutomationRunStatus::cases())->reject->isTerminal()->map->value->all();
@@ -152,6 +189,24 @@ class StartCartPreparation
                 'expires_at' => now()->addMinutes((int) config('automation.run_ttl_minutes', 60)),
             ]);
 
+            $availableSession = BrowserSession::query()
+                ->where('retailer_connection_id', $connection->id)
+                ->whereNull('automation_run_id')
+                ->where('purpose', BrowserSessionPurpose::CartPreparation->value)
+                ->where('status', BrowserSessionStatus::AgentControl->value)
+                ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                ->lockForUpdate()
+                ->latest('id')
+                ->first();
+
+            $availableSession?->update([
+                'automation_run_id' => $run->id,
+                'metadata' => [
+                    ...($availableSession->metadata ?? []),
+                    'claimed_by_automation_run_at' => now()->toIso8601String(),
+                ],
+            ]);
+
             foreach ($frozenItems as $position => $item) {
                 $run->items()->create([
                     'team_id' => $run->team_id,
@@ -161,6 +216,21 @@ class StartCartPreparation
                     'requirement_snapshot' => $item,
                 ]);
             }
+
+            $lockedProductPlan->update([
+                'automation_run_id' => $run->id,
+                'status' => CartProductPlanStatus::Frozen,
+                'reviewed_by_user_id' => $user->id,
+                'reviewed_at' => now(),
+                'frozen_at' => now(),
+                'snapshot' => [
+                    ...($lockedProductPlan->snapshot ?? []),
+                    'frozen_snapshot_checksum' => hash('sha256', json_encode(
+                        $frozenItems,
+                        JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
+                    )),
+                ],
+            ]);
 
             return $run;
         });

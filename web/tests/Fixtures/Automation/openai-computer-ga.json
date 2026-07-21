@@ -1,0 +1,40 @@
+{
+    "version": "chef.openai.computer.v1",
+    "initial_response": {
+        "id": "resp_ga_1",
+        "output": [
+            {
+                "type": "computer_call",
+                "call_id": "call_ga_1",
+                "actions": [
+                    {
+                        "type": "click",
+                        "x": 100,
+                        "y": 120,
+                        "button": "left"
+                    },
+                    {
+                        "type": "keypress",
+                        "keys": ["ENTER"]
+                    }
+                ],
+                "pending_safety_checks": [],
+                "status": "completed"
+            }
+        ]
+    },
+    "continuation_response": {
+        "id": "resp_ga_2",
+        "output": [
+            {
+                "type": "message",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "Done"
+                    }
+                ]
+            }
+        ]
+    }
+}

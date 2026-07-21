@@ -3,6 +3,7 @@
 namespace App\Actions\Automation;
 
 use App\Automation\Contracts\BrowserSessionProvider;
+use App\Automation\Contracts\ComputerExecutor;
 use App\Enums\BrowserSessionStatus;
 use App\Models\BrowserSession;
 
@@ -10,11 +11,14 @@ class CloseBrowserSession
 {
     public function __construct(
         private readonly BrowserSessionProvider $provider,
+        private readonly ComputerExecutor $executor,
         private readonly ReleaseRetailerConnectionLease $releaseLease,
     ) {}
 
     public function handle(BrowserSession $session): void
     {
+        $this->executor->stop($session);
+
         if (in_array($session->status, [BrowserSessionStatus::Closed, BrowserSessionStatus::Expired], true)) {
             $this->releaseLease->handle($session->retailerConnection, 'session:'.$session->id);
 

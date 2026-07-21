@@ -13,16 +13,19 @@ use App\Ai\Testing\DisabledShoppingListDrafter;
 use App\Automation\Browserbase\BrowserbaseBrowserSessionProvider;
 use App\Automation\Browserbase\TypeScriptComputerExecutor;
 use App\Automation\Browserbase\WoolworthsCartAdapter;
+use App\Automation\Browserbase\WoolworthsCatalogueDiscovery;
 use App\Automation\Contracts\BrowserSessionProvider;
 use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\ComputerUseClient;
 use App\Automation\Contracts\ComputerUseEngine;
 use App\Automation\Contracts\RetailerCartAdapter;
+use App\Automation\Contracts\RetailerProductDiscovery;
 use App\Automation\LaravelComputerUseEngine;
 use App\Automation\OpenAI\OpenAIComputerUseClient;
 use App\Automation\Testing\FakeBrowserSessionProvider;
 use App\Automation\Testing\FakeComputerExecutor;
 use App\Automation\Testing\FakeComputerUseClient;
+use App\Automation\Testing\FakeRetailerProductDiscovery;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Support\Facades\Date;
@@ -69,6 +72,12 @@ class AppServiceProvider extends ServiceProvider
                 : OpenAIComputerUseClient::class,
         );
         $this->app->bind(RetailerCartAdapter::class, WoolworthsCartAdapter::class);
+        $this->app->singleton(
+            RetailerProductDiscovery::class,
+            $this->app->environment('testing')
+                ? FakeRetailerProductDiscovery::class
+                : WoolworthsCatalogueDiscovery::class,
+        );
         $this->app->bind(ComputerUseEngine::class, LaravelComputerUseEngine::class);
     }
 

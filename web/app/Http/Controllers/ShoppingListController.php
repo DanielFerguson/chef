@@ -10,6 +10,7 @@ use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\ShoppingListItemCategory;
 use App\Models\Budget;
+use App\Models\CartProductPlan;
 use App\Models\MealPlan;
 use App\Models\PlannedMeal;
 use App\Models\Retailer;
@@ -136,6 +137,15 @@ class ShoppingListController extends Controller
                 'can_prepare' => false,
                 'constraints' => [],
             ];
+        $cartProductPlan = $shoppingList === null || $currentShoppingRevision === null || $woolworths === null
+            ? null
+            : CartProductPlan::query()
+                ->where('shopping_list_id', $shoppingList->id)
+                ->where('shopping_list_revision_id', $currentShoppingRevision->id)
+                ->where('retailer_id', $woolworths->id)
+                ->with('items')
+                ->latest('id')
+                ->first();
 
         return Inertia::render('shopping/show', [
             'workspace' => [
@@ -186,6 +196,25 @@ class ShoppingListController extends Controller
                     'readiness_reasons' => $cartReadinessReasons,
                     'shopping_list_revision_id' => $currentShoppingRevision?->id,
                     'preflight' => $cartPreflight,
+                    'product_plan' => $cartProductPlan === null ? null : [
+                        'id' => $cartProductPlan->id,
+                        'status' => $cartProductPlan->status->value,
+                        'exact_items' => (int) ($cartProductPlan->snapshot['exact_items'] ?? 0),
+                        'ambiguous_items' => (int) ($cartProductPlan->snapshot['ambiguous_items'] ?? 0),
+                        'unresolved_items' => (int) ($cartProductPlan->snapshot['unresolved_items'] ?? 0),
+                        'discovery_failed' => (bool) ($cartProductPlan->snapshot['discovery_failed'] ?? false),
+                        'discovery_ms' => is_numeric($cartProductPlan->snapshot['discovery_ms'] ?? null)
+                            ? (float) $cartProductPlan->snapshot['discovery_ms']
+                            : null,
+                        'items' => $cartProductPlan->items->map(fn ($item) => [
+                            'id' => $item->id,
+                            'name' => (string) ($item->requirement_snapshot['name'] ?? 'Shopping item'),
+                            'status' => $item->status->value,
+                            'decision_reason' => $item->decision_reason,
+                            'selected_product' => $item->selected_product,
+                            'candidates' => collect($item->candidates ?? [])->take(5)->values(),
+                        ])->values(),
+                    ],
                     'connection' => $retailerConnection === null ? null : [
                         'id' => $retailerConnection->id,
                         'status' => $retailerConnection->status->value,

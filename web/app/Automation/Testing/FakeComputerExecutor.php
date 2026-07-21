@@ -5,8 +5,12 @@ namespace App\Automation\Testing;
 use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Data\WorkerCommand;
 use App\Automation\Data\WorkerResult;
+use App\Automation\Exceptions\ActorRecoveryReconciliationRequired;
 use App\Automation\Exceptions\BrowserSessionLostException;
+use App\Enums\BrowserActorStatus;
+use App\Models\BrowserActor;
 use App\Models\BrowserSession;
+use Illuminate\Support\Str;
 use Throwable;
 
 class FakeComputerExecutor implements ComputerExecutor
@@ -22,6 +26,14 @@ class FakeComputerExecutor implements ComputerExecutor
     public bool $removeLinesOnReconcile = false;
 
     public bool $loseNextSession = false;
+
+    public bool $loseNextActor = false;
+
+    public ?string $loseActorOnCommand = null;
+
+    public int $actorStarts = 0;
+
+    public int $actorConnections = 0;
 
     public ?Throwable $executeFailure = null;
 
@@ -45,6 +57,9 @@ class FakeComputerExecutor implements ComputerExecutor
 
     public function execute(BrowserSession $session, WorkerCommand $command): WorkerResult
     {
+        $actor = $this->ensureActor($session);
+        $actorRecovered = false;
+
         if ($this->executeFailure !== null) {
             throw $this->executeFailure;
         }
@@ -55,13 +70,31 @@ class FakeComputerExecutor implements ComputerExecutor
             throw new BrowserSessionLostException;
         }
 
-        $this->commands[] = $command;
+        if ($this->loseNextActor || $this->loseActorOnCommand === $command->type) {
+            $this->loseNextActor = false;
+            $this->loseActorOnCommand = null;
+            $actor->update(['status' => BrowserActorStatus::Lost, 'stopped_at' => now()]);
+            $this->ensureActor($session);
+            $actorRecovered = true;
 
-        return match ($command->type) {
+            if (in_array($command->type, ['clear_cart', 'execute_action', 'prepare_item', 'prepare_and_verify_item'], true)) {
+                throw new ActorRecoveryReconciliationRequired;
+            }
+        }
+
+        $this->commands[] = $command;
+        $session->latestActor?->update(['heartbeat_at' => now()]);
+
+        $result = match ($command->type) {
+            'ping' => new WorkerResult(true, ['control_mode' => 'agent']),
+            'yield_control' => new WorkerResult(true, ['control_mode' => 'human']),
+            'resume_control' => new WorkerResult(true, ['control_mode' => 'agent']),
+            'shutdown' => new WorkerResult(true, ['stopped' => true]),
             'probe_authentication' => $this->probeAuthentication($session),
             'inspect_cart' => $this->inspectCart(),
             'reconcile_cart' => $this->reconcileCart(),
             'clear_cart' => $this->clearCart(),
+            'prepare_and_verify_item' => $this->prepareAndVerifyItem($command),
             'prepare_item' => $this->prepareItem($command),
             'capture' => new WorkerResult(true, [
                 'screenshot' => 'data:image/png;base64,'.base64_encode('fake screenshot'),
@@ -76,6 +109,75 @@ class FakeComputerExecutor implements ComputerExecutor
             ]),
             default => new WorkerResult(false, errorCode: 'unsupported_command', errorMessage: 'Unsupported fake worker command.'),
         };
+
+        return $actorRecovered
+            ? new WorkerResult(
+                ok: $result->ok,
+                payload: $result->payload,
+                errorCode: $result->errorCode,
+                errorMessage: $result->errorMessage,
+                diagnostics: [...$result->diagnostics, 'actor_recovered' => true],
+            )
+            : $result;
+    }
+
+    public function heartbeat(BrowserSession $session): WorkerResult
+    {
+        return $this->execute($session, new WorkerCommand('ping'));
+    }
+
+    public function yieldControl(BrowserSession $session): void
+    {
+        $this->execute($session, new WorkerCommand('yield_control'));
+        $session->latestActor?->update(['status' => BrowserActorStatus::HumanControl]);
+    }
+
+    public function resumeControl(BrowserSession $session): void
+    {
+        $this->execute($session, new WorkerCommand('resume_control'));
+        $session->latestActor?->update(['status' => BrowserActorStatus::Ready]);
+    }
+
+    public function stop(BrowserSession $session): void
+    {
+        $actor = $session->latestActor;
+
+        if ($actor === null || ! $actor->status->isActive()) {
+            return;
+        }
+
+        $actor->update(['status' => BrowserActorStatus::Stopped, 'stopped_at' => now()]);
+    }
+
+    private function ensureActor(BrowserSession $session): BrowserActor
+    {
+        $actor = $session->actors()
+            ->whereIn('status', collect(BrowserActorStatus::cases())->filter->isActive()->map->value->all())
+            ->latest('generation')
+            ->first();
+
+        if ($actor !== null) {
+            return $actor;
+        }
+
+        $generation = ((int) $session->actors()->max('generation')) + 1;
+        $this->actorStarts++;
+        $this->actorConnections++;
+
+        return BrowserActor::query()->create([
+            'team_id' => $session->team_id,
+            'browser_session_id' => $session->id,
+            'generation' => $generation,
+            'actor_uuid' => (string) Str::uuid(),
+            'fencing_token' => Str::random(64),
+            'socket_path' => sys_get_temp_dir().'/fake-chef-actor-'.$session->id.'-'.$generation.'.sock',
+            'process_id' => 10_000 + $generation,
+            'status' => BrowserActorStatus::Ready,
+            'started_at' => now(),
+            'connected_at' => now(),
+            'heartbeat_at' => now(),
+            'diagnostics' => ['fake' => true],
+        ]);
     }
 
     private function probeAuthentication(BrowserSession $session): WorkerResult
@@ -193,5 +295,23 @@ class FakeComputerExecutor implements ComputerExecutor
             'product' => $line,
             'reason' => 'The fake cart observation verified the line.',
         ]);
+    }
+
+    private function prepareAndVerifyItem(WorkerCommand $command): WorkerResult
+    {
+        $before = $this->inspectCart()->payload;
+        $preparation = $this->prepareItem($command)->payload;
+        $after = $this->inspectCart()->payload;
+
+        return new WorkerResult(true, [
+            'preparation' => $preparation,
+            'before' => $before,
+            'after' => $after,
+            'timings' => [
+                'before_inspection_ms' => 1,
+                'deterministic_preparation_ms' => 1,
+                'after_inspection_ms' => 1,
+            ],
+        ], diagnostics: ['command_ms' => 3, 'fake' => true]);
     }
 }

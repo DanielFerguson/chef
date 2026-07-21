@@ -1,16 +1,33 @@
 <?php
 
+use App\Actions\Automation\HeartbeatBrowserActors;
 use App\Actions\Shopping\GenerateShoppingList;
 use App\Models\MealPlan;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use Symfony\Component\Console\Command\Command;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('chef:automation-actors:heartbeat', function (HeartbeatBrowserActors $heartbeat): int {
+    $counts = $heartbeat->handle();
+    $this->line(sprintf(
+        'Browser actors: %d checked, %d healthy, %d recovered, %d lost.',
+        $counts['checked'],
+        $counts['healthy'],
+        $counts['recovered'],
+        $counts['lost'],
+    ));
+
+    return $counts['lost'] === 0 ? Command::SUCCESS : Command::FAILURE;
+})->purpose('Refresh and fence persistent Browserbase session actors');
+
+Schedule::command('chef:automation-actors:heartbeat')->everyMinute()->withoutOverlapping();
 
 Artisan::command('chef:shopping-list:regenerate {mealPlan} {--user= : User ID performing the authorised regeneration}', function (GenerateShoppingList $generate): int {
     $mealPlan = MealPlan::query()->findOrFail((int) $this->argument('mealPlan'));
@@ -47,7 +64,11 @@ Artisan::command('chef:automation:status', function (): int {
         'Browserbase API key' => filled(config('services.browserbase.api_key')),
         'Browserbase project ID' => filled(config('services.browserbase.project_id')),
         'OpenAI API key' => filled(config('services.openai.api_key')),
-        'Compiled browser worker' => is_file((string) config('services.chef_automation.worker_path')),
+        'Compiled browser actor' => collect([
+            config('services.chef_automation.worker_path'),
+            config('services.chef_automation.actor_path'),
+            config('services.chef_automation.actor_launcher_path'),
+        ])->every(fn ($path): bool => is_string($path) && is_file($path)),
     ];
 
     $this->table(['Requirement', 'Status'], collect($checks)
@@ -68,6 +89,7 @@ Artisan::command('chef:automation:status', function (): int {
         (int) config('services.browserbase.viewport_height'),
     ));
     $this->line('Normal-app sync proof: '.(config('automation.normal_app_sync_proven') ? 'recorded' : 'not recorded'));
+    $this->line('Computer-use model: '.config('services.openai.computer_use_model'));
     $this->line('Automation queue: '.config('automation.queue'));
 
     $providerReady = $checks['Browserbase API key'] && $checks['Browserbase project ID'];

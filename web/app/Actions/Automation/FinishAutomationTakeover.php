@@ -2,6 +2,7 @@
 
 namespace App\Actions\Automation;
 
+use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\RetailerCartAdapter;
 use App\Enums\AutomationInterventionStatus;
 use App\Enums\AutomationInterventionType;
@@ -22,6 +23,7 @@ class FinishAutomationTakeover
 {
     public function __construct(
         private readonly RetailerCartAdapter $adapter,
+        private readonly ComputerExecutor $executor,
         private readonly TransitionAutomationRun $transition,
     ) {}
 
@@ -45,15 +47,18 @@ class FinishAutomationTakeover
                     $session->update(['status' => BrowserSessionStatus::AgentControl]);
 
                     try {
+                        $this->executor->resumeControl($session);
                         $check = $this->adapter->checkAuthentication($session);
                     } catch (\Throwable $exception) {
                         $session->update(['status' => BrowserSessionStatus::HumanControl]);
+                        $this->yieldBackToHuman($session);
 
                         throw $exception;
                     }
 
                     if (! $check->authenticated || $check->botDetected || $check->sensitiveScreen) {
                         $session->update(['status' => BrowserSessionStatus::HumanControl]);
+                        $this->yieldBackToHuman($session);
 
                         throw ValidationException::withMessages([
                             'automation' => $check->reason,
@@ -96,5 +101,14 @@ class FinishAutomationTakeover
 
         AdvanceAutomationRunJob::dispatch($run->id)
             ->onQueue((string) config('automation.queue', 'automation'));
+    }
+
+    private function yieldBackToHuman(BrowserSession $session): void
+    {
+        try {
+            $this->executor->yieldControl($session);
+        } catch (\Throwable) {
+            // The provider session remains bounded by its expiry.
+        }
     }
 }

@@ -1,9 +1,10 @@
 import { createInterface } from 'node:readline';
+import { pathToFileURL } from 'node:url';
 
 import { chromium } from 'playwright-core';
 import type { Browser, Locator, Page } from 'playwright-core';
 
-const protocolVersion = 'chef.browser.v1' as const;
+export const protocolVersion = 'chef.browser.v1' as const;
 const allowedHosts = new Set(['woolworths.com.au', 'www.woolworths.com.au']);
 const cartPath = '/shop/checkout/cart';
 const cartSurfacePaths = new Set([cartPath, '/checkout']);
@@ -22,13 +23,13 @@ const productCardSelector = [
     '[class*="ProductCard"]',
 ].join(',');
 
-type CommandEnvelope = {
+export type CommandEnvelope = {
     version: typeof protocolVersion;
     type: string;
     payload?: Record<string, unknown>;
 };
 
-type WorkerResponse = {
+export type WorkerResponse = {
     version: typeof protocolVersion;
     ok: boolean;
     payload?: Record<string, unknown>;
@@ -55,7 +56,7 @@ type Requirement = {
     pre_existing_quantity: number;
 };
 
-class WorkerFailure extends Error {
+export class WorkerFailure extends Error {
     constructor(
         public readonly code: string,
         public readonly safeMessage: string,
@@ -65,7 +66,6 @@ class WorkerFailure extends Error {
 }
 
 async function main(): Promise<void> {
-    let browser: Browser | null = null;
     let exitCode = 0;
 
     try {
@@ -79,23 +79,8 @@ async function main(): Promise<void> {
             );
         }
 
-        browser = await chromium.connectOverCDP(cdpUrl);
-        const context = browser.contexts()[0];
-
-        if (!context) {
-            throw new WorkerFailure(
-                'missing_browser_context',
-                'The remote browser did not expose a usable context.',
-            );
-        }
-
-        const openPages = context.pages();
-        const page =
-            openPages.find((candidate) => isWoolworthsPage(candidate.url())) ??
-            openPages[0] ??
-            (await context.newPage());
-        page.on('download', (download) => void download.cancel());
-        page.on('filechooser', (chooser) => void chooser.setFiles([]));
+        const connection = await connectRemoteBrowser(cdpUrl);
+        const page = connection.page;
 
         const payload = await executeCommand(page, command);
         await respond({ version: protocolVersion, ok: true, payload });
@@ -121,15 +106,45 @@ async function main(): Promise<void> {
         // A typed rejection is a valid protocol result. The Laravel policy
         // layer decides whether to pause, retry, or fail the run.
         exitCode = 0;
-    } finally {
-        // Do not call browser.close() here. With connectOverCDP that would end
-        // the shared Browserbase session after every one-command worker
-        // process. Exiting the process drops only this CDP transport; Laravel
-        // explicitly requests session release at the safe checkpoint.
-        browser = null;
     }
 
     process.exit(exitCode);
+}
+
+export async function connectRemoteBrowser(
+    cdpUrl: string,
+): Promise<{ browser: Browser; page: Page; connect_ms: number }> {
+    if (!/^(wss?|https):\/\//i.test(cdpUrl)) {
+        throw new WorkerFailure(
+            'missing_cdp_url',
+            'The browser connection was not available.',
+        );
+    }
+
+    const startedAt = performance.now();
+    const browser = await chromium.connectOverCDP(cdpUrl);
+    const context = browser.contexts()[0];
+
+    if (!context) {
+        throw new WorkerFailure(
+            'missing_browser_context',
+            'The remote browser did not expose a usable context.',
+        );
+    }
+
+    const openPages = context.pages();
+    const page =
+        openPages.find((candidate) => isWoolworthsPage(candidate.url())) ??
+        openPages[0] ??
+        (await context.newPage());
+    page.on('download', (download) => void download.cancel());
+    page.on('filechooser', (chooser) => void chooser.setFiles([]));
+
+    return {
+        browser,
+        page,
+        connect_ms: Math.round((performance.now() - startedAt) * 100) / 100,
+    };
 }
 
 async function readCommand(): Promise<CommandEnvelope> {
@@ -177,7 +192,7 @@ async function readCommand(): Promise<CommandEnvelope> {
     );
 }
 
-async function executeCommand(
+export async function executeCommand(
     page: Page,
     command: CommandEnvelope,
 ): Promise<Record<string, unknown>> {
@@ -196,6 +211,12 @@ async function executeCommand(
             return inspectCart(page, requiredString(payload.url, 'url'));
         case 'clear_cart':
             return clearCart(page, requiredString(payload.url, 'url'));
+        case 'prepare_and_verify_item':
+            return prepareAndVerifyItem(
+                page,
+                requiredString(payload.url, 'url'),
+                parseRequirement(payload.requirement),
+            );
         case 'prepare_item':
             return prepareItem(page, parseRequirement(payload.requirement));
         case 'capture':
@@ -211,6 +232,33 @@ async function executeCommand(
                 'The browser worker command is not allowlisted.',
             );
     }
+}
+
+async function prepareAndVerifyItem(
+    page: Page,
+    cartUrl: string,
+    requirement: Requirement,
+): Promise<Record<string, unknown>> {
+    const beforeStartedAt = performance.now();
+    const before = await inspectCart(page, cartUrl);
+    const beforeMs = performance.now() - beforeStartedAt;
+    const preparationStartedAt = performance.now();
+    const preparation = await prepareItem(page, requirement);
+    const preparationMs = performance.now() - preparationStartedAt;
+    const afterStartedAt = performance.now();
+    const after = await inspectCart(page, cartUrl);
+    const afterMs = performance.now() - afterStartedAt;
+
+    return {
+        preparation,
+        before,
+        after,
+        timings: {
+            before_inspection_ms: Math.round(beforeMs * 100) / 100,
+            deterministic_preparation_ms: Math.round(preparationMs * 100) / 100,
+            after_inspection_ms: Math.round(afterMs * 100) / 100,
+        },
+    };
 }
 
 async function navigate(
@@ -373,9 +421,11 @@ async function inspectCart(
 async function inspectCurrentCart(
     page: Page,
 ): Promise<Record<string, unknown>> {
-    const observation = await observeSafety(page);
-    const lines = await extractCartLines(page);
-    const total = await extractCartTotal(page);
+    const [observation, lines, total] = await Promise.all([
+        observeSafety(page),
+        extractCartLines(page),
+        extractCartTotal(page),
+    ]);
 
     return {
         lines,
@@ -611,12 +661,14 @@ async function prepareItem(
 
 async function capture(page: Page): Promise<Record<string, unknown>> {
     assertAllowedUrl(page.url(), false);
-    const safety = await observeSafety(page);
-    const screenshot = await page.screenshot({
-        type: 'png',
-        fullPage: false,
-        animations: 'disabled',
-    });
+    const [safety, screenshot] = await Promise.all([
+        observeSafety(page),
+        page.screenshot({
+            type: 'png',
+            fullPage: false,
+            animations: 'disabled',
+        }),
+    ]);
 
     return {
         screenshot: `data:image/png;base64,${screenshot.toString('base64')}`,
@@ -1313,4 +1365,8 @@ function respond(response: WorkerResponse): Promise<void> {
     });
 }
 
-void main();
+const invokedPath = process.argv[1];
+
+if (invokedPath && import.meta.url === pathToFileURL(invokedPath).href) {
+    void main();
+}

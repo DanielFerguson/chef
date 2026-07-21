@@ -11,5 +11,7 @@ return [
     'max_runtime_seconds' => (int) env('AUTOMATION_MAX_RUNTIME_SECONDS', 180),
     'max_actions_per_job' => (int) env('AUTOMATION_MAX_ACTIONS_PER_JOB', 8),
     'max_item_attempts' => (int) env('AUTOMATION_MAX_ITEM_ATTEMPTS', 4),
+    'product_match_confidence' => (float) env('AUTOMATION_PRODUCT_MATCH_CONFIDENCE', 0.92),
+    'product_match_margin' => (float) env('AUTOMATION_PRODUCT_MATCH_MARGIN', 0.08),
     'context_sync_delay_milliseconds' => (int) env('AUTOMATION_CONTEXT_SYNC_DELAY_MILLISECONDS', 3000),
 ];

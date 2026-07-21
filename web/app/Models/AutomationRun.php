@@ -109,6 +109,12 @@ class AutomationRun extends Model
         return $this->hasOne(CartSnapshot::class)->ofMany('version', 'max');
     }
 
+    /** @return HasOne<CartProductPlan, $this> */
+    public function productPlan(): HasOne
+    {
+        return $this->hasOne(CartProductPlan::class);
+    }
+
     protected function casts(): array
     {
         return [

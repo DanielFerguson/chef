@@ -1,9 +1,12 @@
 <?php
 
-use App\Actions\Automation\CreateBrowserSession;
+use App\Actions\Automation\BuildCartProductPlan;
+use App\Actions\Automation\CloseBrowserSession;
 use App\Actions\Automation\DisconnectRetailerConnection;
 use App\Actions\Automation\FinishAutomationTakeover;
+use App\Actions\Automation\HeartbeatBrowserActors;
 use App\Actions\Automation\ResolveAutomationIntervention;
+use App\Actions\Automation\SelectCartProductCandidate;
 use App\Actions\Automation\StartAutomationTakeover;
 use App\Actions\Automation\StartCartPreparation;
 use App\Actions\Automation\StartRetailerConnection;
@@ -14,16 +17,23 @@ use App\Actions\Teams\AddUserToTeam;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Automation\Contracts\BrowserSessionProvider;
 use App\Automation\Contracts\ComputerExecutor;
+use App\Automation\Contracts\ComputerUseClient;
 use App\Automation\Contracts\ComputerUseEngine;
+use App\Automation\Contracts\RetailerProductDiscovery;
+use App\Automation\Data\ComputerUseTurn;
 use App\Automation\Exceptions\RetailerContextRevokedException;
 use App\Automation\Testing\FakeBrowserSessionProvider;
 use App\Automation\Testing\FakeComputerExecutor;
+use App\Automation\Testing\FakeComputerUseClient;
+use App\Automation\Testing\FakeRetailerProductDiscovery;
 use App\Enums\AutomationInterventionStatus;
 use App\Enums\AutomationInterventionType;
 use App\Enums\AutomationRunItemStatus;
 use App\Enums\AutomationRunStatus;
+use App\Enums\BrowserActorStatus;
 use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
+use App\Enums\CartProductPlanStatus;
 use App\Enums\RetailerConnectionStatus;
 use App\Jobs\AdvanceAutomationRunJob;
 use App\Models\AutomationIntervention;
@@ -149,6 +159,157 @@ it('keeps Browserbase authentication owner-only encrypted and recording-disabled
     expect($connection->refresh()->status)->toBe(RetailerConnectionStatus::Connected);
 });
 
+it('hands the verified login session directly to one persistent actor for atomic cart preparation', function () {
+    $workspace = browserbaseCartWorkspace();
+    config()->set('automation.connection_enabled', true);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $executor = app(ComputerExecutor::class);
+    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
+    $session = app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']);
+
+    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
+    $actor = $session->latestActor;
+
+    expect($session->refresh()->status)->toBe(BrowserSessionStatus::AgentControl)
+        ->and($session->ended_at)->toBeNull()
+        ->and($actor)->not->toBeNull()
+        ->and($actor->generation)->toBe(1)
+        ->and(DB::table('browser_actors')->where('id', $actor->id)->value('fencing_token'))->not->toBe($actor->fencing_token)
+        ->and($executor->actorStarts)->toBe(1)
+        ->and($executor->actorConnections)->toBe(1);
+
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $session->retailerConnection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+
+    expect($run->browserSessions()->sole()->id)->toBe($session->id);
+
+    $result = app(ComputerUseEngine::class)->advance($run);
+    $step = $run->steps()->where('action_type', 'prepare_and_verify_item')->sole();
+
+    expect($result->checkpoint)->toBe('ready_for_review')
+        ->and($executor->actorStarts)->toBe(1)
+        ->and($executor->actorConnections)->toBe(1)
+        ->and(collect($executor->commands)->pluck('type')->contains('prepare_and_verify_item'))->toBeTrue()
+        ->and($step->output_summary['before']['checksum'])->toBeString()
+        ->and($step->output_summary['after']['checksum'])->toBeString()
+        ->and($step->output_summary['diagnostics']['item'])->toHaveKeys([
+            'before_inspection_ms',
+            'deterministic_preparation_ms',
+            'after_inspection_ms',
+        ]);
+});
+
+it('renews a stale actor heartbeat with a fenced replacement on the same keep-alive session', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    $session = $connection->browserSessions()->latest()->firstOrFail();
+    $original = $session->latestActor;
+    $original->update(['heartbeat_at' => now()->subMinutes(2)]);
+    config()->set('services.chef_automation.actor_heartbeat_ttl', 20);
+    $executor = app(ComputerExecutor::class);
+    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
+    $executor->loseActorOnCommand = 'ping';
+
+    $counts = app(HeartbeatBrowserActors::class)->handle();
+    $replacement = $session->refresh()->latestActor;
+
+    expect($counts)->toMatchArray(['checked' => 1, 'healthy' => 0, 'recovered' => 1, 'lost' => 0])
+        ->and($original->refresh()->status)->toBe(BrowserActorStatus::Lost)
+        ->and($replacement->id)->not->toBe($original->id)
+        ->and($replacement->generation)->toBe(2)
+        ->and($replacement->browser_session_id)->toBe($session->id)
+        ->and($replacement->fencing_token)->not->toBe($original->fencing_token);
+});
+
+it('reconciles the real cart after actor recovery before retrying an atomic mutation', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+    $executor = app(ComputerExecutor::class);
+    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
+    $executor->loseActorOnCommand = 'prepare_and_verify_item';
+
+    $recovery = app(ComputerUseEngine::class)->advance($run);
+
+    expect($recovery->checkpoint)->toBe('browser_actor_recovered')
+        ->and($executor->cartLines)->toBe([])
+        ->and($run->steps()->where('action_type', 'browser_actor_recovered')->exists())->toBeTrue()
+        ->and($run->browserSessions()->count())->toBe(1)
+        ->and($run->browserSessions()->sole()->actors()->count())->toBe(2);
+
+    $completed = app(ComputerUseEngine::class)->advance($run->refresh());
+    $orderedTypes = $run->steps()->orderBy('sequence')->pluck('action_type')->all();
+    $recoveryPosition = array_search('browser_actor_recovered', $orderedTypes, true);
+    $afterRecovery = array_slice($orderedTypes, ((int) $recoveryPosition) + 1);
+
+    expect($completed->checkpoint)->toBe('ready_for_review')
+        ->and($executor->cartLines)->toHaveCount(1)
+        ->and($recoveryPosition)->not->toBeFalse()
+        ->and($afterRecovery[0] ?? null)->toBe('authentication_probe')
+        ->and($afterRecovery[1] ?? null)->toBe('inspect_cart')
+        ->and($afterRecovery[2] ?? null)->toBe('prepare_and_verify_item');
+});
+
+it('executes every GPT-5.6 computer action in order under the server policy', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    $executor = app(ComputerExecutor::class);
+    $client = app(ComputerUseClient::class);
+    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class)
+        ->and($client)->toBeInstanceOf(FakeComputerUseClient::class);
+    $executor->preparedStatus = 'searching';
+    $client->turns = [new ComputerUseTurn(
+        responseId: 'resp-batch-1',
+        callId: 'call-batch-1',
+        actions: [
+            ['type' => 'click', 'x' => 100, 'y' => 120, 'button' => 'left'],
+            ['type' => 'keypress', 'keys' => ['ENTER']],
+        ],
+        diagnostics: ['model' => 'gpt-5.6-sol', 'openai_response_ms' => 12.5],
+    )];
+
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    )->refresh();
+
+    $executedActions = collect($executor->commands)
+        ->where('type', 'execute_action')
+        ->pluck('payload.action.type')
+        ->values()
+        ->all();
+    expect($run->status)->toBe(AutomationRunStatus::ReadyForReview)
+        ->and($run->actions_taken)->toBe(2)
+        ->and($executedActions)->toBe(['click', 'keypress'])
+        ->and($run->steps()->orderBy('sequence')->get()
+            ->filter(fn ($step): bool => ($step->input_summary['call_id'] ?? null) === 'call-batch-1')
+            ->pluck('input_summary.action_index')->values()->all())->toBe([0, 1]);
+});
+
 it('redirects an ended authentication link instead of looping back to itself', function () {
     $workspace = browserbaseCartWorkspace();
     config()->set('automation.connection_enabled', true);
@@ -243,7 +404,8 @@ it('reports an infrastructure failure without claiming an untouched cart needs r
     expect($run->refresh()->status)->toBe(AutomationRunStatus::Failed)
         ->and($run->failure_message)->toContain('No Woolworths cart changes were made')
         ->and($run->failure_message)->not->toContain('must be reconciled')
-        ->and($run->browserSessions)->toHaveCount(0);
+        ->and($run->browserSessions)->toHaveCount(1)
+        ->and($run->browserSessions->sole()->status)->toBe(BrowserSessionStatus::Closed);
 });
 
 it('clears a Context revoked while opening an owner login so reconnect can recover', function () {
@@ -251,6 +413,7 @@ it('clears a Context revoked while opening an owner login so reconnect can recov
     $connection = connectedWoolworths($workspace);
     $provider = app(BrowserSessionProvider::class);
     expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
+    app(CloseBrowserSession::class)->handle($connection->browserSessions()->latest()->firstOrFail());
     $provider->createSessionFailure = new RetailerContextRevokedException;
 
     expect(fn () => app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']))
@@ -345,7 +508,74 @@ it('requires an explicit safe product preflight before cart mutation', function 
         (string) Str::uuid(),
         true,
         false,
-    ))->toThrow(ValidationException::class, 'Approve automatic Woolworths search');
+    ))->toThrow(ValidationException::class, 'Review the exact Woolworths product plan');
+});
+
+it('completes discovery before an authenticated mutation and pauses on ambiguous products', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $discovery = app(RetailerProductDiscovery::class);
+    expect($discovery)->toBeInstanceOf(FakeRetailerProductDiscovery::class);
+    $discovery->returnAmbiguousCandidates = true;
+
+    expect(fn () => app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    ))->toThrow(ValidationException::class, 'Finish the Woolworths product plan');
+
+    $plan = $workspace['list']->cartProductPlans()->sole();
+    expect($plan->status)->toBe(CartProductPlanStatus::NeedsReview)
+        ->and($plan->items()->sole()->status->value)->toBe('ambiguous')
+        ->and($workspace['list']->automationRuns)->toHaveCount(0)
+        ->and(collect(app(ComputerExecutor::class)->commands)->contains(
+            fn ($command): bool => $command->type === 'prepare_and_verify_item',
+        ))->toBeFalse();
+    Queue::assertNothingPushed();
+});
+
+it('freezes a reviewed candidate plan before deterministic cart preparation', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $discovery = app(RetailerProductDiscovery::class);
+    expect($discovery)->toBeInstanceOf(FakeRetailerProductDiscovery::class);
+    $discovery->returnAmbiguousCandidates = true;
+    $plan = app(BuildCartProductPlan::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+    );
+    $plan = app(SelectCartProductCandidate::class)->handle(
+        $plan->items()->sole(),
+        $workspace['user'],
+        0,
+    );
+
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+
+    expect($plan->refresh()->status)->toBe(CartProductPlanStatus::Frozen)
+        ->and($plan->automation_run_id)->toBe($run->id)
+        ->and($plan->reviewed_by_user_id)->toBe($workspace['user']->id)
+        ->and($run->frozen_snapshot['product_plan']['id'])->toBe($plan->id)
+        ->and($run->items()->sole()->requirement_snapshot['product_match']['external_id'])
+        ->toBe($plan->items()->sole()->selected_product['external_id']);
 });
 
 it('requires exact approved products and disables substitutions when safety constraints apply', function () {
@@ -369,7 +599,7 @@ it('requires exact approved products and disables substitutions when safety cons
         (string) Str::uuid(),
         true,
         true,
-    ))->toThrow(ValidationException::class, 'exact approved Woolworths product');
+    ))->toThrow(ValidationException::class, 'Finish the Woolworths product plan');
 
     $snapshot = $workspace['revision']->snapshot;
     $snapshot['items'][0]['product_match'] = [
@@ -388,7 +618,7 @@ it('requires exact approved products and disables substitutions when safety cons
         $workspace['user'],
         (string) Str::uuid(),
         true,
-        false,
+        true,
     );
 
     expect($run->frozen_snapshot['safety_context']['constraints'][0]['subject'])->toBe('peanuts')
@@ -573,6 +803,7 @@ it('replaces a revoked Browserbase Context through owner reauthentication', func
     );
     $provider = app(BrowserSessionProvider::class);
     expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
+    $run->browserSessions()->sole()->update(['expires_at' => now()->subMinute()]);
     $provider->createSessionFailure = new RetailerContextRevokedException;
 
     $checkpoint = app(ComputerUseEngine::class)->advance($run);
@@ -605,11 +836,7 @@ it('expires an old session and resumes through a fresh authenticated cart inspec
         true,
         true,
     );
-    $expiredSession = app(CreateBrowserSession::class)->handle(
-        $connection,
-        BrowserSessionPurpose::CartPreparation,
-        $run,
-    );
+    $expiredSession = $run->browserSessions()->sole();
     $expiredSession->update(['expires_at' => now()->subMinute()]);
 
     $checkpoint = app(ComputerUseEngine::class)->advance($run->refresh());
@@ -913,11 +1140,7 @@ it('prevents concurrent human and agent control of one Browserbase context', fun
         true,
         true,
     );
-    $agentSession = app(CreateBrowserSession::class)->handle(
-        $connection,
-        BrowserSessionPurpose::CartPreparation,
-        $run,
-    );
+    $agentSession = $run->browserSessions()->sole();
 
     expect(fn () => app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']))
         ->toThrow(ValidationException::class, 'already in use')
@@ -939,11 +1162,7 @@ it('stops the model for owner-only manual takeover and reconciles before resumin
         true,
         true,
     );
-    $agentSession = app(CreateBrowserSession::class)->handle(
-        $connection,
-        BrowserSessionPurpose::CartPreparation,
-        $run,
-    );
+    $agentSession = $run->browserSessions()->sole();
     $takeoverSession = app(StartAutomationTakeover::class)->handle($run, $workspace['user']);
 
     expect($takeoverSession->id)->toBe($agentSession->id)
@@ -990,12 +1209,8 @@ it('moves manual takeover from a recorded agent session into a fresh unrecorded 
     );
     $provider = app(BrowserSessionProvider::class);
     expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
-    $provider->recordingEnabled = true;
-    $agentSession = app(CreateBrowserSession::class)->handle(
-        $connection,
-        BrowserSessionPurpose::CartPreparation,
-        $run,
-    );
+    $agentSession = $run->browserSessions()->sole();
+    $agentSession->update(['recording_enabled' => true]);
 
     $takeoverSession = app(StartAutomationTakeover::class)->handle($run, $workspace['user']);
 
@@ -1007,8 +1222,8 @@ it('moves manual takeover from a recorded agent session into a fresh unrecorded 
         ->and($takeoverSession->purpose)->toBe(BrowserSessionPurpose::ManualTakeover)
         ->and($takeoverSession->recording_enabled)->toBeFalse()
         ->and($takeoverSession->metadata['previous_purpose'])->toBe(BrowserSessionPurpose::CartPreparation->value)
-        ->and($provider->sessionsCreated)->toBe(3)
-        ->and($provider->sessionsClosed)->toBe(2);
+        ->and($provider->sessionsCreated)->toBe(2)
+        ->and($provider->sessionsClosed)->toBe(1);
 });
 
 it('redirects an ended manual takeover link instead of looping back to itself', function () {
@@ -1025,11 +1240,7 @@ it('redirects an ended manual takeover link instead of looping back to itself', 
         true,
         true,
     );
-    $session = app(CreateBrowserSession::class)->handle(
-        $connection,
-        BrowserSessionPurpose::CartPreparation,
-        $run,
-    );
+    $session = $run->browserSessions()->sole();
     $session = app(StartAutomationTakeover::class)->handle($run, $workspace['user']);
     $session->update([
         'status' => BrowserSessionStatus::Closed,
