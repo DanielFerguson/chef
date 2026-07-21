@@ -26,6 +26,8 @@ class FakeBrowserSessionProvider implements BrowserSessionProvider
 
     public bool $loseLiveView = false;
 
+    public bool $recordingEnabled = false;
+
     public function createContext(): string
     {
         if ($this->createContextFailure !== null) {
@@ -48,7 +50,11 @@ class FakeBrowserSessionProvider implements BrowserSessionProvider
 
         $this->sessionsCreated++;
 
-        return new ProviderSession('fake-session-'.$this->sessionsCreated, new DateTimeImmutable('+15 minutes'));
+        return new ProviderSession(
+            'fake-session-'.$this->sessionsCreated,
+            new DateTimeImmutable('+15 minutes'),
+            $purpose === BrowserSessionPurpose::CartPreparation && $this->recordingEnabled,
+        );
     }
 
     public function connectionUrl(BrowserSession $session): string

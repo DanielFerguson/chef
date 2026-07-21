@@ -10,6 +10,7 @@ use App\Enums\BrowserSessionPurpose;
 use App\Models\BrowserSession;
 use App\Models\RetailerConnection;
 use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -28,6 +29,7 @@ class BrowserbaseBrowserSessionProvider implements BrowserSessionProvider
     public function createSession(RetailerConnection $connection, BrowserSessionPurpose $purpose): ProviderSession
     {
         $contextId = $connection->provider_context_id;
+        $recordingEnabled = $this->recordingEnabledFor($purpose);
 
         if (! is_string($contextId) || $contextId === '') {
             throw new RuntimeException('The retailer connection does not have a Browserbase Context.');
@@ -37,10 +39,10 @@ class BrowserbaseBrowserSessionProvider implements BrowserSessionProvider
             'projectId' => $this->requiredConfig('project_id'),
             'browserSettings' => [
                 'context' => ['id' => $contextId, 'persist' => true],
-                'recordSession' => false,
+                'recordSession' => $recordingEnabled,
                 'viewport' => [
-                    'width' => (int) config('services.browserbase.viewport_width', 1280),
-                    'height' => (int) config('services.browserbase.viewport_height', 900),
+                    'width' => (int) config('services.browserbase.viewport_width', 1024),
+                    'height' => (int) config('services.browserbase.viewport_height', 768),
                 ],
             ],
             'timeout' => (int) config('services.browserbase.session_timeout', 900),
@@ -67,15 +69,26 @@ class BrowserbaseBrowserSessionProvider implements BrowserSessionProvider
 
         $payload = $response->json();
         $expiresAt = isset($payload['expiresAt']) && is_string($payload['expiresAt'])
-            ? new DateTimeImmutable($payload['expiresAt'])
+            ? (new DateTimeImmutable($payload['expiresAt']))->setTimezone(
+                new DateTimeZone((string) config('app.timezone', 'UTC')),
+            )
             : null;
 
-        return new ProviderSession($this->requiredString($payload, 'id'), $expiresAt);
+        return new ProviderSession(
+            $this->requiredString($payload, 'id'),
+            $expiresAt,
+            $recordingEnabled,
+        );
     }
 
     public function connectionUrl(BrowserSession $session): string
     {
         $payload = $this->sessionPayload($session);
+        $status = $payload['status'] ?? null;
+
+        if (is_string($status) && strtoupper($status) !== 'RUNNING') {
+            throw new BrowserSessionLostException;
+        }
 
         return $this->requiredString($payload, 'connectUrl');
     }
@@ -157,6 +170,13 @@ class BrowserbaseBrowserSessionProvider implements BrowserSessionProvider
         }
 
         return $value;
+    }
+
+    private function recordingEnabledFor(BrowserSessionPurpose $purpose): bool
+    {
+        return app()->environment('local')
+            && $purpose === BrowserSessionPurpose::CartPreparation
+            && (bool) config('services.browserbase.record_local_cart_sessions', false);
     }
 
     /** @param array<string, mixed> $payload */

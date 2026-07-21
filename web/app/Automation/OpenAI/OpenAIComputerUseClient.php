@@ -22,8 +22,8 @@ class OpenAIComputerUseClient implements ComputerUseClient
             'model' => (string) config('services.openai.computer_use_model', 'computer-use-preview'),
             'tools' => [[
                 'type' => (string) config('services.openai.computer_tool_type', 'computer_use_preview'),
-                'display_width' => (int) config('services.browserbase.viewport_width', 1280),
-                'display_height' => (int) config('services.browserbase.viewport_height', 900),
+                'display_width' => (int) config('services.browserbase.viewport_width', 1024),
+                'display_height' => (int) config('services.browserbase.viewport_height', 768),
                 'environment' => 'browser',
             ]],
             'store' => (bool) config('services.openai.store', false),

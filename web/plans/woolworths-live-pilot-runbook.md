@@ -35,7 +35,9 @@ gate has passed.
 ## 4. Configure Browserbase and enable connection only
 
 - Set `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID` outside source control.
-- Keep the configured Australian region/proxy and recording disabled.
+- Keep the configured Australian region/proxy. Leave
+  `BROWSERBASE_RECORD_LOCAL_CART_SESSIONS=false` for the release-evidence run;
+  enable it only temporarily when diagnosing a local agent cart session.
 - Run `php artisan chef:automation:status`; it must report both Browserbase
   values and the compiled worker as ready.
 - Set only `WOOLWORTHS_CONNECTION_ENABLED=true`, clear the configuration cache,
@@ -49,6 +51,14 @@ gate has passed.
 - Finish sign-in, allow the Context sync delay, and close the login session.
 - Open a fresh session from the same Context and prove a protected cart page is
   authenticated without re-entering credentials.
+
+For local cart-worker diagnosis, set
+`BROWSERBASE_RECORD_LOCAL_CART_SESSIONS=true`, clear the configuration cache,
+and restart the automation worker before starting a new run. This affects only
+new agent-controlled cart-preparation sessions in the local environment. Login,
+reauthentication, and manual takeover remain unrecorded. Browserbase recordings
+may contain cart and account-page details, so disable the flag again and remove
+the retained diagnostic session as soon as the investigation is complete.
 - Revoke or expire one session and prove the owner-only reauthentication path.
 
 ## 6. Run one-item, then five-item cart trials

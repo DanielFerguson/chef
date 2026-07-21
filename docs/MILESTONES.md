@@ -373,9 +373,9 @@ M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
   and the permissioned Chrome-extension executor remain later adapters, so the
   full milestone exit is still open.
 - Owner-only just-in-time login uses one encrypted Browserbase Context reference
-  and recording-disabled persistent sessions. The model is absent during human
-  password/MFA entry. Live View and CDP URLs remain transient, and disconnect
-  closes sessions, deletes the Context, and cancels active work.
+  and recording-disabled persistent human sessions. The model is absent during
+  human password/MFA entry. Live View and CDP URLs remain transient, and
+  disconnect closes sessions, deletes the Context, and cancels active work.
 - Cart runs freeze the exact current list revision, reject stale, unresolved,
   empty, mismatched, cross-family, or non-owner inputs, and use an exclusive
   connection lease plus idempotent item outcomes. A non-empty cart always
@@ -385,17 +385,19 @@ M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
   reconciliation. The TypeScript worker connects to a supplied CDP URL and
   independently blocks sensitive navigation, fields, pointer targets,
   downloads, uploads, unsafe keys, CAPTCHA handling, and non-Woolworths origins.
-- The connection owner can pause an active run into the same recording-disabled
-  Live View while the model is disconnected. Resume closes human control,
-  rechecks authentication, inspects the real cart, and retries only missing
-  work. Cancellation and disconnect share the run lock, and final
+- The connection owner can pause an active run into a recording-disabled Live
+  View while the model is disconnected. A locally recorded agent session is
+  replaced with a fresh unrecorded session before takeover. Resume closes human
+  control, rechecks authentication, inspects the real cart, and retries only
+  missing work. Cancellation and disconnect share the run lock, and final
   reconciliation pauses again if a previously verified line changed.
 - Provider recovery distinguishes a revoked Context from a lost session. A
   revoked Context is cleared and routed through owner reauthentication; a lost
   session or Live View is expired, releases its lease, and resumes only through
   a fresh authenticated cart inspection.
 - Normal tests use fakes and HTTP protocol fixtures. They cover encrypted
-  provider identifiers, recording-disabled configuration, ownership and
+  provider identifiers, recording-disabled human sessions, the opt-in local
+  agent-recording boundary, ownership and
   tenancy, frozen revisions, idempotency, existing-cart merge/replace,
   MFA and bot challenges, provider timeouts, Context revocation, session loss,
   reauthentication resume, price and substitution pauses, disconnect
@@ -405,7 +407,7 @@ M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
 - `WOOLWORTHS_CONNECTION_ENABLED`, `WOOLWORTHS_CART_MUTATION_ENABLED`, and
   `WOOLWORTHS_NORMAL_APP_SYNC_PROVEN` remain false by default. M6 must not be
   marked complete until an authorised account proves cross-session login,
-  recording-disabled operation, a five-plus-item cart, reauthentication,
+  recording-disabled human operation, a five-plus-item cart, reauthentication,
   non-empty-cart decisions, normal-app/site visibility, retailer tolerance,
   privacy obligations, operating cost, and the human checkout boundary.
 
@@ -426,15 +428,29 @@ M6 hardening evidence recorded 21 July 2026:
   retailer and line identity, quantity, prices, and substitutions come from the
   verified cart snapshot while final checkout and actual-total entry remain
   human actions.
-- The implementation and fake-provider intervention journeys are complete, but
-  the local environment has no Browserbase API key or project ID. Connection
-  and mutation flags therefore remain disabled. Cross-session authentication,
-  the one-item and five-item trials, real merge/replace/reauthentication,
-  normal-app visibility, and retailer review are still live evidence gates.
+- The implementation and fake-provider intervention journeys are complete.
+  Local pilot credentials and flags are now configured, while repository and
+  release defaults remain disabled. Same-session reauthentication and empty-cart
+  inspection are proven; cross-session Context restoration, the one-item and
+  five-item trials, real merge/replace, normal-app visibility, and retailer
+  review remain live evidence gates.
 - The exact live sequence and rollback rules are recorded in
   [`web/plans/woolworths-live-pilot-runbook.md`](../web/plans/woolworths-live-pilot-runbook.md).
-- The final local gate passes 273 backend tests with 1,539 assertions and all
-  45 browser journeys with 377 assertions. Pint, PHPStan, ESLint, Prettier,
+- Live reauthentication testing on 21 July 2026 proved the protected checkout
+  in the owner session but lost authentication when the run opened a fresh
+  Browserbase session. Reauthentication and manual-takeover completion now
+  transfer the verified recording-disabled session directly back to the one
+  active run; the cross-session login gate remains open until a later pilot
+  proves Context restoration independently.
+- The same pilot then reached cart inspection and exposed a redundant protected
+  checkout reload after the successful authentication probe. Adjacent cart
+  commands now reuse the open protected surface, keeping the navigation budget
+  for genuine route changes.
+- A later item retry exposed that the original run TTL still included time spent
+  in required login and decision pauses. Resuming any authorised human pause now
+  renews the bounded active-processing window before the queue continues.
+- The final local gate passes 280 backend tests with 1,592 assertions and all
+  46 browser journeys with 385 assertions. Pint, PHPStan, ESLint, Prettier,
   application and worker TypeScript, the production build, and a fresh
   migration plus rollback/reapply pass. npm and Composer audits are clean after
   updating Guzzle from 7.14.2 to 7.15.1 and PSR-7 from 2.12.5 to 2.13.0.

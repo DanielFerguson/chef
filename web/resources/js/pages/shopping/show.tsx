@@ -1918,7 +1918,7 @@ function CartAutomationSection({
 
     return (
         <section
-            className="mt-8 border-y py-6"
+            className="mt-8 border-b pb-6"
             aria-labelledby="woolworths-cart-heading"
         >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -2371,15 +2371,15 @@ function ReadyShoppingList({
                 </section>
             )}
 
-            <ShoppingItemsSection
-                included={included}
-                shoppingCategories={shoppingCategories}
-                shoppingList={shoppingList}
-            />
             <CartAutomationSection
                 automation={cartAutomation}
                 shoppingList={shoppingList}
                 retailers={retailers}
+            />
+            <ShoppingItemsSection
+                included={included}
+                shoppingCategories={shoppingCategories}
+                shoppingList={shoppingList}
             />
             {shoppingList.items.length > 0 && (
                 <details className="mt-8 border-t py-4">

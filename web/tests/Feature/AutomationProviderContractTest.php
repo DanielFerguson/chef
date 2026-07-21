@@ -83,13 +83,15 @@ function providerConnectedWoolworths(array $workspace): RetailerConnection
     return $session->retailerConnection->refresh();
 }
 
-it('creates recording-disabled persistent Australian Browserbase sessions', function () {
+it('records only explicitly enabled local cart preparation Browserbase sessions', function () {
+    $this->app['env'] = 'local';
     config()->set('services.browserbase.api_key', 'test-browserbase-key');
     config()->set('services.browserbase.project_id', 'test-project');
     config()->set('services.browserbase.base_url', 'https://api.browserbase.test');
     config()->set('services.browserbase.region', 'ap-southeast-1');
     config()->set('services.browserbase.proxy_city', 'MELBOURNE');
     config()->set('services.browserbase.proxy_country', 'AU');
+    config()->set('services.browserbase.record_local_cart_sessions', true);
 
     Http::fake(function (Request $request) {
         $path = $request->url();
@@ -101,7 +103,7 @@ it('creates recording-disabled persistent Australian Browserbase sessions', func
         if ($request->method() === 'POST' && str_ends_with($path, '/v1/sessions')) {
             return Http::response([
                 'id' => 'session-test',
-                'expiresAt' => now()->addMinutes(15)->toIso8601String(),
+                'expiresAt' => '2026-07-21T08:56:59.000Z',
             ], 201);
         }
 
@@ -128,6 +130,10 @@ it('creates recording-disabled persistent Australian Browserbase sessions', func
     $provider = new BrowserbaseBrowserSessionProvider;
     expect($provider->createContext())->toBe('ctx-test');
     $created = $provider->createSession($connection, BrowserSessionPurpose::Login);
+    $recorded = $provider->createSession($connection, BrowserSessionPurpose::CartPreparation);
+    expect($created->expiresAt?->format('Y-m-d H:i:s P'))->toBe('2026-07-21 18:56:59 +10:00')
+        ->and($created->recordingEnabled)->toBeFalse()
+        ->and($recorded->recordingEnabled)->toBeTrue();
     $session = BrowserSession::factory()->create([
         'team_id' => $connection->team_id,
         'retailer_connection_id' => $connection->id,
@@ -143,9 +149,15 @@ it('creates recording-disabled persistent Australian Browserbase sessions', func
     Http::assertSent(fn (Request $request) => $request->method() === 'POST'
         && str_ends_with($request->url(), '/v1/sessions')
         && $request['browserSettings']['recordSession'] === false
+        && $request['userMetadata']['purpose'] === BrowserSessionPurpose::Login->value
         && $request['browserSettings']['context'] === ['id' => 'ctx-test', 'persist' => true]
+        && $request['browserSettings']['viewport'] === ['width' => 1024, 'height' => 768]
         && $request['region'] === 'ap-southeast-1'
         && $request['proxies'][0]['geolocation'] === ['city' => 'MELBOURNE', 'country' => 'AU']);
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/v1/sessions')
+        && $request['browserSettings']['recordSession'] === true
+        && $request['userMetadata']['purpose'] === BrowserSessionPurpose::CartPreparation->value);
     Http::assertSent(fn (Request $request) => $request->method() === 'POST'
         && str_ends_with($request->url(), '/v1/sessions/session-test')
         && $request['status'] === 'REQUEST_RELEASE');
@@ -176,6 +188,23 @@ it('maps missing Browserbase Contexts and sessions to recoverable domain failure
 
     $provider->close($session);
     $provider->deleteContext($connection);
+});
+
+it('maps completed Browserbase sessions without a CDP URL to a lost session', function () {
+    config()->set('services.browserbase.api_key', 'test-browserbase-key');
+    config()->set('services.browserbase.project_id', 'test-project');
+    config()->set('services.browserbase.base_url', 'https://api.browserbase.test');
+    Http::fake(fn () => Http::response(['id' => 'completed-session', 'status' => 'COMPLETED'], 200));
+    $connection = RetailerConnection::factory()->create(['provider_context_id' => 'ctx-test']);
+    $session = BrowserSession::factory()->create([
+        'team_id' => $connection->team_id,
+        'retailer_connection_id' => $connection->id,
+        'provider_session_id' => 'completed-session',
+        'purpose' => BrowserSessionPurpose::Reauthentication,
+    ]);
+
+    expect(fn () => (new BrowserbaseBrowserSessionProvider)->connectionUrl($session))
+        ->toThrow(BrowserSessionLostException::class);
 });
 
 it('uses the direct Responses computer-call protocol without persisting screenshots', function () {
@@ -233,6 +262,8 @@ it('uses the direct Responses computer-call protocol without persisting screensh
     Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v1/responses')
         && $request['store'] === false
         && $request['tools'][0]['type'] === 'computer_use_preview'
+        && $request['tools'][0]['display_width'] === 1024
+        && $request['tools'][0]['display_height'] === 768
         && data_get($request->data(), 'input.0.content.1.image_url') === $screenshot);
     Http::assertSent(fn (Request $request) => ($request['previous_response_id'] ?? null) === 'resp_1'
         && $request['input'][0]['type'] === 'computer_call_output'
@@ -240,15 +271,19 @@ it('uses the direct Responses computer-call protocol without persisting screensh
 });
 
 it('reports automation readiness and fails closed on incomplete enabled provider configuration', function () {
+    $this->app['env'] = 'local';
     config()->set('services.browserbase.api_key', 'secret-test-key');
     config()->set('services.browserbase.project_id', 'project-test');
     config()->set('services.openai.api_key', 'secret-openai-key');
     config()->set('services.chef_automation.worker_path', __FILE__);
     config()->set('automation.connection_enabled', false);
     config()->set('automation.queue', 'automation');
+    config()->set('services.browserbase.record_local_cart_sessions', true);
 
     $this->artisan('chef:automation:status')
         ->expectsOutputToContain('Connection flag: disabled')
+        ->expectsOutputToContain('Local cart-session recording: enabled')
+        ->expectsOutputToContain('Browser viewport: 1024 × 768')
         ->expectsOutputToContain('Automation queue: automation')
         ->assertSuccessful();
 

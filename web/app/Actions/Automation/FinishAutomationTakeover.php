@@ -22,7 +22,6 @@ class FinishAutomationTakeover
 {
     public function __construct(
         private readonly RetailerCartAdapter $adapter,
-        private readonly CloseBrowserSession $closeSession,
         private readonly TransitionAutomationRun $transition,
     ) {}
 
@@ -61,7 +60,14 @@ class FinishAutomationTakeover
                         ]);
                     }
 
-                    $this->closeSession->handle($session);
+                    $session->update([
+                        'purpose' => BrowserSessionPurpose::CartPreparation,
+                        'status' => BrowserSessionStatus::AgentControl,
+                        'metadata' => [
+                            ...($session->metadata ?? []),
+                            'resumed_after_manual_takeover' => true,
+                        ],
+                    ]);
                     $run->retailerConnection->update([
                         'status' => RetailerConnectionStatus::Connected,
                         'last_verified_at' => now(),

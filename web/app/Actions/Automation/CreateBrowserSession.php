@@ -41,7 +41,7 @@ class CreateBrowserSession
                 ], true)
                     ? BrowserSessionStatus::HumanControl
                     : BrowserSessionStatus::AgentControl,
-                'recording_enabled' => false,
+                'recording_enabled' => $providerSession->recordingEnabled,
                 'started_at' => now(),
                 'expires_at' => $providerSession->expiresAt,
                 'metadata' => [

@@ -9,5 +9,6 @@ final readonly class ProviderSession
     public function __construct(
         public string $id,
         public ?DateTimeImmutable $expiresAt = null,
+        public bool $recordingEnabled = false,
     ) {}
 }

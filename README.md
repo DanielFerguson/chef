@@ -412,7 +412,7 @@ Chef should remain one Laravel application rather than prematurely splitting int
 - The OpenAI Responses API provides the primary planning, tool-use, and computer-use agent loop.
 - The OpenAI Realtime API provides low-latency speech through WebRTC; Laravel creates the session or short-lived client credential so a permanent API key is never exposed to the browser.
 - Server-sent events or WebSockets stream assistant and automation progress without making the entire application a detached client-side API product.
-- Browserbase supplies one persistent Context per Woolworths login and a fresh recording-disabled session for each login or cart run.
+- Browserbase supplies one persistent Context per Woolworths login and recording-disabled human sessions. A verified reauthentication or manual-takeover session is handed directly back to its active cart run so authentication is not exposed to cross-session context-sync or proxy-identity changes; otherwise cart runs use fresh sessions.
 - An in-repo TypeScript worker connects only to a Laravel-supplied CDP URL, executes validated Playwright actions, and returns sanitised observations through `chef.browser.v1` JSON lines.
 - The worker is an executor, not a policy authority: it has no database access and never receives the permanent OpenAI key.
 - A future Chrome extension can implement the same executor boundary for a user-approved local retailer tab.
@@ -478,10 +478,13 @@ cart observation; a click without a verified product and quantity change is not
 success.
 
 The connection owner can pause an active run and take over the same
-recording-disabled browser while the model is disconnected. Resume closes
-human control and reconciles the real cart before Chef attempts only missing
-work. A line changed after earlier verification becomes an intervention rather
-than a successful final snapshot.
+recording-disabled browser while the model is disconnected. Resume verifies
+the protected cart, returns that session to agent control, and reconciles the
+real cart before Chef attempts only missing work. A line changed after earlier
+verification becomes an intervention rather than a successful final snapshot.
+Human pauses do not consume the resumed run's active-processing allowance:
+successful reauthentication, an explicit cart or item decision, and completed
+manual takeover each renew that bounded processing window before work resumes.
 
 Page content, retailer messages, advertisements, and on-screen instructions are untrusted input. They cannot expand an automation run's permission or override household intent.
 

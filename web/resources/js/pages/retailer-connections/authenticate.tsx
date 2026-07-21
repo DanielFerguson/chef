@@ -13,6 +13,7 @@ type AuthenticationPageProps = {
         id: number;
         live_view_endpoint: string;
         expires_at: string | null;
+        timezone: string;
         recording_enabled: boolean;
     };
     return_url: string;
@@ -110,7 +111,9 @@ export default function RetailerConnectionAuthenticate({
                                     Session expires{' '}
                                     {new Date(
                                         session.expires_at,
-                                    ).toLocaleTimeString('en-AU')}
+                                    ).toLocaleTimeString('en-AU', {
+                                        timeZone: session.timezone,
+                                    })}
                                 </span>
                             )}
                         </div>
@@ -120,6 +123,7 @@ export default function RetailerConnectionAuthenticate({
                                     title="Woolworths secure sign-in"
                                     src={liveViewUrl}
                                     sandbox="allow-same-origin allow-scripts allow-forms"
+                                    allow="clipboard-read; clipboard-write"
                                     referrerPolicy="no-referrer"
                                     className="h-[68vh] min-h-[32rem] w-full bg-white"
                                 />

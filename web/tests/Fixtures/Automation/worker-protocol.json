@@ -2,8 +2,12 @@
     "version": "chef.browser.v1",
     "cases": [
         {
-            "name": "authenticated protected cart",
+            "name": "authenticated scheduled checkout cart",
             "command": "probe_authentication",
+            "observation": {
+                "url": "https://www.woolworths.com.au/checkout",
+                "body_text": "Your order Delivery location Select a date and time Place order"
+            },
             "response": {
                 "authenticated": true,
                 "reason": "Protected Woolworths cart probe passed.",

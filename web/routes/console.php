@@ -57,6 +57,16 @@ Artisan::command('chef:automation:status', function (): int {
     $this->newLine();
     $this->line('Connection flag: '.(config('automation.connection_enabled') ? 'enabled' : 'disabled'));
     $this->line('Cart mutation flag: '.(config('automation.cart_mutation_enabled') ? 'enabled' : 'disabled'));
+    $this->line('Local cart-session recording: '.(
+        app()->environment('local') && config('services.browserbase.record_local_cart_sessions')
+            ? 'enabled'
+            : 'disabled'
+    ));
+    $this->line(sprintf(
+        'Browser viewport: %d × %d',
+        (int) config('services.browserbase.viewport_width'),
+        (int) config('services.browserbase.viewport_height'),
+    ));
     $this->line('Normal-app sync proof: '.(config('automation.normal_app_sync_proven') ? 'recorded' : 'not recorded'));
     $this->line('Automation queue: '.config('automation.queue'));
 

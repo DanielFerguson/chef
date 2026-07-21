@@ -26,14 +26,19 @@ class AutomationTakeoverController extends Controller
         return to_route('browser-sessions.takeover.show', $session);
     }
 
-    public function show(BrowserSession $browserSession): Response
+    public function show(BrowserSession $browserSession): Response|RedirectResponse
     {
         $this->authorize('control', $browserSession);
 
         if ($browserSession->purpose !== BrowserSessionPurpose::ManualTakeover
             || $browserSession->status !== BrowserSessionStatus::HumanControl
             || $browserSession->run === null) {
-            throw ValidationException::withMessages(['automation' => 'This manual takeover session is no longer active.']);
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'This manual Woolworths session has ended. The current cart status is available from Shopping.',
+            ]);
+
+            return redirect($this->returnUrl($browserSession));
         }
 
         return Inertia::render('retailer-connections/takeover', [
@@ -45,9 +50,10 @@ class AutomationTakeoverController extends Controller
                 'id' => $browserSession->id,
                 'live_view_endpoint' => route('browser-sessions.live-view', $browserSession),
                 'expires_at' => $browserSession->expires_at?->toIso8601String(),
+                'timezone' => $browserSession->team->timezone,
                 'recording_enabled' => $browserSession->recording_enabled,
             ],
-            'return_url' => route('meal-plans.shopping.show', $browserSession->run->shoppingList->meal_plan_id),
+            'return_url' => $this->returnUrl($browserSession),
         ]);
     }
 
@@ -66,5 +72,12 @@ class AutomationTakeoverController extends Controller
         $finish->handle($browserSession, $request->user());
 
         return redirect($returnUrl)->with('success', 'Manual control ended. Chef will reconcile the actual cart before continuing.');
+    }
+
+    private function returnUrl(BrowserSession $session): string
+    {
+        return $session->run === null
+            ? route('shopping.index')
+            : route('meal-plans.shopping.show', $session->run->shoppingList->meal_plan_id);
     }
 }

@@ -9,6 +9,7 @@ use App\Automation\Data\WorkerResult;
 use App\Models\BrowserSession;
 use JsonException;
 use RuntimeException;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 class TypeScriptComputerExecutor implements ComputerExecutor
@@ -24,8 +25,21 @@ class TypeScriptComputerExecutor implements ComputerExecutor
             'CHEF_BROWSER_CDP_URL' => $this->sessions->connectionUrl($session),
         ]);
         $process->setInput(json_encode($command->toArray(), JSON_THROW_ON_ERROR)."\n");
-        $process->setTimeout((float) config('services.chef_automation.worker_timeout', 45));
-        $process->run();
+        $workerTimeout = max(1, (int) config('services.chef_automation.worker_timeout', 45));
+        $timeout = $command->type === 'probe_authentication'
+            ? min($workerTimeout, max(1, (int) config('services.chef_automation.authentication_worker_timeout', 20)))
+            : $workerTimeout;
+        $process->setTimeout((float) $timeout);
+
+        try {
+            $process->run();
+        } catch (ProcessTimedOutException) {
+            return new WorkerResult(
+                ok: false,
+                errorCode: 'worker_timeout',
+                errorMessage: 'Woolworths took too long to return a verifiable page.',
+            );
+        }
 
         if (! $process->isSuccessful()) {
             throw new RuntimeException('The browser worker stopped before reaching a safe checkpoint.');

@@ -42,9 +42,10 @@ return [
         'region' => env('BROWSERBASE_REGION', 'ap-southeast-1'),
         'proxy_city' => env('BROWSERBASE_PROXY_CITY', 'MELBOURNE'),
         'proxy_country' => env('BROWSERBASE_PROXY_COUNTRY', 'AU'),
+        'record_local_cart_sessions' => (bool) env('BROWSERBASE_RECORD_LOCAL_CART_SESSIONS', false),
         'session_timeout' => (int) env('BROWSERBASE_SESSION_TIMEOUT', 900),
-        'viewport_width' => (int) env('BROWSERBASE_VIEWPORT_WIDTH', 1280),
-        'viewport_height' => (int) env('BROWSERBASE_VIEWPORT_HEIGHT', 900),
+        'viewport_width' => (int) env('BROWSERBASE_VIEWPORT_WIDTH', 1024),
+        'viewport_height' => (int) env('BROWSERBASE_VIEWPORT_HEIGHT', 768),
     ],
 
     'openai' => [
@@ -60,6 +61,7 @@ return [
         'node_binary' => env('AUTOMATION_NODE_BINARY', 'node'),
         'worker_path' => env('AUTOMATION_WORKER_PATH', base_path('automation/dist/worker.js')),
         'worker_timeout' => (int) env('AUTOMATION_WORKER_TIMEOUT', 45),
+        'authentication_worker_timeout' => (int) env('AUTOMATION_AUTHENTICATION_WORKER_TIMEOUT', 20),
     ],
 
     'woolworths' => [

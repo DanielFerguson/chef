@@ -56,7 +56,21 @@ class StartAutomationTakeover
                     $created = $session === null;
                     $previousPurpose = $session?->purpose;
 
-                    if ($session === null) {
+                    if ($session?->recording_enabled) {
+                        $this->closeSession->handle($session);
+                        $session = $this->createSession->handle(
+                            $run->retailerConnection,
+                            BrowserSessionPurpose::ManualTakeover,
+                            $run,
+                        );
+                        $session->update([
+                            'metadata' => [
+                                ...($session->metadata ?? []),
+                                'previous_purpose' => $previousPurpose?->value,
+                            ],
+                        ]);
+                        $created = true;
+                    } elseif ($session === null) {
                         $session = $this->createSession->handle(
                             $run->retailerConnection,
                             BrowserSessionPurpose::ManualTakeover,

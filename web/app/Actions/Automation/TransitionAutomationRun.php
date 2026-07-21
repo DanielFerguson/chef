@@ -17,9 +17,28 @@ class TransitionAutomationRun
             throw new LogicException("Automation run cannot transition from {$from->value} to {$status->value}.");
         }
 
+        if ($this->resumesActiveWork($from, $status)) {
+            $attributes = [
+                ...$attributes,
+                'expires_at' => now()->addMinutes((int) config('automation.run_ttl_minutes', 60)),
+            ];
+        }
+
         $run->update([...$attributes, 'status' => $status]);
 
         return $run->refresh();
+    }
+
+    private function resumesActiveWork(AutomationRunStatus $from, AutomationRunStatus $to): bool
+    {
+        return in_array($from, [
+            AutomationRunStatus::AwaitingReauthentication,
+            AutomationRunStatus::AwaitingExistingCartDecision,
+            AutomationRunStatus::AwaitingItemDecision,
+        ], true) && in_array($to, [
+            AutomationRunStatus::CheckingConnection,
+            AutomationRunStatus::Queued,
+        ], true);
     }
 
     public function canTransition(AutomationRunStatus $from, AutomationRunStatus $to): bool

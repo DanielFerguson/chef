@@ -14,7 +14,6 @@ use App\Models\ShoppingList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -31,12 +30,17 @@ class RetailerConnectionAuthenticationController extends Controller
         return to_route('browser-sessions.authenticate.show', $session);
     }
 
-    public function show(BrowserSession $browserSession): Response
+    public function show(BrowserSession $browserSession): Response|RedirectResponse
     {
         $this->authorize('control', $browserSession);
 
         if ($browserSession->status !== BrowserSessionStatus::HumanControl) {
-            throw ValidationException::withMessages(['connection' => 'This secure login session is no longer active.']);
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => 'This secure Woolworths sign-in session has ended. Reconnect when you are ready to try again.',
+            ]);
+
+            return redirect($this->returnUrl($browserSession));
         }
 
         return Inertia::render('retailer-connections/authenticate', [
@@ -49,6 +53,7 @@ class RetailerConnectionAuthenticationController extends Controller
                 'id' => $browserSession->id,
                 'live_view_endpoint' => route('browser-sessions.live-view', $browserSession),
                 'expires_at' => $browserSession->expires_at?->toIso8601String(),
+                'timezone' => $browserSession->team->timezone,
                 'recording_enabled' => $browserSession->recording_enabled,
             ],
             'return_url' => $this->returnUrl($browserSession),

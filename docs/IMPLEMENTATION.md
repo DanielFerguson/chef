@@ -92,7 +92,7 @@ remains open.
 - Laravel queues for asynchronous agent and automation work
 - Laravel broadcasting or server-sent events for streamed progress
 - Laravel MCP for exposing reviewed Chef domain capabilities
-- Browserbase Contexts and recording-disabled sessions for the first Woolworths execution surface
+- Browserbase Contexts with recording-disabled human sessions and opt-in local-only agent-session recording for the first Woolworths execution surface
 - An in-repo TypeScript worker using Browserbase/Playwright dependencies behind `chef.browser.v1`
 - A future permissioned Manifest V3 Chrome extension behind `ComputerExecutor`
 
@@ -311,9 +311,25 @@ There are no update or delete routes for historical order snapshots.
 owner may authenticate, reauthenticate, or disconnect it. The Browserbase
 Context ID uses Laravel's encrypted cast and is hidden from serialisation.
 `BrowserSession` retains only the encrypted provider session identifier,
-purpose, safe lifecycle state, region metadata, and the fact that recording was
-disabled. CDP and Live View URLs are fetched transiently and never written to a
-database, page history, audit step, or log payload.
+purpose, safe lifecycle state, region metadata, and whether recording was
+enabled. CDP and Live View URLs are fetched transiently and never written to a
+database, page history, audit step, or log payload. Human login,
+reauthentication, and manual-takeover sessions are always recording-disabled.
+For local diagnosis only, `BROWSERBASE_RECORD_LOCAL_CART_SESSIONS=true` records
+new agent-controlled cart-preparation sessions. The default is false and the
+provider ignores the flag outside the local application environment.
+Browserbase sessions default to a `1024 × 768` viewport to reduce Live View
+rendering and transfer work while retaining Woolworths' desktop layout. The
+same configured dimensions are sent to OpenAI computer use so screenshot
+coordinates and browser actions remain aligned.
+Authentication, inspection, clearing, and item preparation reuse an already
+open protected cart surface instead of reloading Woolworths between adjacent
+worker commands. Optional empty-cart totals use a bounded lookup so the absence
+of a total-specific selector cannot consume the whole worker timeout.
+The owner-only authentication Live View grants clipboard read/write permission
+to its iframe so the person can paste credentials or MFA values directly. That
+permission is not granted to manual cart takeover or agent-controlled browser
+surfaces, and Chef never reads, stores, or forwards the clipboard contents.
 
 `AutomationRun` references the exact current `ShoppingListRevision` and copies
 only included, non-pantry requirements into `AutomationRunItem` records. A
@@ -601,9 +617,12 @@ interface ComputerUseEngine
 CDP lookup, session closure, and Context deletion. `RetailerCartAdapter` owns
 deterministic Woolworths login probes, cart inspection, known controls, and
 reconciliation. `ComputerUseClient` owns only the direct Responses protocol.
-`ComputerExecutor` owns the versioned JSON-lines worker process. These contracts
-leave Coles and a future Chrome extension as later adapters rather than new
-domain workflows.
+`ComputerExecutor` owns the versioned JSON-lines worker process. A
+human-triggered authentication probe uses a shorter navigation and process
+deadline than queued cart work. Provider or worker timeouts return as a
+recoverable in-session retry before the web request deadline rather than
+allowing PHP to terminate the request. These contracts leave Coles and a future
+Chrome extension as later adapters rather than new domain workflows.
 
 The worker connects only to a Laravel-supplied CDP URL, has no Chef database or
 authorisation access, and never receives the OpenAI key. Screenshots remain in
@@ -639,17 +658,29 @@ Woolworths cart link is shown.
 
 `php artisan chef:automation:status` reports whether Browserbase, OpenAI, the
 compiled worker, feature flags, normal-app proof, and queue configuration are
-ready without printing credentials. Persistent login verification closes the
-human session and waits for the configurable Browserbase Context sync delay
-before marking the connection ready for a fresh session.
+ready without printing credentials. Initial persistent-login verification
+closes the human session and waits for the configurable Browserbase Context
+sync delay before marking the connection ready. When an active run is already
+waiting for reauthentication, verification instead transfers that same
+recording-disabled session to the run. This avoids a new Browserbase proxy and
+Context-restore boundary after the owner has already proved the protected cart.
 
-The connection owner may also pause an active run and take control through the
-same recording-disabled session. A run-level lock prevents the worker,
-cancellation, and human control from overlapping. The model remains
-disconnected during takeover; finishing closes human control, checks the
-protected cart page, and queues a fresh inspection. If final reconciliation no
-longer contains a previously verified item, Chef creates a cart-changed
-intervention instead of presenting the cart as ready.
+The connection owner may also pause an active run and take control through a
+recording-disabled session. If local agent recording is active, Chef closes the
+recorded agent session and opens a fresh unrecorded session before handing over
+control. A run-level lock prevents the worker, cancellation, and human control
+from overlapping. The model remains disconnected during takeover; finishing
+checks the protected cart page, returns the same unrecorded session to agent
+control, and queues a fresh inspection. If final reconciliation no longer
+contains a previously verified item, Chef creates a cart-changed intervention
+instead of presenting the cart as ready.
+
+`AutomationRun.expires_at` bounds active browser processing rather than time a
+person spends completing a required pause. Every authorised transition from
+reauthentication, an existing-cart decision, an item decision, or manual
+takeover back into queued work renews the configured run TTL. The resumed worker
+still rechecks the current shopping-list revision and protected cart before any
+further mutation.
 
 ## Collaboration
 

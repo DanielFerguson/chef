@@ -6,14 +6,16 @@ use App\Automation\Data\ItemPreparationResult;
 
 it('keeps recorded worker observations compatible with the typed automation protocol', function () {
     $fixture = json_decode(
-        file_get_contents(base_path('tests/Fixtures/Automation/worker-protocol.json')),
+        file_get_contents(dirname(__DIR__).'/Fixtures/Automation/worker-protocol.json'),
         true,
         512,
         JSON_THROW_ON_ERROR,
     );
 
     expect($fixture['version'])->toBe('chef.browser.v1')
-        ->and($fixture['cases'])->toHaveCount(13);
+        ->and($fixture['cases'])->toHaveCount(13)
+        ->and($fixture['cases'][0]['observation']['url'])->toBe('https://www.woolworths.com.au/checkout')
+        ->and($fixture['cases'][0]['observation']['body_text'])->toContain('Your order');
 
     foreach ($fixture['cases'] as $case) {
         match ($case['command']) {

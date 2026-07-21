@@ -12,6 +12,7 @@ type TakeoverPageProps = {
         id: number;
         live_view_endpoint: string;
         expires_at: string | null;
+        timezone: string;
         recording_enabled: boolean;
     };
     return_url: string;
@@ -112,7 +113,9 @@ export default function RetailerConnectionTakeover({
                                     Session expires{' '}
                                     {new Date(
                                         session.expires_at,
-                                    ).toLocaleTimeString('en-AU')}
+                                    ).toLocaleTimeString('en-AU', {
+                                        timeZone: session.timezone,
+                                    })}
                                 </span>
                             )}
                         </div>

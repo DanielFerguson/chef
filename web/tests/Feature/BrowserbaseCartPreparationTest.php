@@ -18,7 +18,9 @@ use App\Automation\Contracts\ComputerUseEngine;
 use App\Automation\Exceptions\RetailerContextRevokedException;
 use App\Automation\Testing\FakeBrowserSessionProvider;
 use App\Automation\Testing\FakeComputerExecutor;
+use App\Enums\AutomationInterventionStatus;
 use App\Enums\AutomationInterventionType;
+use App\Enums\AutomationRunItemStatus;
 use App\Enums\AutomationRunStatus;
 use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
@@ -147,6 +149,27 @@ it('keeps Browserbase authentication owner-only encrypted and recording-disabled
     expect($connection->refresh()->status)->toBe(RetailerConnectionStatus::Connected);
 });
 
+it('redirects an ended authentication link instead of looping back to itself', function () {
+    $workspace = browserbaseCartWorkspace();
+    config()->set('automation.connection_enabled', true);
+    $session = app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']);
+    $session->update([
+        'status' => BrowserSessionStatus::Expired,
+        'ended_at' => now(),
+        'metadata' => [
+            ...$session->metadata,
+            'return_shopping_list_id' => $workspace['list']->id,
+        ],
+    ]);
+
+    $this->withoutVite();
+    $this->actingAs($workspace['user'])
+        ->get(route('browser-sessions.authenticate.show', $session))
+        ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']))
+        ->assertInertiaFlash('toast.type', 'error')
+        ->assertInertiaFlash('toast.message', 'This secure Woolworths sign-in session has ended. Reconnect when you are ready to try again.');
+});
+
 it('keeps an unfinished MFA or bot challenge in the owner-only login session', function () {
     $workspace = browserbaseCartWorkspace();
     config()->set('automation.connection_enabled', true);
@@ -169,6 +192,20 @@ it('keeps an unfinished MFA or bot challenge in the owner-only login session', f
         ->and($session->refresh()->status)->toBe(BrowserSessionStatus::HumanControl);
 });
 
+it('keeps a slow authentication probe recoverable in the existing login session', function () {
+    $workspace = browserbaseCartWorkspace();
+    config()->set('automation.connection_enabled', true);
+    $executor = app(ComputerExecutor::class);
+    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
+    $session = app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']);
+    $executor->executeFailure = new RuntimeException('Fake browser worker timeout.');
+
+    expect(fn () => app(VerifyRetailerConnection::class)->handle($session, $workspace['user']))
+        ->toThrow(ValidationException::class, 'secure session is still open')
+        ->and($session->refresh()->status)->toBe(BrowserSessionStatus::HumanControl)
+        ->and($session->retailerConnection->refresh()->status)->toBe(RetailerConnectionStatus::PendingLogin);
+});
+
 it('marks a provider timeout as an error and releases the Context lease', function () {
     $workspace = browserbaseCartWorkspace();
     config()->set('automation.connection_enabled', true);
@@ -184,6 +221,29 @@ it('marks a provider timeout as an error and releases the Context lease', functi
         ->and($connection->lease_owner)->toBeNull()
         ->and($connection->lease_expires_at)->toBeNull()
         ->and($connection->browserSessions)->toHaveCount(0);
+});
+
+it('reports an infrastructure failure without claiming an untouched cart needs reconciliation', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+
+    (new AdvanceAutomationRunJob($run->id))->failed(new RuntimeException('Browser provider DNS failure.'));
+
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Failed)
+        ->and($run->failure_message)->toContain('No Woolworths cart changes were made')
+        ->and($run->failure_message)->not->toContain('must be reconciled')
+        ->and($run->browserSessions)->toHaveCount(0);
 });
 
 it('clears a Context revoked while opening an owner login so reconnect can recover', function () {
@@ -482,11 +542,18 @@ it('stops for reauthentication and resumes only after the owner passes a fresh p
         ->and($run->items()->sole()->status->value)->toBe('pending');
 
     $loginSession = app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']);
+    $provider = app(BrowserSessionProvider::class);
+    expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
+    $createdBeforeVerification = $provider->sessionsCreated;
     $executor->authenticated = true;
     app(VerifyRetailerConnection::class)->handle($loginSession, $workspace['user']);
 
     expect($run->refresh()->status)->toBe(AutomationRunStatus::ReadyForReview)
         ->and($run->items()->sole()->status->value)->toBe('matched')
+        ->and($loginSession->refresh()->automation_run_id)->toBe($run->id)
+        ->and($loginSession->purpose)->toBe(BrowserSessionPurpose::CartPreparation)
+        ->and($loginSession->metadata['resumed_after_reauthentication'])->toBeTrue()
+        ->and($provider->sessionsCreated)->toBe($createdBeforeVerification)
         ->and($run->interventions()->where('type', AutomationInterventionType::Reauthentication->value)->where('status', 'resolved')->exists())->toBeTrue();
 });
 
@@ -764,6 +831,46 @@ it('pauses and safely rebuilds an item removed before final reconciliation', fun
         ->and($run->latestSnapshot?->lines)->toHaveCount(1);
 });
 
+it('renews the active processing window when a person resumes a paused item', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+    $item = $run->items()->sole();
+    $item->update(['status' => AutomationRunItemStatus::AwaitingDecision]);
+    $intervention = AutomationIntervention::factory()->create([
+        'team_id' => $workspace['team']->id,
+        'automation_run_id' => $run->id,
+        'automation_run_item_id' => $item->id,
+        'type' => AutomationInterventionType::ItemDecision,
+        'status' => AutomationInterventionStatus::Pending,
+    ]);
+    $run->update([
+        'status' => AutomationRunStatus::AwaitingItemDecision,
+        'expires_at' => now()->subMinute(),
+    ]);
+
+    app(ResolveAutomationIntervention::class)->handle(
+        $intervention,
+        $workspace['user'],
+        ['choice' => 'retry'],
+    );
+
+    expect($run->refresh()->status)->toBe(AutomationRunStatus::Queued)
+        ->and($run->expires_at->greaterThan(now()->addMinutes(59)))->toBeTrue()
+        ->and($item->refresh()->status)->toBe(AutomationRunItemStatus::Pending);
+    Queue::assertPushed(AdvanceAutomationRunJob::class, 1);
+});
+
 it('enforces team route isolation and connection-owner authentication policy', function () {
     $workspace = browserbaseCartWorkspace();
     $connection = connectedWoolworths($workspace);
@@ -856,13 +963,85 @@ it('stops the model for owner-only manual takeover and reconciles before resumin
 
     app(FinishAutomationTakeover::class)->handle($takeoverSession, $workspace['user']);
 
-    expect($takeoverSession->refresh()->status)->toBe(BrowserSessionStatus::Closed)
+    expect($takeoverSession->refresh()->status)->toBe(BrowserSessionStatus::AgentControl)
+        ->and($takeoverSession->purpose)->toBe(BrowserSessionPurpose::CartPreparation)
+        ->and($takeoverSession->metadata['resumed_after_manual_takeover'])->toBeTrue()
         ->and($run->refresh()->status)->toBe(AutomationRunStatus::Queued)
         ->and($run->interventions()->sole()->status->value)->toBe('resolved');
     // The original unique advancement job remains queued in this fake. In a
     // live worker it either resumes the queued run or releases uniqueness so
     // FinishAutomationTakeover can enqueue the continuation.
     Queue::assertPushed(AdvanceAutomationRunJob::class, 1);
+});
+
+it('moves manual takeover from a recorded agent session into a fresh unrecorded session', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+    $provider = app(BrowserSessionProvider::class);
+    expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
+    $provider->recordingEnabled = true;
+    $agentSession = app(CreateBrowserSession::class)->handle(
+        $connection,
+        BrowserSessionPurpose::CartPreparation,
+        $run,
+    );
+
+    $takeoverSession = app(StartAutomationTakeover::class)->handle($run, $workspace['user']);
+
+    expect($agentSession->refresh()->status)->toBe(BrowserSessionStatus::Closed)
+        ->and($agentSession->ended_at)->not->toBeNull()
+        ->and($agentSession->recording_enabled)->toBeTrue()
+        ->and($takeoverSession->id)->not->toBe($agentSession->id)
+        ->and($takeoverSession->status)->toBe(BrowserSessionStatus::HumanControl)
+        ->and($takeoverSession->purpose)->toBe(BrowserSessionPurpose::ManualTakeover)
+        ->and($takeoverSession->recording_enabled)->toBeFalse()
+        ->and($takeoverSession->metadata['previous_purpose'])->toBe(BrowserSessionPurpose::CartPreparation->value)
+        ->and($provider->sessionsCreated)->toBe(3)
+        ->and($provider->sessionsClosed)->toBe(2);
+});
+
+it('redirects an ended manual takeover link instead of looping back to itself', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    );
+    $session = app(CreateBrowserSession::class)->handle(
+        $connection,
+        BrowserSessionPurpose::CartPreparation,
+        $run,
+    );
+    $session = app(StartAutomationTakeover::class)->handle($run, $workspace['user']);
+    $session->update([
+        'status' => BrowserSessionStatus::Closed,
+        'ended_at' => now(),
+    ]);
+
+    $this->withoutVite();
+    $this->actingAs($workspace['user'])
+        ->get(route('browser-sessions.takeover.show', $session))
+        ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']))
+        ->assertInertiaFlash('toast.type', 'error')
+        ->assertInertiaFlash('toast.message', 'This manual Woolworths session has ended. The current cart status is available from Shopping.');
 });
 
 it('denies cross-family access to every team-owned automation record', function () {

@@ -7,6 +7,7 @@ use App\Automation\Data\WorkerCommand;
 use App\Automation\Data\WorkerResult;
 use App\Automation\Exceptions\BrowserSessionLostException;
 use App\Models\BrowserSession;
+use Throwable;
 
 class FakeComputerExecutor implements ComputerExecutor
 {
@@ -21,6 +22,8 @@ class FakeComputerExecutor implements ComputerExecutor
     public bool $removeLinesOnReconcile = false;
 
     public bool $loseNextSession = false;
+
+    public ?Throwable $executeFailure = null;
 
     public string $authenticationFailureReason = 'Woolworths requested login.';
 
@@ -42,6 +45,10 @@ class FakeComputerExecutor implements ComputerExecutor
 
     public function execute(BrowserSession $session, WorkerCommand $command): WorkerResult
     {
+        if ($this->executeFailure !== null) {
+            throw $this->executeFailure;
+        }
+
         if ($this->loseNextSession) {
             $this->loseNextSession = false;
 

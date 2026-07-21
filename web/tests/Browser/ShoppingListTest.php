@@ -274,6 +274,8 @@ it('offers just-in-time Woolworths connection without overflowing a narrow scree
         ->assertSee('Connect Woolworths when the list is ready')
         ->assertSee('Chef’s model is not attached during sign-in')
         ->assertPresent('button:has-text("Connect Woolworths")')
+        ->assertScript('() => { const cart = document.querySelector("#woolworths-cart-heading"); const items = Array.from(document.querySelectorAll("h2")).find((heading) => heading.textContent?.trim() === "Items"); return Boolean(cart && items && (cart.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING)); }')
+        ->assertScript('() => { const section = document.querySelector("#woolworths-cart-heading")?.closest("section"); if (!section) return false; const style = getComputedStyle(section); return style.borderTopWidth === "0px" && style.borderBottomWidth !== "0px"; }')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
 });
@@ -295,7 +297,7 @@ it('keeps human login separate from cart mutation in the recording-disabled view
         ->assertSee('The Chef model is not attached during sign-in')
         ->assertSee('Recording disabled')
         ->assertSee('It will not start filling the cart yet')
-        ->assertPresent('iframe[title="Woolworths secure sign-in"]')
+        ->assertPresent('iframe[title="Woolworths secure sign-in"][allow="clipboard-read; clipboard-write"]')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
 });
@@ -411,6 +413,7 @@ it('lets the connection owner pause for recording-disabled manual takeover', fun
         ->assertSee('Its model is disconnected while you inspect or edit the cart')
         ->assertSee('Recording disabled')
         ->assertPresent('iframe[title="Manual Woolworths cart control"]')
+        ->assertNotPresent('iframe[title="Manual Woolworths cart control"][allow*="clipboard"]')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->pressAndWaitFor('Reconcile and resume')
         ->assertSee('queued')
@@ -451,6 +454,29 @@ it('keeps a failed MFA probe in human control and verifies it before returning t
         ->assertSee('Woolworths connected')
         ->assertSee('Prepare Woolworths cart')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->assertNoJavaScriptErrors();
+});
+
+it('shows a recoverable retry when the protected-cart probe times out', function () {
+    $workspace = browserShoppingWorkspace();
+    app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    config()->set('automation.connection_enabled', true);
+    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
+    $executor = app(ComputerExecutor::class);
+    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
+    $session = app(StartRetailerConnection::class)->handle(
+        $workspace['user']->currentTeam,
+        $workspace['user'],
+    );
+    $executor->executeFailure = new RuntimeException('Fake browser worker timeout.');
+    $this->actingAs($workspace['user']);
+
+    visit(route('browser-sessions.authenticate.show', $session))
+        ->resize(390, 844)
+        ->pressAndWaitFor('I’ve signed in')
+        ->assertSee('Chef could not verify the protected Woolworths cart yet')
+        ->assertSee('Your secure session is still open')
+        ->assertSee('I’ve signed in')
         ->assertNoJavaScriptErrors();
 });
 

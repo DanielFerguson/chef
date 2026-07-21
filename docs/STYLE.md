@@ -222,6 +222,14 @@ login uses a dedicated, recording-disabled browser surface with a plain
 explanation that the model is absent. Never mix password/MFA entry with agent
 activity or automatically continue into cart mutation after authentication;
 return to Shopping for a second explicit start action.
+The owner-only sign-in iframe may use clipboard read/write permission so the
+person can paste a password-manager value or MFA code. Do not grant clipboard
+permission to cart takeover or agent-controlled browser surfaces.
+
+If an already-approved cart run pauses for reauthentication, the explicit
+`I’ve signed in` action may return that same recording-disabled session to the
+run after the protected cart check passes. This is a resume of the earlier
+approved work, not a new cart-preparation approval.
 
 Before that second action, show a compact product plan: exact matches, items
 that require retailer search, and the applicable explicit household safety

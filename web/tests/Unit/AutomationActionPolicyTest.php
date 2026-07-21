@@ -49,6 +49,10 @@ it('requires intervention on checkout account captcha and sensitive screens', fu
     )->decision)->toBe(AutomationPolicyDecision::RequiresIntervention)
         ->and($policy->assess(
             ['type' => 'click'],
+            ['url' => 'https://www.woolworths.com.au/checkout'],
+        )->decision)->toBe(AutomationPolicyDecision::RequiresIntervention)
+        ->and($policy->assess(
+            ['type' => 'click'],
             [
                 'url' => 'https://www.woolworths.com.au/shop/search/products',
                 'bot_detected' => true,

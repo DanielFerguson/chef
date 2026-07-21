@@ -6,6 +6,7 @@ import type { Browser, Locator, Page } from 'playwright-core';
 const protocolVersion = 'chef.browser.v1' as const;
 const allowedHosts = new Set(['woolworths.com.au', 'www.woolworths.com.au']);
 const cartPath = '/shop/checkout/cart';
+const cartSurfacePaths = new Set([cartPath, '/checkout']);
 const cartItemSelector = [
     '[data-testid*="cart-item"]',
     '[data-testid*="trolley-item"]',
@@ -88,7 +89,11 @@ async function main(): Promise<void> {
             );
         }
 
-        const page = context.pages()[0] ?? (await context.newPage());
+        const openPages = context.pages();
+        const page =
+            openPages.find((candidate) => isWoolworthsPage(candidate.url())) ??
+            openPages[0] ??
+            (await context.newPage());
         page.on('download', (download) => void download.cancel());
         page.on('filechooser', (chooser) => void chooser.setFiles([]));
 
@@ -98,10 +103,15 @@ async function main(): Promise<void> {
         const failure =
             error instanceof WorkerFailure
                 ? error
-                : new WorkerFailure(
-                      'worker_failure',
-                      'The browser worker stopped before it could verify the step.',
-                  );
+                : error instanceof Error && error.name === 'TimeoutError'
+                  ? new WorkerFailure(
+                        'worker_timeout',
+                        'Woolworths did not expose a verifiable cart control in time.',
+                    )
+                  : new WorkerFailure(
+                        'worker_failure',
+                        'The browser worker stopped before it could verify the step.',
+                    );
         await respond({
             version: protocolVersion,
             ok: false,
@@ -224,40 +234,138 @@ async function probeAuthentication(
     page: Page,
     rawUrl: string,
 ): Promise<Record<string, unknown>> {
-    await navigate(page, rawUrl);
-    const observation = await observeSafety(page);
-    const path = safePath(page.url());
-    const body = await bodyText(page);
-    const loginRequested =
-        path.includes('securelogin') ||
-        /\b(sign in|log in|login)\b/i.test(body.slice(0, 6_000)) ||
-        (await page.locator('input[type="password"]').count()) > 0;
-    const cartMarker =
-        path === cartPath ||
-        /\b(your (cart|trolley)|shopping (cart|trolley))\b/i.test(
-            body.slice(0, 10_000),
-        );
+    const url = assertAllowedUrl(rawUrl, true);
+
+    if (!isAllowedCartSurfaceUrl(page.url())) {
+        try {
+            await page.goto(url.toString(), {
+                waitUntil: 'commit',
+                timeout: 10_000,
+            });
+        } catch {
+            throw new WorkerFailure(
+                'authentication_navigation_failed',
+                'Woolworths did not open the protected cart in time.',
+            );
+        }
+
+        await page
+            .waitForLoadState('domcontentloaded', { timeout: 1_500 })
+            .catch(() => undefined);
+        await page.waitForTimeout(250);
+    }
+
+    const state = await waitForAuthenticationState(page);
+    const { loginRequested, cartMarker, observation } = state;
+    const sensitiveScreen = observation.sensitive_screen && !cartMarker;
     const authenticated =
         !loginRequested &&
         cartMarker &&
         !observation.bot_detected &&
-        !observation.sensitive_screen;
+        !sensitiveScreen;
 
     return {
         authenticated,
         reason: authenticated
             ? 'Protected Woolworths cart probe passed.'
-            : 'Woolworths requested login or the protected cart could not be verified.',
+            : authenticationFailureReason(
+                  loginRequested,
+                  cartMarker,
+                  observation.bot_detected,
+                  sensitiveScreen,
+              ),
         bot_detected: observation.bot_detected,
-        sensitive_screen: observation.sensitive_screen && !loginRequested,
+        sensitive_screen: sensitiveScreen && !loginRequested,
     };
+}
+
+async function waitForAuthenticationState(page: Page): Promise<{
+    loginRequested: boolean;
+    cartMarker: boolean;
+    observation: Awaited<ReturnType<typeof observeSafety>>;
+}> {
+    const deadline = Date.now() + 6_000;
+    let latest = await readAuthenticationState(page);
+
+    while (
+        !latest.loginRequested &&
+        !latest.cartMarker &&
+        !latest.observation.bot_detected &&
+        !latest.observation.sensitive_screen &&
+        Date.now() < deadline
+    ) {
+        await page.waitForTimeout(400);
+        latest = await readAuthenticationState(page);
+    }
+
+    return latest;
+}
+
+async function readAuthenticationState(page: Page): Promise<{
+    loginRequested: boolean;
+    cartMarker: boolean;
+    observation: Awaited<ReturnType<typeof observeSafety>>;
+}> {
+    const path = safePath(page.url());
+    const body = await bodyText(page, 1_500);
+    const [observation, passwordFields] = await Promise.all([
+        observeSafety(page, body),
+        page.locator('input[type="password"]').count(),
+    ]);
+    const bodyExcerpt = body.slice(0, 10_000);
+    const loginRequested =
+        path.includes('securelogin') ||
+        path.includes('/auth/login') ||
+        /\b(log in or sign up|welcome to woolworths online|email address)\b/i.test(
+            bodyExcerpt,
+        ) ||
+        passwordFields > 0;
+    const cartSignals = [
+        /\byour (cart|trolley|order)\b/i,
+        /\bshopping (cart|trolley)\b/i,
+        /\breview your items\b/i,
+        /\byour cart is empty\b/i,
+        /\bdelivery location\b/i,
+        /\bselect a date and time\b/i,
+        /\btotal\s*\(incl\.? gst\)\b/i,
+    ].filter((pattern) => pattern.test(bodyExcerpt)).length;
+    const cartMarker = isCartSurfacePath(path) && cartSignals > 0;
+
+    return { loginRequested, cartMarker, observation };
+}
+
+function authenticationFailureReason(
+    loginRequested: boolean,
+    cartMarker: boolean,
+    botDetected: boolean,
+    sensitiveScreen: boolean,
+): string {
+    if (loginRequested) {
+        return 'Woolworths still shows a sign-in screen.';
+    }
+
+    if (botDetected) {
+        return 'Woolworths presented bot detection during the protected-cart check.';
+    }
+
+    if (sensitiveScreen) {
+        return 'Woolworths opened an unexpected sensitive screen instead of the cart.';
+    }
+
+    if (!cartMarker) {
+        return 'Woolworths opened the protected checkout, but Chef could not identify its cart state.';
+    }
+
+    return 'The protected Woolworths cart could not be verified.';
 }
 
 async function inspectCart(
     page: Page,
     rawUrl: string,
 ): Promise<Record<string, unknown>> {
-    await navigate(page, rawUrl);
+    if (!isAllowedCartSurfaceUrl(page.url())) {
+        await navigate(page, rawUrl);
+    }
 
     return inspectCurrentCart(page);
 }
@@ -282,7 +390,9 @@ async function clearCart(
     page: Page,
     rawUrl: string,
 ): Promise<Record<string, unknown>> {
-    await navigate(page, rawUrl);
+    if (!isAllowedCartSurfaceUrl(page.url())) {
+        await navigate(page, rawUrl);
+    }
 
     for (let attempt = 0; attempt < 50; attempt++) {
         const line = page.locator(cartItemSelector).first();
@@ -324,7 +434,10 @@ async function prepareItem(
     page: Page,
     requirement: Requirement,
 ): Promise<Record<string, unknown>> {
-    await navigate(page, woolworthsUrl(cartPath).toString());
+    if (!isAllowedCartSurfaceUrl(page.url())) {
+        await navigate(page, woolworthsUrl(cartPath).toString());
+    }
+
     const existingLines = await extractCartLines(page);
     const desiredProductName =
         typeof requirement.product_match?.product_name === 'string'
@@ -647,29 +760,35 @@ async function executeAction(
     };
 }
 
-async function observeSafety(page: Page): Promise<{
+async function observeSafety(
+    page: Page,
+    knownBody?: string,
+): Promise<{
     bot_detected: boolean;
     sensitive_screen: boolean;
     sensitive_field: boolean;
 }> {
-    const body = (await bodyText(page)).slice(0, 12_000);
+    const body = (knownBody ?? (await bodyText(page))).slice(0, 12_000);
     const path = safePath(page.url());
-    const active = await activeElementSafety(page);
-    const botDetected =
-        /\b(captcha|verify you are human|unusual traffic|access denied|are you a robot)\b/i.test(
-            body,
-        ) || (await page.locator('iframe[src*="captcha" i]').count()) > 0;
-    const sensitivePath =
-        path !== cartPath &&
-        /\b(checkout|securelogin|account|payment|address|delivery|pickup|orders?)\b/i.test(
-            path,
-        );
-    const sensitiveForm =
-        (await page
+    const [active, captchaFrames, sensitiveFields] = await Promise.all([
+        activeElementSafety(page),
+        page.locator('iframe[src*="captcha" i]').count(),
+        page
             .locator(
                 'input[type="password"], input[autocomplete*="cc-" i], input[autocomplete*="address" i], input[name*="payment" i]',
             )
-            .count()) > 0;
+            .count(),
+    ]);
+    const botDetected =
+        /\b(captcha|verify you are human|unusual traffic|access denied|are you a robot)\b/i.test(
+            body,
+        ) || captchaFrames > 0;
+    const sensitivePath =
+        !isCartSurfacePath(path) &&
+        /\b(checkout|securelogin|account|payment|address|delivery|pickup|orders?)\b/i.test(
+            path,
+        );
+    const sensitiveForm = sensitiveFields > 0;
 
     return {
         bot_detected: botDetected,
@@ -885,7 +1004,7 @@ async function extractCartTotal(page: Page): Promise<number | null> {
             '[data-testid*="cart-total" i], [data-testid*="trolley-total" i], [class*="cart-total" i], [class*="CartTotal" i]',
         )
         .last()
-        .textContent()
+        .textContent({ timeout: 1_500 })
         .catch(() => null);
 
     return parseMoney(text);
@@ -1066,10 +1185,41 @@ function safePath(rawUrl: string): string {
     }
 }
 
-async function bodyText(page: Page): Promise<string> {
+function isCartSurfacePath(path: string): boolean {
+    return cartSurfacePaths.has(path.toLowerCase());
+}
+
+function isWoolworthsPage(rawUrl: string): boolean {
+    try {
+        const url = new URL(rawUrl);
+
+        return (
+            url.protocol === 'https:' &&
+            allowedHosts.has(url.hostname.toLowerCase())
+        );
+    } catch {
+        return false;
+    }
+}
+
+function isAllowedCartSurfaceUrl(rawUrl: string): boolean {
+    try {
+        const url = new URL(rawUrl);
+
+        return (
+            url.protocol === 'https:' &&
+            allowedHosts.has(url.hostname.toLowerCase()) &&
+            isCartSurfacePath(url.pathname.replace(/\/$/, '') || '/')
+        );
+    } catch {
+        return false;
+    }
+}
+
+async function bodyText(page: Page, timeout = 5_000): Promise<string> {
     return page
         .locator('body')
-        .innerText({ timeout: 5_000 })
+        .innerText({ timeout })
         .catch(() => '');
 }
 
