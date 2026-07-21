@@ -238,6 +238,7 @@ it('exposes authorised recipe creation import versioning and reading over HTTP',
         'steps' => [['instruction' => 'Crumb and air fry.', 'timer_minutes' => 18]],
         'equipment' => ['Air fryer'],
         'notices' => [],
+        'storage_guidance' => 'Cool promptly and refrigerate for up to two days.',
     ];
 
     $this->withoutVite()->actingAs($workspace['user'])->post(route('recipes.store'), $payload)->assertRedirect();
@@ -255,6 +256,7 @@ it('exposes authorised recipe creation import versioning and reading over HTTP',
     ])->assertRedirect();
 
     expect($recipe->versions()->count())->toBe(2)
+        ->and($recipe->versions()->latest('version')->firstOrFail()->storage_guidance)->toBe('Cool promptly and refrigerate for up to two days.')
         ->and($workspace['team']->recipes()->count())->toBe(2);
 });
 
@@ -278,6 +280,9 @@ it('exposes the complete planning workspace mutations over HTTP', function () {
         'servings' => 1.5,
         'status' => 'skipped',
         'notes' => 'Not tonight.',
+    ])->assertRedirect();
+    $this->post(route('meal-plans.safety-review.store', $workspace['plan']), [
+        'explicitly_reviewed' => true,
     ])->assertRedirect();
     $this->post(route('meal-plans.milestones.store', $workspace['plan']), [
         'kind' => 'planning_confirmed',
@@ -398,6 +403,22 @@ it('rolls back a meal move when its expected plan revision is stale', function (
     ))->toThrow(ValidationException::class, 'This plan changed elsewhere');
 
     expect($planned->refresh()->meal_slot_id)->toBe($source->id);
+});
+
+it('swaps two occupied meal slots in one plan revision', function () {
+    $workspace = m3PlanningWorkspace();
+    $first = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    $second = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today()->addDay(), MealSlotKind::Dinner, $workspace['team']->people);
+    $tacos = app(SelectPlannedMeal::class)->handle($first, $workspace['user'], PlannedMealType::Takeaway, title: 'Tacos');
+    $pizza = app(SelectPlannedMeal::class)->handle($second, $workspace['user'], PlannedMealType::Takeaway, title: 'Pizza');
+    $revision = $workspace['plan']->refresh()->revision;
+
+    app(MovePlannedMeal::class)->handle($tacos, $second, $workspace['user'], $revision);
+
+    expect($tacos->refresh()->meal_slot_id)->toBe($second->id)
+        ->and($pizza->refresh()->meal_slot_id)->toBe($first->id)
+        ->and($workspace['plan']->refresh()->revision)->toBe($revision + 1)
+        ->and($workspace['plan']->revisions()->latest('revision')->firstOrFail()->summary)->toBe('Swapped Tacos with Pizza.');
 });
 
 it('clears recipe-only relationships when a slot changes to another meal type', function () {

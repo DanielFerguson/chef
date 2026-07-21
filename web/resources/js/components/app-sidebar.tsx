@@ -1,10 +1,8 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
-    CalendarDays,
     CirclePlus,
     Clock3,
-    Search,
     ShoppingBasket,
     Utensils,
 } from 'lucide-react';
@@ -82,23 +80,11 @@ export function AppSidebar() {
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                         <SidebarMenuItem>
-                            <SidebarMenuButton disabled tooltip="Calendar">
-                                <CalendarDays />
-                                <span>Calendar</span>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
                             <SidebarMenuButton asChild tooltip="Shopping">
                                 <Link href="/shopping">
                                     <ShoppingBasket />
                                     <span>Shopping</span>
                                 </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton disabled tooltip="Search">
-                                <Search />
-                                <span>Search</span>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
                     </SidebarMenu>

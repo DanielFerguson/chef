@@ -3,7 +3,7 @@
 namespace App\Actions\Planning;
 
 use App\Actions\MealPlans\RecordMealPlanRevision;
-use App\Actions\Recipes\PreparePlannedMealRecipe;
+use App\Actions\Recipes\PrepareMealPlanRecipes;
 use App\Enums\MealProposalStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
@@ -18,7 +18,7 @@ class AcceptMealProposal
 {
     public function __construct(
         private readonly RecordMealPlanRevision $recordRevision,
-        private readonly PreparePlannedMealRecipe $prepareRecipe,
+        private readonly PrepareMealPlanRecipes $prepareRecipes,
     ) {}
 
     public function handle(MealProposal $proposal, User $user): PlannedMeal
@@ -88,8 +88,8 @@ class AcceptMealProposal
             return $plannedMeal;
         });
 
-        $this->prepareRecipe->handle($plannedMeal, $user);
+        $this->prepareRecipes->handle($plannedMeal->mealPlan, $user);
 
-        return $plannedMeal->refresh()->load(['recipeVersion', 'recipePreparation']);
+        return $plannedMeal->refresh()->load('recipeVersion');
     }
 }

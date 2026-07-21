@@ -2,6 +2,7 @@
 
 namespace App\Actions\Households;
 
+use App\Actions\MealPlans\InvalidateMealPlansForConstraintChange;
 use App\Enums\ConstraintKind;
 use App\Models\Constraint;
 use App\Models\Message;
@@ -13,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 
 class RecordConstraint
 {
+    public function __construct(private readonly InvalidateMealPlansForConstraintChange $invalidatePlans) {}
+
     public function handle(
         Team $team,
         User $user,
@@ -51,7 +54,12 @@ class RecordConstraint
         $existing = Constraint::query()->where($identity)->first();
 
         if ($existing !== null) {
+            $changed = $existing->details !== $details || $existing->severity !== $severity;
             $existing->update($values);
+
+            if ($changed) {
+                $this->invalidatePlans->handle($team, $user, $person, 'Updated a confirmed household safety constraint.');
+            }
 
             return $existing;
         }
@@ -61,13 +69,17 @@ class RecordConstraint
             'constraint', $team->id, $confirmationMessage->id, $personId, $kind->value, mb_strtolower(trim($subject)),
         ]));
 
-        if ($confirmationMessage === null) {
-            return Constraint::query()->updateOrCreate($identity, $values);
+        $constraint = $confirmationMessage === null
+            ? Constraint::query()->updateOrCreate($identity, $values)
+            : Constraint::query()->firstOrCreate(
+                ['idempotency_key' => $idempotencyKey],
+                [...$identity, ...$values],
+            );
+
+        if ($constraint->wasRecentlyCreated) {
+            $this->invalidatePlans->handle($team, $user, $person, 'Added a confirmed household safety constraint.');
         }
 
-        return Constraint::query()->firstOrCreate(
-            ['idempotency_key' => $idempotencyKey],
-            [...$identity, ...$values],
-        );
+        return $constraint;
     }
 }

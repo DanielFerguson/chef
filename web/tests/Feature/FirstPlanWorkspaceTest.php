@@ -42,6 +42,11 @@ it('creates and resumes a meal plan workspace', function () {
             ->component('meal-plans/show')
             ->where('workspace.plan.title', 'Next few days')
             ->where('workspace.household.name', 'The Test Kitchen')
+            ->where('workspace.household.timezone', $team->timezone)
+            ->where(
+                'workspace.conversation.messages.0.created_at',
+                fn ($createdAt) => is_string($createdAt),
+            )
             ->has('workspace.conversation.messages', 1));
 });
 
@@ -163,6 +168,29 @@ it('never records an unconfirmed safety constraint', function () {
         subject: 'Peanuts',
     );
 })->throws(ValidationException::class);
+
+it('records direct safety rules and an explicit current-plan safety review over HTTP', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today());
+
+    $this->actingAs($user)
+        ->post(route('constraints.store'), [
+            'kind' => ConstraintKind::Allergy->value,
+            'subject' => 'Peanuts',
+            'severity' => 'severe',
+            'explicitly_confirmed' => true,
+        ])
+        ->assertRedirect();
+    $this->post(route('meal-plans.safety-review.store', $plan), [
+        'explicitly_reviewed' => true,
+    ])->assertRedirect();
+
+    expect($team->constraints()->sole()->subject)->toBe('Peanuts')
+        ->and($plan->refresh()->safety_reviewed_at)->not->toBeNull()
+        ->and($plan->safety_reviewed_by_user_id)->toBe($user->id)
+        ->and($plan->safety_reviewed_context_hash)->not->toBeNull();
+});
 
 it('hides plan route bindings outside the active family', function () {
     $owner = User::factory()->create();

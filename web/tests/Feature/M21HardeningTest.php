@@ -387,7 +387,9 @@ it('marks a failed turn retryable and persists only one response', function () {
     $failed = $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $workspace['conversation']), [
         'content' => 'Try this safely.', 'client_message_id' => $clientId,
     ]);
-    expect($failed->streamedContent())->toContain('"type":"error"');
+    expect($failed->streamedContent())->toContain('"type":"error"')
+        ->toContain('"code":"unknown"')
+        ->toContain('"retryable":true');
 
     $successful = Mockery::mock(ChefConversationEngine::class);
     $successful->shouldReceive('streamResponse')->once()->andReturn([new AssistantStreamChunk('delta', 'Recovered.'), new AssistantStreamChunk('complete')]);
@@ -398,6 +400,7 @@ it('marks a failed turn retryable and persists only one response', function () {
 
     expect($retry->streamedContent())->toContain('Recovered.')
         ->and($workspace['conversation']->messages()->where('client_message_id', $clientId)->sole()->response_status)->toBe(MessageResponseStatus::Completed)
+        ->and($workspace['conversation']->messages()->where('client_message_id', $clientId)->sole()->metadata['response']['attempts'])->toBe(2)
         ->and($workspace['conversation']->messages()->where('client_message_id', $clientId)->sole()->response()->count())->toBe(1);
 });
 

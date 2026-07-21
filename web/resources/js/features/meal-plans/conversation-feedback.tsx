@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Check, Copy, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ConversationFeedback } from './types';
@@ -131,14 +131,17 @@ function FeedbackDetails({
 }
 
 export function MessageFeedback({
+    content,
     messageId,
     feedback,
 }: {
+    content: string;
     messageId: number;
     feedback?: ConversationFeedback;
 }) {
     const [editing, setEditing] = useState<Rating | null>(null);
     const [saved, setSaved] = useState(false);
+    const [copied, setCopied] = useState(false);
     const action = `/messages/${messageId}/feedback`;
 
     const choose = (rating: Rating) => {
@@ -163,6 +166,27 @@ export function MessageFeedback({
     return (
         <div className="mt-1">
             <div className="flex items-center gap-0.5 text-muted-foreground">
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={
+                        copied ? 'Chef response copied' : 'Copy Chef response'
+                    }
+                    title={copied ? 'Copied' : 'Copy'}
+                    onClick={async () => {
+                        try {
+                            await navigator.clipboard.writeText(content);
+                            setCopied(true);
+                            window.setTimeout(() => setCopied(false), 2000);
+                        } catch {
+                            setCopied(false);
+                        }
+                    }}
+                    className="size-7"
+                >
+                    {copied ? <Check /> : <Copy />}
+                </Button>
                 <Button
                     type="button"
                     size="icon"

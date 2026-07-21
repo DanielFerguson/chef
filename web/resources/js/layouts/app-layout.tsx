@@ -6,12 +6,17 @@ const EMPTY_BREADCRUMBS: BreadcrumbItem[] = [];
 export default function AppLayout({
     breadcrumbs = EMPTY_BREADCRUMBS,
     children,
+    headerBackLink,
 }: {
     breadcrumbs?: BreadcrumbItem[];
     children: React.ReactNode;
+    headerBackLink?: BreadcrumbItem;
 }) {
     return (
-        <AppLayoutTemplate breadcrumbs={breadcrumbs}>
+        <AppLayoutTemplate
+            breadcrumbs={breadcrumbs}
+            headerBackLink={headerBackLink}
+        >
             {children}
         </AppLayoutTemplate>
     );

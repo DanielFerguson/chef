@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 class RecordMealPlanMilestone
 {
+    public function __construct(private readonly MealPlanSafetyContext $safetyContext) {}
+
     public function handle(MealPlan $mealPlan, User $user, MealPlanMilestoneKind $kind): MealPlanMilestone
     {
         if (! $user->can('update', $mealPlan)) {
@@ -25,7 +27,12 @@ class RecordMealPlanMilestone
             );
 
             if ($kind === MealPlanMilestoneKind::PlanningConfirmed) {
-                $mealPlan->update(['planning_confirmed_at' => now(), 'derived_data_stale_at' => null, 'derived_data_stale_reason' => null]);
+                $mealPlan->update([
+                    'planning_confirmed_at' => now(),
+                    'confirmed_safety_context_hash' => $this->safetyContext->fingerprint($mealPlan),
+                    'derived_data_stale_at' => null,
+                    'derived_data_stale_reason' => null,
+                ]);
             }
 
             if ($kind === MealPlanMilestoneKind::ShoppingListGenerated) {

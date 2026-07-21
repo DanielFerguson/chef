@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Households\RecordPreference;
+use App\Actions\Households\RemovePreference;
 use App\Enums\PreferenceSentiment;
 use App\Models\Preference;
 use Illuminate\Http\RedirectResponse;
@@ -11,7 +12,7 @@ use Illuminate\Validation\Rule;
 
 class PreferenceController extends Controller
 {
-    public function update(Request $request, Preference $preference, RecordPreference $record): RedirectResponse
+    public function update(Request $request, Preference $preference, RecordPreference $record, RemovePreference $remove): RedirectResponse
     {
         $this->authorize('update', $preference);
         $validated = $request->validate([
@@ -31,16 +32,16 @@ class PreferenceController extends Controller
         );
 
         if ($preference->subject !== $validated['subject']) {
-            $preference->delete();
+            $remove->handle($preference, $request->user());
         }
 
         return back();
     }
 
-    public function destroy(Request $request, Preference $preference): RedirectResponse
+    public function destroy(Request $request, Preference $preference, RemovePreference $remove): RedirectResponse
     {
         $this->authorize('delete', $preference);
-        $preference->delete();
+        $remove->handle($preference, $request->user());
 
         return back();
     }

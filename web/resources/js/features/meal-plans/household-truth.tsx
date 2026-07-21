@@ -1,5 +1,13 @@
-import { router } from '@inertiajs/react';
-import { Check, Pencil, ShieldCheck, Trash2, UsersRound } from 'lucide-react';
+import { router, useForm } from '@inertiajs/react';
+import {
+    Check,
+    MessagesSquare,
+    Pencil,
+    Plus,
+    ShieldCheck,
+    Trash2,
+    UsersRound,
+} from 'lucide-react';
 import { useState } from 'react';
 import {
     destroy as destroyConstraint,
@@ -76,14 +84,22 @@ function TruthActions({ children }: { children: React.ReactNode }) {
     return (
         <div
             data-truth-actions
-            className="ml-auto flex shrink-0 items-center rounded-md bg-background/95 pl-1 opacity-100 transition-opacity md:[@media(hover:hover)]:pointer-events-none md:[@media(hover:hover)]:absolute md:[@media(hover:hover)]:right-0 md:[@media(hover:hover)]:opacity-0 md:[@media(hover:hover)]:group-focus-within:pointer-events-auto md:[@media(hover:hover)]:group-focus-within:opacity-100 md:[@media(hover:hover)]:group-hover:pointer-events-auto md:[@media(hover:hover)]:group-hover:opacity-100"
+            className="ml-auto flex shrink-0 items-center rounded-md bg-background/95 pl-1"
         >
             {children}
         </div>
     );
 }
 
-function EditablePreference({ preference }: { preference: Preference }) {
+function EditablePreference({
+    preference,
+    conversationId,
+    onShowMessageSource,
+}: {
+    preference: Preference;
+    conversationId: number;
+    onShowMessageSource: (messageId: number) => void;
+}) {
     const [draft, setDraft] = useState<string | null>(null);
 
     const save = () => {
@@ -130,6 +146,26 @@ function EditablePreference({ preference }: { preference: Preference }) {
                 </>
             ) : (
                 <>
+                    {preference.source_message?.conversation_id ===
+                        conversationId && (
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 shrink-0"
+                            onClick={() =>
+                                onShowMessageSource(
+                                    preference.source_message!.id,
+                                )
+                            }
+                            title="View source message"
+                            aria-label={`View source for ${preference.subject}`}
+                        >
+                            <MessagesSquare />
+                            <span className="sr-only">
+                                View source for {preference.subject}
+                            </span>
+                        </Button>
+                    )}
                     <span className="min-w-0 flex-1 truncate">
                         {preference.sentiment === 'dislike'
                             ? 'Avoid '
@@ -172,7 +208,15 @@ function EditablePreference({ preference }: { preference: Preference }) {
     );
 }
 
-function EditableConstraint({ constraint }: { constraint: Constraint }) {
+function EditableConstraint({
+    constraint,
+    conversationId,
+    onShowMessageSource,
+}: {
+    constraint: Constraint;
+    conversationId: number;
+    onShowMessageSource: (messageId: number) => void;
+}) {
     const [draft, setDraft] = useState<string | null>(null);
     const source = constraint.confirmation_message;
 
@@ -256,20 +300,42 @@ function EditableConstraint({ constraint }: { constraint: Constraint }) {
                     </>
                 )}
             </div>
-            {draft === null && source && (
-                <p className="mt-1 ml-6 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                    Confirmed by {source.author?.name ?? 'a household member'}:
-                    “{source.content}”
-                </p>
-            )}
+            {draft === null &&
+                source &&
+                (source.conversation_id === conversationId ? (
+                    <button
+                        type="button"
+                        className="mt-1 ml-6 line-clamp-2 text-left text-xs leading-5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        onClick={() => onShowMessageSource(source.id)}
+                        aria-label={`View source for ${constraint.subject}`}
+                    >
+                        Confirmed by{' '}
+                        {source.author?.name ?? 'a household member'}: “
+                        {source.content}”
+                    </button>
+                ) : (
+                    <p className="mt-1 ml-6 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                        Confirmed by{' '}
+                        {source.author?.name ?? 'a household member'}: “
+                        {source.content}”
+                    </p>
+                ))}
         </li>
     );
 }
 
 export function HouseholdTruth({
     household,
+    planId,
+    safetyReviewRequired,
+    conversationId,
+    onShowMessageSource,
 }: {
     household: MealPlanWorkspace['household'];
+    planId: number;
+    safetyReviewRequired: boolean;
+    conversationId: number;
+    onShowMessageSource: (messageId: number) => void;
 }) {
     const ownerNames = new Map(
         household.people.map((person) => [person.id, person.name]),
@@ -282,6 +348,23 @@ export function HouseholdTruth({
         ...household.constraints,
         ...household.people.flatMap((person) => person.constraints),
     ];
+    const [addingConstraint, setAddingConstraint] = useState(false);
+    const constraintForm = useForm<{
+        person_id: number | '';
+        kind: string;
+        subject: string;
+        details: string;
+        severity: string;
+        explicitly_confirmed: boolean;
+    }>({
+        person_id: '',
+        kind: 'allergy',
+        subject: '',
+        details: '',
+        severity: '',
+        explicitly_confirmed: true,
+    });
+    const safetyReviewForm = useForm({ explicitly_reviewed: true });
     const ownerFor = (personId: number | null) =>
         personId === null
             ? household.name
@@ -297,6 +380,8 @@ export function HouseholdTruth({
                     <EditablePreference
                         key={preference.id}
                         preference={preference}
+                        conversationId={conversationId}
+                        onShowMessageSource={onShowMessageSource}
                     />
                 ))}
             </TruthOwnerGroup>
@@ -313,6 +398,8 @@ export function HouseholdTruth({
                     <EditableConstraint
                         key={constraint.id}
                         constraint={constraint}
+                        conversationId={conversationId}
+                        onShowMessageSource={onShowMessageSource}
                     />
                 ))}
             </TruthOwnerGroup>
@@ -327,10 +414,151 @@ export function HouseholdTruth({
             <div className="space-y-4">
                 <TruthGroup
                     title="Safety rules"
-                    empty="No confirmed allergies or safety rules"
+                    empty={
+                        safetyReviewRequired
+                            ? 'Safety details have not been reviewed yet'
+                            : 'No allergies or safety rules reported for this plan'
+                    }
                 >
                     {constraintGroups}
                 </TruthGroup>
+                <div className="space-y-2 rounded-lg border bg-background p-3">
+                    <p className="text-xs leading-5 text-muted-foreground">
+                        Safety rules are only recorded from an explicit
+                        household statement. Chef never infers allergies from
+                        preferences or meal feedback.
+                    </p>
+                    {addingConstraint ? (
+                        <form
+                            className="space-y-2"
+                            onSubmit={(event) => {
+                                event.preventDefault();
+                                constraintForm.transform((data) => ({
+                                    ...data,
+                                    person_id: data.person_id || null,
+                                    details: data.details.trim() || null,
+                                    severity: data.severity.trim() || null,
+                                }));
+                                constraintForm.post('/constraints', {
+                                    preserveScroll: true,
+                                    onSuccess: () => {
+                                        constraintForm.reset();
+                                        setAddingConstraint(false);
+                                    },
+                                });
+                            }}
+                        >
+                            <select
+                                aria-label="Safety rule applies to"
+                                className="h-9 w-full rounded-md border bg-background px-2 text-xs"
+                                value={constraintForm.data.person_id}
+                                onChange={(event) =>
+                                    constraintForm.setData(
+                                        'person_id',
+                                        event.target.value === ''
+                                            ? ''
+                                            : Number(event.target.value),
+                                    )
+                                }
+                            >
+                                <option value="">Whole household</option>
+                                {household.people.map((person) => (
+                                    <option key={person.id} value={person.id}>
+                                        {person.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                aria-label="Safety rule type"
+                                className="h-9 w-full rounded-md border bg-background px-2 text-xs"
+                                value={constraintForm.data.kind}
+                                onChange={(event) =>
+                                    constraintForm.setData(
+                                        'kind',
+                                        event.target.value,
+                                    )
+                                }
+                            >
+                                <option value="allergy">Allergy</option>
+                                <option value="medical">Medical</option>
+                                <option value="dietary">Dietary</option>
+                                <option value="religious">Religious</option>
+                                <option value="accessibility">
+                                    Accessibility
+                                </option>
+                                <option value="other">Other</option>
+                            </select>
+                            <Input
+                                aria-label="Safety rule subject"
+                                placeholder="e.g. Peanut allergy"
+                                value={constraintForm.data.subject}
+                                onChange={(event) =>
+                                    constraintForm.setData(
+                                        'subject',
+                                        event.target.value,
+                                    )
+                                }
+                                required
+                            />
+                            <Input
+                                aria-label="Safety rule details"
+                                placeholder="Details or cross-contamination needs"
+                                value={constraintForm.data.details}
+                                onChange={(event) =>
+                                    constraintForm.setData(
+                                        'details',
+                                        event.target.value,
+                                    )
+                                }
+                            />
+                            <div className="flex justify-end gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setAddingConstraint(false)}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    disabled={constraintForm.processing}
+                                >
+                                    Record safety rule
+                                </Button>
+                            </div>
+                        </form>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setAddingConstraint(true)}
+                            >
+                                <Plus /> Add safety rule
+                            </Button>
+                            {safetyReviewRequired && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={safetyReviewForm.processing}
+                                    onClick={() =>
+                                        safetyReviewForm.post(
+                                            `/meal-plans/${planId}/safety-review`,
+                                            { preserveScroll: true },
+                                        )
+                                    }
+                                >
+                                    <ShieldCheck />
+                                    {constraints.length > 0
+                                        ? 'I reviewed these details'
+                                        : 'Confirm none reported'}
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                </div>
                 <TruthGroup
                     title="Stated preferences"
                     empty="Nothing stated yet"

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Conversations\CreateUserMessage;
+use App\Actions\Conversations\RecordMessageResponseAttempt;
+use App\Actions\Conversations\RecordMessageResponseFailure;
 use App\Ai\Contracts\ChefConversationEngine;
 use App\Enums\MessageResponseStatus;
 use App\Enums\MessageRole;
@@ -20,6 +22,8 @@ class ConversationMessageStreamController extends Controller
         Request $request,
         Conversation $conversation,
         CreateUserMessage $createUserMessage,
+        RecordMessageResponseAttempt $recordResponseAttempt,
+        RecordMessageResponseFailure $recordResponseFailure,
         ChefConversationEngine $engine,
     ): StreamedResponse|JsonResponse {
         $this->authorize('update', $conversation);
@@ -68,7 +72,9 @@ class ConversationMessageStreamController extends Controller
             ], 409);
         }
 
-        return response()->stream(function () use ($conversation, $message, $engine): void {
+        $attempt = $recordResponseAttempt->handle($message);
+
+        return response()->stream(function () use ($conversation, $message, $engine, $recordResponseFailure, $attempt): void {
             $content = '';
             $metadata = [];
 
@@ -108,12 +114,13 @@ class ConversationMessageStreamController extends Controller
 
                 echo json_encode(['type' => 'persisted', 'message_id' => $assistant->id], JSON_THROW_ON_ERROR)."\n";
             } catch (Throwable $exception) {
-                report($exception);
-                $message->update([
-                    'response_status' => MessageResponseStatus::Failed,
-                    'response_error' => 'Chef could not finish that response.',
-                ]);
-                echo json_encode(['type' => 'error', 'message' => 'Chef could not finish that response. Please try again.'], JSON_THROW_ON_ERROR)."\n";
+                $failure = $recordResponseFailure->handle($message, $exception, $attempt);
+                echo json_encode([
+                    'type' => 'error',
+                    'code' => $failure->code->value,
+                    'message' => $failure->message,
+                    'retryable' => $failure->retryable,
+                ], JSON_THROW_ON_ERROR)."\n";
             }
         }, headers: [
             'Content-Type' => 'application/x-ndjson',

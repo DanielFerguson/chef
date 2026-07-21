@@ -14,6 +14,7 @@ import { store as storeInvitation } from '@/actions/App/Http/Controllers/TeamInv
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { HouseholdTruth } from './household-truth';
 import type { MealPlanWorkspace } from './types';
 
@@ -40,11 +41,24 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                         <CalendarDays className="size-4" /> Plan status
                     </h2>
                     <p className="mt-1 text-xs text-muted-foreground">
-                        {plan.slots.length} slots · revision {plan.revision}
+                        {plan.slots.length}{' '}
+                        {plan.slots.length === 1 ? 'meal slot' : 'meal slots'}
                     </p>
                 </div>
-                <Badge variant={confirmed ? 'secondary' : 'outline'}>
-                    {confirmed ? 'Confirmed' : 'Planning'}
+                <Badge
+                    variant={
+                        readiness.safety_review_required
+                            ? 'outline'
+                            : confirmed
+                              ? 'secondary'
+                              : 'outline'
+                    }
+                >
+                    {readiness.safety_review_required
+                        ? 'Safety review'
+                        : confirmed
+                          ? 'Confirmed'
+                          : 'Planning'}
                 </Badge>
             </div>
             {plan.derived_data_stale_at && (
@@ -88,14 +102,35 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                         <Check /> Confirm plan
                     </Button>
                 )}
+                {readiness.ready_for_safety_confirmation && (
+                    <Button
+                        size="sm"
+                        disabled={milestoneForm.processing}
+                        onClick={() =>
+                            milestoneForm.post(
+                                `/meal-plans/${plan.id}/milestones`,
+                                { preserveScroll: true },
+                            )
+                        }
+                    >
+                        <Check /> Reconfirm plan
+                    </Button>
+                )}
             </div>
             {!confirmed && !readiness.ready_for_confirmation && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                    {readiness.open_slots > 0
-                        ? `${readiness.open_slots} ${readiness.open_slots === 1 ? 'slot still needs' : 'slots still need'} a meal.`
-                        : readiness.pending_proposals > 0
-                          ? 'Resolve the remaining meal suggestions before confirming.'
-                          : 'Confirm who is eating in every slot before confirming.'}
+                    {readiness.uncovered_slots > 0 &&
+                    readiness.pending_proposals > 0
+                        ? `${readiness.pending_proposals} ${readiness.pending_proposals === 1 ? 'suggestion' : 'suggestions'} ready; ${readiness.uncovered_slots} ${readiness.uncovered_slots === 1 ? 'slot still needs' : 'slots still need'} an option.`
+                        : readiness.uncovered_slots > 0
+                          ? `${readiness.uncovered_slots} ${readiness.uncovered_slots === 1 ? 'slot still needs' : 'slots still need'} an option.`
+                          : readiness.pending_proposals > 0
+                            ? `${readiness.pending_proposals} ${readiness.pending_proposals === 1 ? 'suggestion needs' : 'suggestions need'} review.`
+                            : readiness.safety_review_required
+                              ? 'Review the household safety details below before confirming.'
+                              : readiness.recipes_unresolved > 0
+                                ? 'Finish preparing each cookable recipe before confirming.'
+                                : 'Confirm who is eating in every slot before confirming.'}
                 </p>
             )}
             {showForm && (
@@ -162,12 +197,7 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                     </summary>
                     <ol className="mt-3 space-y-2 border-l pl-3 text-xs text-muted-foreground">
                         {plan.revisions.slice(0, 5).map((revision) => (
-                            <li key={revision.id}>
-                                <span className="text-foreground">
-                                    v{revision.revision}
-                                </span>{' '}
-                                {revision.summary}
-                            </li>
+                            <li key={revision.id}>{revision.summary}</li>
                         ))}
                     </ol>
                 </details>
@@ -275,12 +305,35 @@ function InvitationForm({ workspace }: { workspace: MealPlanWorkspace }) {
     );
 }
 
-export function PlanInspector({ workspace }: { workspace: MealPlanWorkspace }) {
+export function PlanInspector({
+    workspace,
+    conversationId,
+    onShowMessageSource,
+    className,
+}: {
+    workspace: MealPlanWorkspace;
+    conversationId: number;
+    onShowMessageSource: (messageId: number) => void;
+    className?: string;
+}) {
     return (
-        <aside className="border-t bg-muted/20 lg:h-full lg:w-96 lg:overflow-y-auto lg:border-t-0 lg:border-l">
+        <aside
+            className={cn(
+                'border-t bg-muted/20 lg:h-full lg:w-96 lg:overflow-y-auto lg:border-t-0 lg:border-l',
+                className,
+            )}
+        >
             <div className="space-y-7 p-5">
                 <PlanStatus workspace={workspace} />
-                <HouseholdTruth household={workspace.household} />
+                <HouseholdTruth
+                    household={workspace.household}
+                    planId={workspace.plan.id}
+                    safetyReviewRequired={
+                        workspace.readiness.safety_review_required
+                    }
+                    conversationId={conversationId}
+                    onShowMessageSource={onShowMessageSource}
+                />
                 <InvitationForm workspace={workspace} />
             </div>
         </aside>

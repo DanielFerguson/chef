@@ -66,12 +66,13 @@ it('selects and confirms a recipe from the complete planning workspace', functio
         ->pressAndWaitFor('Select meal')
         ->assertSee('Chicken schnitzel')
         ->assertSee('Why this fits')
+        ->pressAndWaitFor('Confirm none reported')
         ->click('Confirm plan')
         ->assertSee('Confirmed')
         ->assertNoJavaScriptErrors();
 });
 
-it('uses household checkboxes and a guest counter as the only list attendance controls', function () {
+it('uses per-person serving controls for every household participant', function () {
     $workspace = m3BrowserWorkspace();
     $primary = $workspace['team']->people()->sole();
     $tahlia = $workspace['team']->people()->create([
@@ -104,8 +105,8 @@ it('uses household checkboxes and a guest counter as the only list attendance co
         ->assertNotPresent('[aria-label="Meal status"]')
         ->assertNotPresent('[aria-label="Meal notes"]')
         ->click('Participants and servings')
-        ->assertChecked("#slot-{$slot->id}-person-{$primary->id}")
-        ->assertChecked("#slot-{$slot->id}-person-{$tahlia->id}")
+        ->assertValue("#slot-{$slot->id}-person-{$primary->id}", 1)
+        ->assertValue("#slot-{$slot->id}-person-{$tahlia->id}", 1)
         ->assertValue('[aria-label="Dinner guest servings"]', 1)
         ->assertScript("() => {
             const controls = [...document.querySelectorAll(
@@ -117,12 +118,12 @@ it('uses household checkboxes and a guest counter as the only list attendance co
             });
             return rightEdges.length === 3 && Math.max(...rightEdges) - Math.min(...rightEdges) < 1;
         }")
-        ->click('[data-slot="checkbox"][aria-label="Tahlia is eating"]')
+        ->type('[aria-label="Tahlia servings"]', '0')
         ->type('[aria-label="Dinner guest servings"]', '2')
         ->pressAndWaitFor('Save participants')
         ->assertSee('3 eating')
         ->resize(390, 844)
-        ->assertPresent('[data-slot="checkbox"]')
+        ->assertPresent('[aria-label="Tahlia servings"]')
         ->assertPresent('[aria-label="Dinner guest servings"]')
         ->assertScript("() => {
             const card = document.querySelector('[data-testid=meal-slot-{$slot->id}]');
@@ -139,6 +140,45 @@ it('uses household checkboxes and a guest counter as the only list attendance co
         ->toBe(1.0)
         ->and((float) $slot->participants->firstWhere('id', $guest->id)->pivot->servings)
         ->toBe(2.0);
+});
+
+it('swaps occupied meal slots through the accessible move control', function () {
+    $workspace = m3BrowserWorkspace();
+    $first = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
+    $second = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today()->addDay(), MealSlotKind::Dinner, $workspace['team']->people);
+    $schnitzel = app(SelectPlannedMeal::class)->handle($first, $workspace['user'], PlannedMealType::Recipe, $workspace['recipe']->latestVersion);
+    $takeaway = app(SelectPlannedMeal::class)->handle($second, $workspace['user'], PlannedMealType::Takeaway, title: 'Takeaway night');
+    $this->actingAs($workspace['user']);
+
+    visit(route('meal-plans.show', $workspace['plan']))->on()->desktop()
+        ->click('List')
+        ->select('select[aria-label="Move Chicken schnitzel"]', $second->id)
+        ->wait(1)
+        ->assertScript("() => document.querySelector('[data-testid=meal-slot-{$first->id}]')?.textContent.includes('Takeaway night')")
+        ->assertScript("() => document.querySelector('[data-testid=meal-slot-{$second->id}]')?.textContent.includes('Chicken schnitzel')")
+        ->assertNoJavaScriptErrors();
+
+    expect($schnitzel->refresh()->meal_slot_id)->toBe($second->id)
+        ->and($takeaway->refresh()->meal_slot_id)->toBe($first->id);
+});
+
+it('creates a revised recipe version without changing the earlier snapshot', function () {
+    $workspace = m3BrowserWorkspace();
+    $firstVersionId = $workspace['recipe']->latestVersion->id;
+    $this->actingAs($workspace['user']);
+
+    visit(route('recipes.show', $workspace['recipe']))->on()->desktop()
+        ->press('Revise recipe')
+        ->type('[aria-label="Revised recipe title"]', 'Chicken schnitzel with slaw')
+        ->type('[aria-label="Storage and leftovers guidance"]', 'Cool promptly and refrigerate for up to two days.')
+        ->pressAndWaitFor('Save as new version')
+        ->assertSee('v2')
+        ->assertSee('Chicken schnitzel with slaw')
+        ->assertSee('Cool promptly and refrigerate for up to two days.')
+        ->assertNoJavaScriptErrors();
+
+    expect($workspace['recipe']->versions()->count())->toBe(2)
+        ->and($workspace['recipe']->versions()->where('version', 1)->sole()->id)->toBe($firstVersionId);
 });
 
 it('shows drag scheduling and completes the accessible move alternative without losing recipe versions', function () {
@@ -202,14 +242,23 @@ it('keeps recipes and planning controls usable at 390 by 844', function () {
 
     visit(route('meal-plans.show', $workspace['plan']))
         ->resize(390, 844)
-        ->assertSee('Conversation')
-        ->click('Calendar')
+        ->assertScript("() => {
+            const nav = document.querySelector('nav[aria-label=\"Meal plan view\"]');
+            const header = nav?.closest('header');
+            const title = header?.querySelector('h1');
+            return Boolean(header && title)
+                && title.textContent.trim() === '{$workspace['plan']->title}'
+                && header.contains(nav)
+                && !header.textContent.includes('Review safety')
+                && document.querySelectorAll('nav[aria-label=\"Meal plan view\"]').length === 1;
+        }")
+        ->click('button[aria-label="Calendar"]')
         ->assertPresent('[data-testid="calendar-grid"]')
         ->assertScript("() => {
             const grid = document.querySelector('[data-testid=calendar-grid]');
             return grid.scrollWidth <= grid.clientWidth;
         }")
-        ->click('List')
+        ->click('button[aria-label="List"]')
         ->assertSee('Open')
         ->assertPresent('select[aria-label="Recipe"]')
         ->assertNoJavaScriptErrors();

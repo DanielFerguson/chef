@@ -7,8 +7,12 @@ export type Message = {
     id: number | string;
     role: 'user' | 'assistant';
     content: string;
+    created_at?: string | null;
     author?: UserSummary | null;
     feedback?: ConversationFeedback[];
+    client_message_id?: string | null;
+    response_status?: 'pending' | 'processing' | 'completed' | 'failed' | null;
+    response_error?: string | null;
 };
 
 export type ConversationFeedback = {
@@ -22,6 +26,12 @@ export type ConversationFeedback = {
 export type Preference = {
     id: number;
     person_id: number | null;
+    source_message_id?: number | null;
+    evidence_quote?: string | null;
+    source_message?: {
+        id: number;
+        conversation_id: number;
+    } | null;
     subject: string;
     sentiment: 'like' | 'dislike';
     strength: number;
@@ -37,6 +47,7 @@ export type Constraint = {
     severity: string | null;
     confirmation_message?: {
         id: number;
+        conversation_id: number;
         content: string;
         author?: UserSummary | null;
     } | null;
@@ -108,6 +119,8 @@ export type MealPlanWorkspace = {
         ends_on: string;
         revision: number;
         planning_confirmed_at: string | null;
+        safety_reviewed_at: string | null;
+        safety_reviewed_context_hash: string | null;
         derived_data_stale_at: string | null;
         derived_data_stale_reason: string | null;
         slots: MealSlot[];
@@ -127,6 +140,7 @@ export type MealPlanWorkspace = {
         shopping_list: {
             id: number;
             status: 'draft' | 'completed';
+            generation_status: 'pending' | 'processing' | 'ready' | 'failed';
             revision: number;
             stale_at: string | null;
         } | null;
@@ -139,6 +153,7 @@ export type MealPlanWorkspace = {
     household: {
         id: number;
         name: string;
+        timezone: string;
         people: Person[];
         preferences: Preference[];
         constraints: Constraint[];
@@ -158,6 +173,7 @@ export type MealPlanWorkspace = {
         total_slots: number;
         filled_slots: number;
         open_slots: number;
+        uncovered_slots: number;
         pending_proposals: number;
         slots_without_participants: number;
         recipes_required: number;
@@ -165,6 +181,10 @@ export type MealPlanWorkspace = {
         recipes_preparing: number;
         recipes_failed: number;
         recipes_unresolved: number;
+        ready_for_safety_review: boolean;
+        safety_reviewed: boolean;
+        safety_review_required: boolean;
+        ready_for_safety_confirmation: boolean;
         ready_for_confirmation: boolean;
         confirmed: boolean;
         next_action:
@@ -174,6 +194,7 @@ export type MealPlanWorkspace = {
             | 'prepare_recipes'
             | 'wait_for_recipes'
             | 'retry_recipes'
+            | 'review_safety'
             | 'review_and_confirm'
             | 'begin_shopping'
             | 'continue_planning';
@@ -182,6 +203,16 @@ export type MealPlanWorkspace = {
 
 export type StreamEvent = {
     type: 'delta' | 'complete' | 'persisted' | 'error';
+    code?:
+        | 'rate_limited'
+        | 'provider_overloaded'
+        | 'insufficient_credits'
+        | 'configuration_error'
+        | 'provider_error'
+        | 'tool_error'
+        | 'empty_response'
+        | 'unknown';
     delta?: string;
     message?: string;
+    retryable?: boolean;
 };

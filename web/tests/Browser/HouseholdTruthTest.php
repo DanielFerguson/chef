@@ -33,8 +33,13 @@ it('groups stated preferences under each household person', function () {
             PreferenceSentiment::Dislike,
             PreferenceProvenance::Stated,
             $tahlia,
+            sourceMessage: $message,
+            evidenceQuote: $message->content,
         );
     }
+
+    expect($tahlia->preferences()->pluck('source_message_id')->all())
+        ->each->toBe($message->id);
 
     $this->actingAs($user);
 
@@ -48,7 +53,53 @@ it('groups stated preferences under each household person', function () {
                 && list.textContent.includes('Avoid Raw tomatoes')
                 && list.textContent.includes('Avoid Fish')
                 && !list.textContent.includes('stated')
-                && list.querySelectorAll('[data-truth-actions]').length === 3;
+                && list.querySelectorAll('[data-truth-actions]').length === 3
+                && list.querySelectorAll('button[title=\"View source message\"]').length === 3;
         }")
+        ->assertVisible('button[aria-label="View source for Mushrooms"]')
+        ->click('button[aria-label="View source for Mushrooms"]')
+        ->wait(1)
+        ->assertScript("() => {
+            const viewport = document.querySelector('[data-slot=message-scroller-viewport]');
+            const source = document.querySelector('[data-message-id=\"{$message->id}\"]');
+            const viewportBounds = viewport.getBoundingClientRect();
+            const sourceBounds = source.getBoundingClientRect();
+            const announcement = [...document.querySelectorAll('[role=status]')]
+                .some((item) => item.textContent.includes('Source message shown.'));
+            return sourceBounds.top >= viewportBounds.top
+                && sourceBounds.bottom <= viewportBounds.bottom
+                && source.dataset.sourceTarget === 'true'
+                && document.activeElement === source
+                && announcement;
+        }")
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps unreviewed safety distinct from none reported at tablet width', function () {
+    $user = User::factory()->create(['name' => 'Daniel']);
+    $team = app(CreateTeamForUser::class)->handle($user, 'Safety family');
+    $tabletPlan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $tabletPlan))
+        ->resize(1004, 900)
+        ->assertPresent('button[aria-label="Open plan details"]')
+        ->click('button[aria-label="Open plan details"]')
+        ->assertSee('Safety details have not been reviewed yet')
+        ->assertSee('Confirm none reported')
+        ->assertNoJavaScriptErrors();
+});
+
+it('keeps unreviewed safety distinct from none reported at mobile width', function () {
+    $user = User::factory()->create(['name' => 'Daniel']);
+    $team = app(CreateTeamForUser::class)->handle($user, 'Safety family');
+    $mobilePlan = app(StartMealPlan::class)->handle($team, $user, today()->addDays(3), today()->addDays(5));
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $mobilePlan))
+        ->resize(390, 844)
+        ->click('button[aria-label="Open plan details"]')
+        ->assertSee('Safety details have not been reviewed yet')
+        ->assertSee('Confirm none reported')
         ->assertNoJavaScriptErrors();
 });

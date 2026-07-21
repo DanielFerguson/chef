@@ -33,7 +33,7 @@ class StartMealPlan
         return DB::transaction(function () use ($team, $user, $startsOn, $endsOn, $title): MealPlan {
             $mealPlan = $team->mealPlans()->create([
                 'created_by_user_id' => $user->id,
-                'title' => $title ?? $startsOn->format('j M').' – '.$endsOn->format('j M Y'),
+                'title' => $title ?? MealPlanDateTitle::format($startsOn, $endsOn),
                 'starts_on' => $startsOn,
                 'ends_on' => $endsOn,
             ]);

@@ -111,4 +111,16 @@ class Team extends Model
     {
         return $this->hasMany(PreferenceCandidate::class);
     }
+
+    /** @return HasMany<RetailerConnection, $this> */
+    public function retailerConnections(): HasMany
+    {
+        return $this->hasMany(RetailerConnection::class);
+    }
+
+    /** @return HasMany<AutomationRun, $this> */
+    public function automationRuns(): HasMany
+    {
+        return $this->hasMany(AutomationRun::class);
+    }
 }

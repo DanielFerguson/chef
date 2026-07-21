@@ -55,11 +55,13 @@ class MealPlanController extends Controller
             'proposals' => fn ($query) => $query->latest(),
             'revisions' => fn ($query) => $query->limit(20),
             'milestones',
-            'shoppingList:id,meal_plan_id,status,revision,stale_at',
+            'shoppingList:id,meal_plan_id,status,generation_status,revision,stale_at',
             'team.people.userLink',
-            'team.people.preferences',
+            'team.people.preferences.sourceMessage:id,conversation_id',
             'team.people.constraints.confirmationMessage.author:id,name',
-            'team.preferences' => fn ($query) => $query->whereNull('person_id'),
+            'team.preferences' => fn ($query) => $query
+                ->whereNull('person_id')
+                ->with('sourceMessage:id,conversation_id'),
             'team.constraints' => fn ($query) => $query
                 ->whereNull('person_id')
                 ->with('confirmationMessage.author:id,name'),

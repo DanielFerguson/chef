@@ -19,6 +19,7 @@ use App\Ai\Tools\MoveSelectedMeal;
 use App\Ai\Tools\PreparePlanShoppingList;
 use App\Ai\Tools\RecordHouseholdPreference;
 use App\Ai\Tools\RecordSafetyConstraint;
+use App\Ai\Tools\RecoverableTool;
 use App\Ai\Tools\SelectPlanMeal;
 use App\Ai\Tools\SetPlanShoppingBudget;
 use App\Ai\Tools\UpdatePlanDateSpan;
@@ -86,27 +87,28 @@ it('exposes only authorised first-plan domain tools to the chef agent', function
 
     $tools = collect((new ChefAgent($conversation, $current->id, $user, $current))->tools());
 
-    expect($tools->map(fn (object $tool) => $tool::class)->all())->toBe([
-        InspectTeamContext::class,
-        InspectMealPlan::class,
-        InspectPlanShoppingList::class,
-        InspectRecipes::class,
-        CreateHouseholdPerson::class,
-        UpdatePlanDateSpan::class,
-        CreatePlanMealSlot::class,
-        CreateMealProposal::class,
-        CreateFamilyRecipe::class,
-        SelectPlanMeal::class,
-        PreparePlanShoppingList::class,
-        AddPlanShoppingItems::class,
-        UpdatePlanShoppingItem::class,
-        SetPlanShoppingBudget::class,
-        MoveSelectedMeal::class,
-        RecordHouseholdPreference::class,
-        CorrectHouseholdPreference::class,
-        ConfirmPlan::class,
-        RecordSafetyConstraint::class,
-    ]);
+    expect($tools->every(fn (object $tool) => $tool instanceof RecoverableTool))->toBeTrue()
+        ->and($tools->map(fn (RecoverableTool $tool) => $tool->name())->all())->toBe([
+            class_basename(InspectTeamContext::class),
+            class_basename(InspectMealPlan::class),
+            class_basename(InspectPlanShoppingList::class),
+            class_basename(InspectRecipes::class),
+            class_basename(CreateHouseholdPerson::class),
+            class_basename(UpdatePlanDateSpan::class),
+            class_basename(CreatePlanMealSlot::class),
+            class_basename(CreateMealProposal::class),
+            class_basename(CreateFamilyRecipe::class),
+            class_basename(SelectPlanMeal::class),
+            class_basename(PreparePlanShoppingList::class),
+            class_basename(AddPlanShoppingItems::class),
+            class_basename(UpdatePlanShoppingItem::class),
+            class_basename(SetPlanShoppingBudget::class),
+            class_basename(MoveSelectedMeal::class),
+            class_basename(RecordHouseholdPreference::class),
+            class_basename(CorrectHouseholdPreference::class),
+            class_basename(ConfirmPlan::class),
+            class_basename(RecordSafetyConstraint::class),
+        ]);
 });
 
 it('disables parallel openai tool calls for the mixed read and write agent', function () {

@@ -8,7 +8,6 @@ use App\Models\PlannedMeal;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class MovePlannedMeal
 {
@@ -22,19 +21,42 @@ class MovePlannedMeal
             throw new AuthorizationException('You cannot move this meal to that slot.');
         }
 
-        if ($target->plannedMeal()->exists()) {
-            if ($plannedMeal->meal_slot_id === $target->id) {
-                return $plannedMeal;
-            }
-
-            throw ValidationException::withMessages(['meal_slot_id' => 'Replace the existing meal before moving into this slot.']);
+        if ($plannedMeal->meal_slot_id === $target->id) {
+            return $plannedMeal;
         }
 
         DB::transaction(function () use ($plannedMeal, $target, $user, $expectedRevision): void {
             $fromSlotId = $plannedMeal->meal_slot_id;
-            $plannedMeal->update(['meal_slot_id' => $target->id]);
-            $this->recordRevision->handle($plannedMeal->mealPlan, $user, 'Moved '.$plannedMeal->title.' to '.$target->date->toDateString().'.', [
+            $fromSlot = MealSlot::query()->findOrFail($fromSlotId);
+            $targetMeal = PlannedMeal::query()->where('meal_slot_id', $target->id)->first();
+
+            if ($targetMeal !== null) {
+                $temporarySlot = MealSlot::query()->create([
+                    'team_id' => $plannedMeal->team_id,
+                    'meal_plan_id' => $plannedMeal->meal_plan_id,
+                    'date' => $fromSlot->date,
+                    'kind' => $fromSlot->kind,
+                    'label' => $fromSlot->label,
+                    'position' => ((int) MealSlot::query()
+                        ->where('meal_plan_id', $plannedMeal->meal_plan_id)
+                        ->whereDate('date', $fromSlot->date)
+                        ->where('kind', $fromSlot->kind)
+                        ->max('position')) + 1,
+                ]);
+                $targetMeal->update(['meal_slot_id' => $temporarySlot->id]);
+                $plannedMeal->update(['meal_slot_id' => $target->id]);
+                $targetMeal->update(['meal_slot_id' => $fromSlotId]);
+                $temporarySlot->delete();
+            } else {
+                $plannedMeal->update(['meal_slot_id' => $target->id]);
+            }
+
+            $summary = $targetMeal === null
+                ? 'Moved '.$plannedMeal->title.' to '.$target->date->toDateString().'.'
+                : 'Swapped '.$plannedMeal->title.' with '.$targetMeal->title.'.';
+            $this->recordRevision->handle($plannedMeal->mealPlan, $user, $summary, [
                 'planned_meal_id' => $plannedMeal->id,
+                'swapped_planned_meal_id' => $targetMeal?->id,
                 'from_meal_slot_id' => $fromSlotId,
                 'to_meal_slot_id' => $target->id,
             ], $expectedRevision);

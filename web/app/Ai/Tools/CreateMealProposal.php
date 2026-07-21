@@ -23,7 +23,7 @@ class CreateMealProposal implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Create a visible meal suggestion for the current plan. A person must accept it before it becomes selected.';
+        return 'Create a visible plan-specific meal suggestion, including meals requested for this week. A person must accept it before it becomes selected.';
     }
 
     public function handle(Request $request): Stringable|string

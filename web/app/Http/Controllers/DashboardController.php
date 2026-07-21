@@ -41,6 +41,7 @@ class DashboardController extends Controller
                 ->min('date');
 
             if ($nextDate !== null) {
+                $nextDate = Date::parse($nextDate, $team->timezone)->toDateString();
                 $slots = MealSlot::query()
                     ->where('team_id', $team->id)
                     ->whereDate('date', $nextDate)

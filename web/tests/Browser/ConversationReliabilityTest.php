@@ -32,6 +32,8 @@ it('captures response feedback and carries a completed plan into confirmation fe
     $this->actingAs($user);
 
     visit(route('meal-plans.show', $plan))->on()->desktop()
+        ->assertSee('Review this plan’s safety details')
+        ->pressAndWaitFor('Confirm none reported')
         ->assertSee('Your plan is ready to confirm')
         ->click('button[aria-label="Mark this response unhelpful"]')
         ->assertSee('What could Chef improve?')
@@ -52,6 +54,7 @@ it('captures response feedback and carries a completed plan into confirmation fe
         ->pressAndWaitFor('Start shopping list')
         ->assertSee('Shopping list')
         ->assertDontSee('needs structured ingredients')
+        ->click('button[aria-label="Edit Chicken katsu curry with rice ingredients"]')
         ->assertPresent('input[aria-label="Chicken katsu curry with rice ingredients name"]')
         ->assertPresent('input[aria-label="New shopping item"]')
         ->assertNoJavaScriptErrors();

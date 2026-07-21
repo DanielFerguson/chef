@@ -28,7 +28,7 @@ class RecordHouseholdPreference implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Record a food like or dislike stated by a person, or a clearly labelled low-stakes inference. Never use this for allergies or medical restrictions.';
+        return 'Record a durable food like or dislike that should apply beyond the current plan, or a clearly labelled low-stakes inference. Do not use this for meals requested only for this week, allergies, or medical restrictions.';
     }
 
     public function handle(Request $request): Stringable|string

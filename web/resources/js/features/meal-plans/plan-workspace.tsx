@@ -16,7 +16,6 @@ import { useState } from 'react';
 import PlannedMealMoveController from '@/actions/App/Http/Controllers/PlannedMealMoveController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -81,12 +80,6 @@ function MealExplanation({ meal }: { meal: PlannedMeal }) {
     );
 }
 
-function isGuestCounter(name: string) {
-    return ['guest', 'guests', 'dinner guest', 'dinner guests'].includes(
-        name.trim().toLocaleLowerCase(),
-    );
-}
-
 function slotServingCount(slot: MealSlot) {
     return slot.participants.reduce(
         (total, participant) => total + (participant.pivot?.servings ?? 0),
@@ -147,43 +140,6 @@ function ParticipantEditor({
                 {workspace.household.people.map((person, index) => {
                     const inputId = `slot-${slot.id}-person-${person.id}`;
 
-                    if (isGuestCounter(person.name)) {
-                        return (
-                            <div
-                                key={person.id}
-                                data-participant-row
-                                className="grid min-h-8 grid-cols-[minmax(0,1fr)_5rem] items-center gap-3 text-xs"
-                            >
-                                <Label
-                                    htmlFor={inputId}
-                                    className="font-normal"
-                                >
-                                    {person.name}
-                                </Label>
-                                <Input
-                                    id={inputId}
-                                    data-participant-control
-                                    className="h-8 w-full"
-                                    aria-label={`${person.name} servings`}
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="0"
-                                    max="999"
-                                    step="1"
-                                    value={
-                                        form.data.participants[index].servings
-                                    }
-                                    onChange={(event) =>
-                                        setServings(
-                                            index,
-                                            Number(event.target.value),
-                                        )
-                                    }
-                                />
-                            </div>
-                        );
-                    }
-
                     return (
                         <div
                             key={person.id}
@@ -193,16 +149,22 @@ function ParticipantEditor({
                             <Label htmlFor={inputId} className="font-normal">
                                 {person.name}
                             </Label>
-                            <Checkbox
+                            <Input
                                 id={inputId}
                                 data-participant-control
-                                className="justify-self-end"
-                                aria-label={`${person.name} is eating`}
-                                checked={
-                                    form.data.participants[index].servings > 0
-                                }
-                                onCheckedChange={(checked) =>
-                                    setServings(index, checked ? 1 : 0)
+                                className="h-8 w-full"
+                                aria-label={`${person.name} servings`}
+                                type="number"
+                                inputMode="decimal"
+                                min="0"
+                                max="999"
+                                step="0.25"
+                                value={form.data.participants[index].servings}
+                                onChange={(event) =>
+                                    setServings(
+                                        index,
+                                        Number(event.target.value),
+                                    )
                                 }
                             />
                         </div>
@@ -231,7 +193,7 @@ function SelectedMealEditor({
     workspace,
     slot,
     meal,
-    emptySlots,
+    moveTargets,
     showDragHandle = true,
     showMealControls = true,
     onMove,
@@ -239,7 +201,7 @@ function SelectedMealEditor({
     workspace: MealPlanWorkspace;
     slot: MealSlot;
     meal: PlannedMeal;
-    emptySlots: MealSlot[];
+    moveTargets: MealSlot[];
     showDragHandle?: boolean;
     showMealControls?: boolean;
     onMove?: () => void;
@@ -366,15 +328,15 @@ function SelectedMealEditor({
                     </form>
                 </details>
             )}
-            {emptySlots.length > 0 && (
+            {moveTargets.length > 0 && (
                 <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                    Move to
+                    Move or swap
                     <select
                         aria-label={`Move ${meal.title}`}
                         defaultValue=""
                         className="min-w-0 flex-1 rounded border bg-background px-2 py-1"
                         onChange={(event) => {
-                            const target = emptySlots.find(
+                            const target = moveTargets.find(
                                 (item) =>
                                     item.id === Number(event.target.value),
                             );
@@ -386,11 +348,14 @@ function SelectedMealEditor({
                         }}
                     >
                         <option value="" disabled>
-                            Choose an open slot
+                            Choose another slot
                         </option>
-                        {emptySlots.map((target) => (
+                        {moveTargets.map((target) => (
                             <option key={target.id} value={target.id}>
                                 {formatDay(target.date)} · {target.kind}
+                                {target.planned_meal
+                                    ? ` · swap with ${target.planned_meal.title}`
+                                    : ' · open'}
                             </option>
                         ))}
                     </select>
@@ -534,11 +499,9 @@ function OpenMealEditor({
 function SlotCard({
     workspace,
     slot,
-    emptySlots,
 }: {
     workspace: MealPlanWorkspace;
     slot: MealSlot;
-    emptySlots: MealSlot[];
 }) {
     const [over, setOver] = useState(false);
 
@@ -556,10 +519,8 @@ function SlotCard({
                 }
             }}
             onDragOver={(event) => {
-                if (!slot.planned_meal) {
-                    event.preventDefault();
-                    setOver(true);
-                }
+                event.preventDefault();
+                setOver(true);
             }}
             onDragLeave={() => setOver(false)}
             onDrop={(event) => {
@@ -572,7 +533,7 @@ function SlotCard({
                     .map((item) => item.planned_meal)
                     .find((item) => item?.id === mealId);
 
-                if (meal && !slot.planned_meal) {
+                if (meal && meal.meal_slot_id !== slot.id) {
                     moveMeal(meal, slot, workspace.plan.revision);
                 }
             }}
@@ -594,7 +555,9 @@ function SlotCard({
                     workspace={workspace}
                     slot={slot}
                     meal={slot.planned_meal}
-                    emptySlots={emptySlots}
+                    moveTargets={workspace.plan.slots.filter(
+                        (target) => target.id !== slot.id,
+                    )}
                     showMealControls={false}
                 />
             ) : (
@@ -607,11 +570,9 @@ function SlotCard({
 function CalendarSlotCard({
     workspace,
     slot,
-    emptySlots,
 }: {
     workspace: MealPlanWorkspace;
     slot: MealSlot;
-    emptySlots: MealSlot[];
 }) {
     const [over, setOver] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
@@ -634,10 +595,8 @@ function CalendarSlotCard({
                     }
                 }}
                 onDragOver={(event) => {
-                    if (!meal) {
-                        event.preventDefault();
-                        setOver(true);
-                    }
+                    event.preventDefault();
+                    setOver(true);
                 }}
                 onDragLeave={() => setOver(false)}
                 onDrop={(event) => {
@@ -650,7 +609,7 @@ function CalendarSlotCard({
                         .map((item) => item.planned_meal)
                         .find((item) => item?.id === mealId);
 
-                    if (droppedMeal && !meal) {
+                    if (droppedMeal && droppedMeal.meal_slot_id !== slot.id) {
                         moveMeal(droppedMeal, slot, workspace.plan.revision);
                     }
                 }}
@@ -749,7 +708,9 @@ function CalendarSlotCard({
                             workspace={workspace}
                             slot={slot}
                             meal={meal}
-                            emptySlots={emptySlots}
+                            moveTargets={workspace.plan.slots.filter(
+                                (target) => target.id !== slot.id,
+                            )}
                             showDragHandle={false}
                             onMove={() => setDetailsOpen(false)}
                         />
@@ -820,7 +781,6 @@ export function PlanWorkspace({
                                             key={slot.id}
                                             workspace={workspace}
                                             slot={slot}
-                                            emptySlots={emptySlots}
                                         />
                                     ))}
                                 </div>
@@ -872,7 +832,6 @@ export function PlanWorkspace({
                                             key={slot.id}
                                             workspace={workspace}
                                             slot={slot}
-                                            emptySlots={emptySlots}
                                         />
                                     ))}
                                     {slots.length === 0 && (

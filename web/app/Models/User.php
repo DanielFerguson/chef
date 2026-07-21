@@ -71,6 +71,12 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(MealPlan::class, 'created_by_user_id');
     }
 
+    /** @return HasMany<RetailerConnection, $this> */
+    public function retailerConnections(): HasMany
+    {
+        return $this->hasMany(RetailerConnection::class, 'owner_user_id');
+    }
+
     /** @return HasMany<Message, $this> */
     public function messages(): HasMany
     {
