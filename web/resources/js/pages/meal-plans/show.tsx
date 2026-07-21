@@ -109,7 +109,7 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
             {headerPortal}
             <div
                 key={workspace.plan.id}
-                className="flex min-h-0 flex-1 flex-col bg-background lg:flex-row lg:overflow-hidden"
+                className="flex min-h-0 flex-1 flex-col bg-background lg:h-[calc(100svh-5rem)] lg:flex-none lg:flex-row lg:overflow-hidden"
             >
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:overflow-hidden">
                     {view === 'conversation' ? (
