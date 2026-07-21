@@ -30,6 +30,7 @@ export type RecipeVersion = {
     cook_minutes: number | null;
     source_url: string | null;
     notes: string | null;
+    storage_guidance: string | null;
     published_at: string;
     ingredients: RecipeIngredient[];
     steps: RecipeStep[];

@@ -733,10 +733,20 @@ export default function CookingShow({
                                     </p>
                                 </section>
                             )}
-                            {recipe.notes && (
+                            {recipe.storage_guidance && (
                                 <section>
                                     <h2 className="text-sm font-semibold">
                                         Storage and leftovers
+                                    </h2>
+                                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                                        {recipe.storage_guidance}
+                                    </p>
+                                </section>
+                            )}
+                            {recipe.notes && (
+                                <section>
+                                    <h2 className="text-sm font-semibold">
+                                        Recipe notes
                                     </h2>
                                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
                                         {recipe.notes}

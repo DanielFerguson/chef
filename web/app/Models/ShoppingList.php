@@ -2,20 +2,32 @@
 
 namespace App\Models;
 
+use App\Enums\ShoppingListGenerationMethod;
+use App\Enums\ShoppingListGenerationStatus;
 use App\Enums\ShoppingListStatus;
 use App\Models\Concerns\ResolvesWithinCurrentTeam;
+use Database\Factories\ShoppingListFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * @property array{from_plan_revision: int, to_plan_revision?: int, changes: array<int, array<string, mixed>>}|null $stale_diff
  * @property ShoppingListStatus $status
+ * @property ShoppingListGenerationStatus $generation_status
+ * @property ShoppingListGenerationMethod|null $last_generation_method
+ * @property int $generation_attempts
+ * @property Carbon|null $generation_started_at
  */
-#[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'revision', 'source_plan_revision', 'status', 'completed_at', 'stale_at', 'stale_reason', 'stale_diff'])]
+#[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'revision', 'source_plan_revision', 'status', 'generation_status', 'generation_token', 'generation_attempts', 'generation_context_hash', 'last_generation_method', 'generation_failure_code', 'generation_failure_message', 'generation_started_at', 'generation_completed_at', 'completed_at', 'stale_at', 'stale_reason', 'stale_diff'])]
 class ShoppingList extends Model
 {
+    /** @use HasFactory<ShoppingListFactory> */
+    use HasFactory;
+
     use ResolvesWithinCurrentTeam;
 
     /** @return BelongsTo<Team, $this> */
@@ -60,10 +72,20 @@ class ShoppingList extends Model
         return $this->hasMany(Order::class)->orderByDesc('recorded_at');
     }
 
+    /** @return HasMany<AutomationRun, $this> */
+    public function automationRuns(): HasMany
+    {
+        return $this->hasMany(AutomationRun::class)->latest();
+    }
+
     protected function casts(): array
     {
         return [
             'status' => ShoppingListStatus::class,
+            'generation_status' => ShoppingListGenerationStatus::class,
+            'last_generation_method' => ShoppingListGenerationMethod::class,
+            'generation_started_at' => 'datetime',
+            'generation_completed_at' => 'datetime',
             'completed_at' => 'datetime',
             'stale_at' => 'datetime',
             'stale_diff' => 'array',

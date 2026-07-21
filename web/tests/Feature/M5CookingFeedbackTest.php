@@ -335,6 +335,19 @@ it('serves the Today and cooking surfaces with recipe truth and team-scoped bind
     $this->actingAs($outsider)->get(route('planned-meals.cook.show', $workspace['meal']))->assertNotFound();
 });
 
+it('falls forward to the next planned date when today is empty', function () {
+    $workspace = m5CookingWorkspace();
+    $workspace['plan']->slots()->update(['date' => today()->addDays(6)]);
+
+    $this->withoutVite()->actingAs($workspace['user'])
+        ->get(route('dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('dashboard')
+            ->where('today.showing_next', true)
+            ->where('today.meals.0.title', 'Lemon chicken tray bake')
+            ->where('today.meals.0.date', today()->addDays(6)->toDateString()));
+});
+
 it('shows the actual ordered product and substitution while cooking', function () {
     $workspace = m5CookingWorkspace();
     $retailer = Retailer::query()->where('slug', 'coles')->firstOrFail();

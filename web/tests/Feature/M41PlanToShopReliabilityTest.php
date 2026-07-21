@@ -3,35 +3,39 @@
 use App\Actions\Households\RecordConstraint;
 use App\Actions\Households\RecordPreference;
 use App\Actions\MealPlans\ConfirmMealPlan;
+use App\Actions\MealPlans\ReviewMealPlanSafety;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\AcceptMealProposal;
 use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\ProposeMeal;
 use App\Actions\Planning\SelectPlannedMeal;
+use App\Actions\Recipes\BuildMealPlanRecipeDraftRequest;
 use App\Actions\Recipes\CreateRecipe;
-use App\Actions\Recipes\MaterializePlannedMealRecipe;
+use App\Actions\Recipes\MaterializeMealPlanRecipes;
 use App\Actions\Recipes\PrepareMealPlanRecipes;
-use App\Actions\Recipes\PreparePlannedMealRecipe;
 use App\Actions\Shopping\GenerateShoppingList;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
-use App\Ai\Agents\RecipeDraftingAgent;
-use App\Ai\Contracts\RecipeDrafter;
+use App\Ai\Agents\MealPlanRecipeDraftingAgent;
+use App\Ai\Contracts\MealPlanRecipeDrafter;
+use App\Ai\Data\MealPlanRecipeDraft;
+use App\Ai\Data\MealPlanRecipeDraftRequest;
 use App\Ai\Data\RecipeDraft;
 use App\Ai\Data\RecipeDraftRequest;
-use App\Ai\LaravelAiRecipeDrafter;
+use App\Ai\LaravelAiMealPlanRecipeDrafter;
 use App\Enums\ConstraintKind;
+use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Enums\MealSlotKind;
 use App\Enums\MessageResponseStatus;
-use App\Enums\PlannedMealRecipePreparationStatus;
+use App\Enums\MessageRole;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
 use App\Enums\ShoppingListItemCategory;
 use App\Jobs\FinishPreparingShoppingListJob;
-use App\Jobs\MaterializePlannedMealRecipeJob;
+use App\Jobs\MaterializeMealPlanRecipesJob;
 use App\Models\MealSlot;
 use App\Models\PlannedMeal;
 use App\Models\User;
@@ -96,7 +100,16 @@ function m41ValidDraft(string $title = 'Chicken katsu curry'): RecipeDraft
     );
 }
 
-it('materialises an accepted cookable proposal into one immutable recipe version', function () {
+/** @param array<int, array<string, mixed>> $meals */
+function m41ValidBatch(array $meals): MealPlanRecipeDraft
+{
+    return new MealPlanRecipeDraft(array_map(function (array $meal): array {
+        return ['planned_meal_id' => $meal['planned_meal_id'], ...m41ValidDraft($meal['title'])->toArray()];
+    }, $meals));
+}
+
+it('materialises a completed plan with one batch job and one immutable recipe version per meal', function () {
+    Queue::fake();
     $workspace = m41Workspace();
     $slot = app(CreateMealSlot::class)->handle(
         $workspace['plan'],
@@ -115,24 +128,64 @@ it('materialises an accepted cookable proposal into one immutable recipe version
     );
 
     $planned = app(AcceptMealProposal::class)->handle($proposal, $workspace['user']);
-    $preparation = $planned->recipePreparation;
-    app(MaterializePlannedMealRecipe::class)->handle($preparation);
+    Queue::assertPushed(MaterializeMealPlanRecipesJob::class, 1);
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
     $planned->refresh();
-    $preparation->refresh();
     $revision = $workspace['plan']->refresh()->revision;
 
     expect($planned->type)->toBe(PlannedMealType::Recipe)
         ->and($planned->recipe_version_id)->not->toBeNull()
-        ->and($preparation->status)->toBe(PlannedMealRecipePreparationStatus::Completed)
-        ->and($preparation->recipe_version_id)->toBe($planned->recipe_version_id)
+        ->and($workspace['plan']->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Completed)
+        ->and($workspace['plan']->recipe_generation_attempts)->toBe(1)
         ->and($workspace['team']->recipes()->count())->toBe(1)
         ->and($workspace['team']->recipes()->sole()->versions()->count())->toBe(1);
 
-    app(MaterializePlannedMealRecipe::class)->handle($preparation);
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
 
     expect($workspace['team']->recipes()->count())->toBe(1)
         ->and($workspace['team']->recipes()->sole()->versions()->count())->toBe(1)
         ->and($workspace['plan']->refresh()->revision)->toBe($revision);
+});
+
+it('waits for every slot and then dispatches exactly one recipe batch for the whole plan', function () {
+    Queue::fake();
+    $workspace = m41Workspace(2);
+
+    $proposals = collect(['Chicken tacos', 'Beef stir-fry', 'Vegetarian pasta'])
+        ->map(function (string $title, int $offset) use ($workspace) {
+            $slot = app(CreateMealSlot::class)->handle(
+                $workspace['plan'],
+                $workspace['user'],
+                today()->addDays($offset),
+                MealSlotKind::Dinner,
+                $workspace['team']->people,
+            );
+
+            return app(ProposeMeal::class)->handle(
+                $workspace['plan'],
+                $workspace['user'],
+                $title,
+                $slot,
+                'A quick family dinner.',
+                30,
+            );
+        });
+
+    foreach ($proposals as $offset => $proposal) {
+        app(AcceptMealProposal::class)->handle($proposal, $workspace['user']);
+
+        Queue::assertPushed(MaterializeMealPlanRecipesJob::class, $offset === 2 ? 1 : 0);
+    }
+
+    $plan = $workspace['plan']->refresh();
+    expect($plan->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Pending)
+        ->and($plan->recipe_generation_input['meals'])->toHaveCount(3);
+
+    app(MaterializeMealPlanRecipes::class)->handle($plan);
+
+    expect($workspace['plan']->plannedMeals()->whereNotNull('recipe_version_id')->count())->toBe(3)
+        ->and($workspace['team']->recipes()->count())->toBe(3)
+        ->and($workspace['plan']->refresh()->recipe_generation_attempts)->toBe(1);
 });
 
 it('passes named preferences and explicit safety constraints into recipe drafting', function () {
@@ -169,33 +222,76 @@ it('passes named preferences and explicit safety constraints into recipe draftin
         PreferenceProvenance::Stated,
         $guest,
     );
-    $spy = new class implements RecipeDrafter
+    $spy = new class implements MealPlanRecipeDrafter
     {
-        public ?RecipeDraftRequest $request = null;
+        public ?MealPlanRecipeDraftRequest $request = null;
 
-        public function draft(RecipeDraftRequest $request): RecipeDraft
+        public function draft(MealPlanRecipeDraftRequest $request): MealPlanRecipeDraft
         {
             $this->request = $request;
 
-            return m41ValidDraft();
+            return m41ValidBatch($request->meals);
         }
     };
-    app()->instance(RecipeDrafter::class, $spy);
+    app()->instance(MealPlanRecipeDrafter::class, $spy);
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, [$tahlia]);
 
     app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Custom, title: 'Chicken katsu curry');
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
+    $meal = $spy->request?->meals[0];
 
     expect($spy->request)->not->toBeNull()
-        ->and($spy->request->preferences)->toContain([
+        ->and($meal['preferences'])->toContain([
             'owner' => 'Tahlia',
             'subject' => 'pesto',
             'sentiment' => 'dislike',
             'provenance' => 'stated',
         ])
-        ->and($spy->request->constraints[0]['owner'])->toBe('Tahlia')
-        ->and($spy->request->constraints[0]['kind'])->toBe('allergy')
-        ->and($spy->request->constraints[0]['subject'])->toBe('peanuts')
-        ->and(collect($spy->request->preferences)->pluck('subject'))->not->toContain('garlic');
+        ->and($meal['constraints'][0]['owner'])->toBe('Tahlia')
+        ->and($meal['constraints'][0]['kind'])->toBe('allergy')
+        ->and($meal['constraints'][0]['subject'])->toBe('peanuts')
+        ->and(collect($meal['preferences'])->pluck('subject'))->not->toContain('garlic');
+});
+
+it('includes the plan conversation in the batch without letting later chat invalidate an active draft', function () {
+    Queue::fake();
+    $workspace = m41Workspace();
+    $conversation = $workspace['plan']->conversations()->latest('id')->firstOrFail();
+    $conversation->messages()->create([
+        'team_id' => $workspace['team']->id,
+        'user_id' => $workspace['user']->id,
+        'role' => MessageRole::User,
+        'content' => 'Keep every dinner high protein and under 35 minutes.',
+    ]);
+    $slot = app(CreateMealSlot::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        today(),
+        MealSlotKind::Dinner,
+        $workspace['team']->people,
+    );
+    app(SelectPlannedMeal::class)->handle(
+        $slot,
+        $workspace['user'],
+        PlannedMealType::Custom,
+        title: 'Lemon chicken and couscous',
+    );
+    $pending = $workspace['plan']->refresh();
+    $originalFingerprint = $pending->recipe_generation_input_fingerprint;
+
+    $conversation->messages()->create([
+        'team_id' => $workspace['team']->id,
+        'user_id' => $workspace['user']->id,
+        'role' => MessageRole::User,
+        'content' => 'What happens after the recipes are ready?',
+    ]);
+    $request = app(BuildMealPlanRecipeDraftRequest::class)->handle($pending);
+
+    expect($pending->recipe_generation_input['conversation_context'])->toContain([
+        'role' => 'user',
+        'content' => 'Keep every dinner high protein and under 35 minutes.',
+    ])->and(app(BuildMealPlanRecipeDraftRequest::class)->fingerprint($request))
+        ->toBe($originalFingerprint);
 });
 
 it('keeps explicit non-recipe states out of recipe preparation', function () {
@@ -212,11 +308,11 @@ it('keeps explicit non-recipe states out of recipe preparation', function () {
     $leftoverSlot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today()->addDays(3), MealSlotKind::Lunch, $workspace['team']->people);
     app(SelectPlannedMeal::class)->handle($leftoverSlot, $workspace['user'], PlannedMealType::Leftovers, sourcePlannedMeal: $source);
 
-    expect($workspace['plan']->recipePreparations()->count())->toBe(0)
+    expect($workspace['plan']->recipe_generation_status)->toBeNull()
         ->and($workspace['plan']->plannedMeals()->whereNull('recipe_version_id')->count())->toBe(4);
 });
 
-it('cancels an obsolete queued recipe when a custom meal becomes non-recipe', function () {
+it('discards a stale batch when a selected custom meal becomes non-recipe', function () {
     Queue::fake();
     $workspace = m41Workspace();
     $slot = app(CreateMealSlot::class)->handle(
@@ -226,21 +322,20 @@ it('cancels an obsolete queued recipe when a custom meal becomes non-recipe', fu
         MealSlotKind::Dinner,
         $workspace['team']->people,
     );
-    $custom = app(SelectPlannedMeal::class)->handle(
+    app(SelectPlannedMeal::class)->handle(
         $slot,
         $workspace['user'],
         PlannedMealType::Custom,
         title: 'Chicken dinner',
     );
-    $preparation = $custom->recipePreparation;
-    app()->instance(RecipeDrafter::class, new class($slot, $workspace['user']) implements RecipeDrafter
+    app()->instance(MealPlanRecipeDrafter::class, new class($slot, $workspace['user']) implements MealPlanRecipeDrafter
     {
         public function __construct(
             private readonly MealSlot $slot,
             private readonly User $user,
         ) {}
 
-        public function draft(RecipeDraftRequest $request): RecipeDraft
+        public function draft(MealPlanRecipeDraftRequest $request): MealPlanRecipeDraft
         {
             app(SelectPlannedMeal::class)->handle(
                 $this->slot,
@@ -249,17 +344,17 @@ it('cancels an obsolete queued recipe when a custom meal becomes non-recipe', fu
                 title: 'Takeaway night',
             );
 
-            return m41ValidDraft('Obsolete chicken dinner');
+            return m41ValidBatch($request->meals);
         }
     });
 
-    app(MaterializePlannedMealRecipe::class)->handle($preparation);
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
     $takeaway = $slot->plannedMeal()->sole();
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $readiness = app(AssessMealPlanReadiness::class)->handle($workspace['plan']->refresh());
 
     expect($takeaway->refresh()->type)->toBe(PlannedMealType::Takeaway)
         ->and($takeaway->recipe_version_id)->toBeNull()
-        ->and($preparation->refresh()->status)->toBe(PlannedMealRecipePreparationStatus::Cancelled)
         ->and($workspace['team']->recipes()->count())->toBe(0)
         ->and($readiness['recipes_required'])->toBe(0)
         ->and($readiness['recipes_preparing'])->toBe(0)
@@ -271,10 +366,11 @@ it('blocks confirmation and list generation while a cookable recipe is unresolve
     $workspace = m41Workspace();
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
     $planned = app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Custom, title: 'Pulled pork rolls');
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $readiness = app(AssessMealPlanReadiness::class)->handle($workspace['plan']->refresh());
 
-    Queue::assertPushed(MaterializePlannedMealRecipeJob::class, 1);
-    expect($planned->recipePreparation->status)->toBe(PlannedMealRecipePreparationStatus::Pending)
+    Queue::assertPushed(MaterializeMealPlanRecipesJob::class, 1);
+    expect($workspace['plan']->refresh()->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Pending)
         ->and($readiness['recipes_required'])->toBe(1)
         ->and($readiness['recipes_ready'])->toBe(0)
         ->and($readiness['recipes_preparing'])->toBe(1)
@@ -294,38 +390,36 @@ it('records safe failures and retries without duplicate recipes or plan revision
     $workspace = m41Workspace();
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
     $planned = app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Custom, title: 'Butter chicken');
-    $preparation = $planned->recipePreparation;
-    app()->instance(RecipeDrafter::class, new class implements RecipeDrafter
+    app()->instance(MealPlanRecipeDrafter::class, new class implements MealPlanRecipeDrafter
     {
-        public function draft(RecipeDraftRequest $request): RecipeDraft
+        public function draft(MealPlanRecipeDraftRequest $request): MealPlanRecipeDraft
         {
             throw new RuntimeException('Provider secret and raw failure');
         }
     });
 
-    expect(fn () => app(MaterializePlannedMealRecipe::class)->handle($preparation))
-        ->toThrow(RuntimeException::class, 'Provider secret');
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
 
-    $failed = $preparation->refresh();
-    expect($failed->status)->toBe(PlannedMealRecipePreparationStatus::Failed)
-        ->and($failed->attempts)->toBe(1)
-        ->and($failed->failure_message)->toBe('Chef could not prepare this recipe.')
-        ->and($failed->failure_message)->not->toContain('Provider secret');
+    $failed = $workspace['plan']->refresh();
+    expect($failed->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Failed)
+        ->and($failed->recipe_generation_attempts)->toBe(1)
+        ->and($failed->recipe_generation_failure_message)->toBe('Chef could not prepare the completed plan’s recipes.')
+        ->and($failed->recipe_generation_failure_message)->not->toContain('Provider secret');
 
-    app()->instance(RecipeDrafter::class, new class implements RecipeDrafter
+    app()->instance(MealPlanRecipeDrafter::class, new class implements MealPlanRecipeDrafter
     {
-        public function draft(RecipeDraftRequest $request): RecipeDraft
+        public function draft(MealPlanRecipeDraftRequest $request): MealPlanRecipeDraft
         {
-            return m41ValidDraft('Butter chicken');
+            return m41ValidBatch($request->meals);
         }
     });
-    $retry = app(PreparePlannedMealRecipe::class)->handle($planned->refresh(), $workspace['user']);
-    app(MaterializePlannedMealRecipe::class)->handle($retry);
+    app(PrepareMealPlanRecipes::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
     $revision = $workspace['plan']->refresh()->revision;
-    app(MaterializePlannedMealRecipe::class)->handle($retry->refresh());
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
 
-    expect($retry->refresh()->status)->toBe(PlannedMealRecipePreparationStatus::Completed)
-        ->and($retry->attempts)->toBe(2)
+    expect($workspace['plan']->refresh()->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Completed)
+        ->and($workspace['plan']->recipe_generation_attempts)->toBe(2)
         ->and($workspace['team']->recipes()->count())->toBe(1)
         ->and($workspace['team']->recipes()->sole()->versions()->count())->toBe(1)
         ->and($workspace['plan']->refresh()->revision)->toBe($revision);
@@ -336,24 +430,29 @@ it('rejects malformed structured drafts before creating a recipe', function () {
     $workspace = m41Workspace();
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
     $planned = app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Custom, title: 'Mystery dinner');
-    app()->instance(RecipeDrafter::class, new class implements RecipeDrafter
+    app()->instance(MealPlanRecipeDrafter::class, new class implements MealPlanRecipeDrafter
     {
-        public function draft(RecipeDraftRequest $request): RecipeDraft
+        public function draft(MealPlanRecipeDraftRequest $request): MealPlanRecipeDraft
         {
-            return new RecipeDraft('', null, 0, null, null, [], [], [], []);
+            return new MealPlanRecipeDraft([[
+                'planned_meal_id' => $request->meals[0]['planned_meal_id'],
+                ...m41ValidDraft('')->toArray(),
+                'ingredients' => [],
+            ]]);
         }
     });
 
-    expect(fn () => app(MaterializePlannedMealRecipe::class)->handle($planned->recipePreparation))
-        ->toThrow(ValidationException::class);
+    app(MaterializeMealPlanRecipes::class)->handle($workspace['plan']->refresh());
 
-    expect($planned->recipePreparation->refresh()->status)->toBe(PlannedMealRecipePreparationStatus::Failed)
+    expect($workspace['plan']->refresh()->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Failed)
         ->and($workspace['team']->recipes()->count())->toBe(0)
         ->and($planned->refresh()->recipe_version_id)->toBeNull();
 });
 
-it('uses the Laravel AI SDK structured fake behind the Chef-owned drafting boundary', function () {
-    $request = new RecipeDraftRequest(
+it('uses one Sol high Laravel AI SDK structured call behind the Chef-owned batch boundary', function () {
+    config()->set('ai.workloads.recipe_batch.model', 'gpt-5.6-sol');
+    config()->set('ai.workloads.recipe_batch.reasoning_effort', 'high');
+    $meal = (new RecipeDraftRequest(
         teamId: 10,
         mealPlanId: 15,
         plannedMealId: 20,
@@ -369,20 +468,30 @@ it('uses the Laravel AI SDK structured fake behind the Chef-owned drafting bound
         preferences: [['owner' => 'Tahlia', 'subject' => 'pesto', 'sentiment' => 'dislike', 'provenance' => 'stated']],
         constraints: [['owner' => 'Tahlia', 'kind' => 'allergy', 'subject' => 'peanuts', 'details' => null, 'severity' => null]],
         otherMeals: [['title' => 'Chicken fried rice', 'date' => '2026-07-19', 'kind' => 'dinner']],
-    );
+    ))->jsonSerialize();
+    $request = new MealPlanRecipeDraftRequest(10, 15, 'Daniel and Tahlia', [$meal], [[
+        'role' => 'user',
+        'content' => 'Keep every dinner high protein and under 35 minutes.',
+    ]]);
     $draft = m41ValidDraft('Pork katsu');
-    RecipeDraftingAgent::fake([$draft->toArray()])->preventStrayPrompts();
+    MealPlanRecipeDraftingAgent::fake([['recipes' => [[
+        'planned_meal_id' => 20,
+        ...$draft->toArray(),
+    ]]]])->preventStrayPrompts();
 
-    $result = (new LaravelAiRecipeDrafter)->draft($request);
+    $result = (new LaravelAiMealPlanRecipeDrafter)->draft($request);
 
-    expect($result->title)->toBe('Pork katsu')
-        ->and($result->ingredients)->toHaveCount(2);
-    RecipeDraftingAgent::assertPrompted(function (AgentPrompt $prompt): bool {
+    expect($result->recipes[0]['title'])->toBe('Pork katsu')
+        ->and($result->recipes[0]['ingredients'])->toHaveCount(2);
+    MealPlanRecipeDraftingAgent::assertPrompted(function (AgentPrompt $prompt): bool {
         $instructions = (string) $prompt->agent->instructions();
 
         return str_contains($instructions, 'Tahlia')
             && str_contains($instructions, 'pesto')
-            && str_contains($instructions, 'peanuts');
+            && str_contains($instructions, 'peanuts')
+            && str_contains($instructions, 'under 35 minutes')
+            && $prompt->agent->model() === 'gpt-5.6-sol'
+            && $prompt->agent->providerOptions('openai')['reasoning']['effort'] === 'high';
     });
 });
 
@@ -401,22 +510,21 @@ it('recovers a confirmed legacy plan through the authorised HTTP workflow', func
         'title' => 'Legacy chicken dinner',
     ]);
     $workspace['plan']->forceFill(['planning_confirmed_at' => now()])->save();
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
 
     $this->actingAs($workspace['user'])
         ->post(route('meal-plans.shopping-list.generate', $workspace['plan']))
         ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']));
 
-    expect($legacyMeal->recipePreparation()->count())->toBe(1)
-        ->and($legacyMeal->recipePreparation->status)->toBe(PlannedMealRecipePreparationStatus::Pending)
+    expect($workspace['plan']->refresh()->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Pending)
         ->and($workspace['plan']->shoppingList()->sole()->revision)->toBe(0);
-    Queue::assertPushed(MaterializePlannedMealRecipeJob::class, 1);
+    Queue::assertPushed(MaterializeMealPlanRecipesJob::class, 1);
     Queue::assertPushed(FinishPreparingShoppingListJob::class, 1);
 
     $outsider = User::factory()->create();
     app(CreateTeamForUser::class)->handle($outsider, 'Other household');
-    expect($workspace['user']->can('view', $legacyMeal->recipePreparation))->toBeTrue()
-        ->and($outsider->can('view', $legacyMeal->recipePreparation))->toBeFalse()
-        ->and(fn () => app(PrepareMealPlanRecipes::class)->handle($workspace['plan'], $outsider))
+    expect(fn () => app(PrepareMealPlanRecipes::class)->handle($workspace['plan'], $outsider))
         ->toThrow(AuthorizationException::class);
     $this->actingAs($outsider)
         ->post(route('meal-plans.recipes.prepare', $workspace['plan']->id))
@@ -433,26 +541,26 @@ it('retries failed recipe preparation through the authorised HTTP workflow', fun
         MealSlotKind::Dinner,
         $workspace['team']->people,
     );
-    $planned = app(SelectPlannedMeal::class)->handle(
+    app(SelectPlannedMeal::class)->handle(
         $slot,
         $workspace['user'],
         PlannedMealType::Custom,
         title: 'Retry dinner',
     );
-    $planned->recipePreparation->update([
-        'status' => PlannedMealRecipePreparationStatus::Failed,
-        'failure_code' => 'provider_error',
-        'failure_message' => 'Chef could not prepare this recipe.',
+    $workspace['plan']->refresh()->update([
+        'recipe_generation_status' => MealPlanRecipeGenerationStatus::Failed,
+        'recipe_generation_failure_code' => 'provider_error',
+        'recipe_generation_failure_message' => 'Chef could not prepare the completed plan’s recipes.',
     ]);
 
     $this->actingAs($workspace['user'])
         ->post(route('meal-plans.recipes.prepare', $workspace['plan']))
         ->assertRedirect();
 
-    expect($planned->recipePreparation->refresh()->status)->toBe(PlannedMealRecipePreparationStatus::Pending)
-        ->and($planned->recipePreparation->failure_code)->toBeNull()
-        ->and($planned->recipePreparation->failure_message)->toBeNull();
-    Queue::assertPushed(MaterializePlannedMealRecipeJob::class, 2);
+    expect($workspace['plan']->refresh()->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Pending)
+        ->and($workspace['plan']->recipe_generation_failure_code)->toBeNull()
+        ->and($workspace['plan']->recipe_generation_failure_message)->toBeNull();
+    Queue::assertPushed(MaterializeMealPlanRecipesJob::class, 1);
 });
 
 it('updates the structured shopping list through the same durable conversation', function () {
@@ -460,6 +568,7 @@ it('updates the structured shopping list through the same durable conversation',
     $recipe = m41CreateRecipe($workspace);
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
     app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Recipe, $recipe->latestVersion);
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $chicken = $list->items()->where('normalized_name', 'chicken breast')->sole();
@@ -507,6 +616,7 @@ it('recovers an atomic shopping batch when the provider fails after the tools fi
     $recipe = m41CreateRecipe($workspace);
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
     app(SelectPlannedMeal::class)->handle($slot, $workspace['user'], PlannedMealType::Recipe, $recipe->latestVersion);
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $conversation = $workspace['plan']->conversations()->sole();

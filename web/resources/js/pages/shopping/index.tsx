@@ -13,14 +13,19 @@ type ShoppingPlanSummary = {
         status: 'draft' | 'completed';
         revision: number;
         stale_at: string | null;
+        remaining_count: number;
     } | null;
 };
 
+const shortDateFormatter = new Intl.DateTimeFormat('en-AU', {
+    day: 'numeric',
+    month: 'short',
+});
+
 function formatDate(value: string) {
-    return new Intl.DateTimeFormat('en-AU', {
-        day: 'numeric',
-        month: 'short',
-    }).format(new Date(`${value.slice(0, 10)}T00:00:00`));
+    return shortDateFormatter.format(
+        new Date(`${value.slice(0, 10)}T00:00:00`),
+    );
 }
 
 export default function ShoppingIndex({
@@ -79,7 +84,7 @@ export default function ShoppingIndex({
                                                                 .status ===
                                                             'completed'
                                                           ? 'Completed'
-                                                          : 'In progress'}
+                                                          : `${plan.shopping_list.remaining_count} remaining`}
                                                 </Badge>
                                             )}
                                         </div>
@@ -93,7 +98,14 @@ export default function ShoppingIndex({
                                             <Link
                                                 href={`/meal-plans/${plan.id}/shopping`}
                                             >
-                                                Open list <ArrowRight />
+                                                {plan.shopping_list.stale_at
+                                                    ? 'Review changes'
+                                                    : plan.shopping_list
+                                                            .status ===
+                                                        'completed'
+                                                      ? 'Review list'
+                                                      : 'Continue shopping'}{' '}
+                                                <ArrowRight />
                                             </Link>
                                         </Button>
                                     ) : (

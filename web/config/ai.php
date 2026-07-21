@@ -15,6 +15,17 @@ return [
         ],
     ],
 
+    'workloads' => [
+        'recipe_batch' => [
+            'model' => env('OPENAI_RECIPE_BATCH_MODEL', 'gpt-5.6-sol'),
+            'reasoning_effort' => env('OPENAI_RECIPE_BATCH_REASONING_EFFORT', 'high'),
+        ],
+        'shopping_list' => [
+            'model' => env('OPENAI_SHOPPING_LIST_MODEL', 'gpt-5.6-sol'),
+            'reasoning_effort' => env('OPENAI_SHOPPING_LIST_REASONING_EFFORT', 'high'),
+        ],
+    ],
+
     'providers' => [
         'openai' => [
             'driver' => 'openai',

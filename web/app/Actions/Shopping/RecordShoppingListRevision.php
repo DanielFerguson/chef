@@ -38,6 +38,7 @@ class RecordShoppingListRevision
                 'summary' => $summary,
                 'snapshot' => [
                     'source_plan_revision' => $locked->source_plan_revision,
+                    'generation_method' => $locked->getRawOriginal('last_generation_method'),
                     'status' => $locked->getRawOriginal('status'),
                     'items' => $locked->items->map(fn (ShoppingListItem $item): array => [
                         'id' => $item->id,

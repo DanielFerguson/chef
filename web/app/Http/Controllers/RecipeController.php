@@ -45,6 +45,7 @@ class RecipeController extends Controller
             $validated['notices'] ?? [],
             $validated['notes'] ?? null,
             $validated['source_url'] ?? null,
+            storageGuidance: $validated['storage_guidance'] ?? null,
         );
 
         return to_route('recipes.show', $recipe);
@@ -75,6 +76,7 @@ class RecipeController extends Controller
             'cook_minutes' => ['nullable', 'integer', 'min:0', 'max:65535'],
             'source_url' => ['nullable', 'url', 'max:2048'],
             'notes' => ['nullable', 'string', 'max:10000'],
+            'storage_guidance' => ['nullable', 'string', 'max:2000'],
             'ingredients' => ['required', 'array', 'min:1', 'max:200'],
             'ingredients.*.name' => ['required', 'string', 'max:255'],
             'ingredients.*.quantity' => ['nullable', 'numeric', 'min:0'],

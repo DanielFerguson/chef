@@ -3,17 +3,17 @@
 namespace App\Jobs;
 
 use App\Actions\Shopping\GenerateShoppingList;
-use App\Enums\PlannedMealRecipePreparationStatus;
+use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Models\MealPlan;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class FinishPreparingShoppingListJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
+class FinishPreparingShoppingListJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -45,10 +45,9 @@ class FinishPreparingShoppingListJob implements ShouldBeUniqueUntilProcessing, S
             ->where('type', 'custom')
             ->whereNull('recipe_version_id')
             ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
-            ->with('recipePreparation')
             ->get();
 
-        if ($unresolved->contains(fn ($meal) => $meal->recipePreparation?->status === PlannedMealRecipePreparationStatus::Failed)) {
+        if ($unresolved->isNotEmpty() && $mealPlan->recipe_generation_status === MealPlanRecipeGenerationStatus::Failed) {
             return;
         }
 

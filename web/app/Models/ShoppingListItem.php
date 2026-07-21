@@ -5,7 +5,9 @@ namespace App\Models;
 use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListItemSourceKind;
 use App\Models\Concerns\ResolvesWithinCurrentTeam;
+use Database\Factories\ShoppingListItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +19,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable(['team_id', 'shopping_list_id', 'ingredient_id', 'created_by_user_id', 'source_message_id', 'idempotency_key', 'source_kind', 'category', 'name', 'normalized_name', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked', 'optional', 'estimated_price', 'position'])]
 class ShoppingListItem extends Model
 {
+    /** @use HasFactory<ShoppingListItemFactory> */
+    use HasFactory;
+
     use ResolvesWithinCurrentTeam;
 
     /** @return BelongsTo<ShoppingList, $this> */

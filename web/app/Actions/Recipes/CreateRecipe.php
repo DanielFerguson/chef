@@ -18,13 +18,13 @@ class CreateRecipe
      * @param  array<int, string>  $equipment
      * @param  array<int, array{kind: string, instruction: string, lead_minutes?: int|null}>  $notices
      */
-    public function handle(Team $team, User $user, string $title, ?string $summary, float $servings, ?int $prepMinutes, ?int $cookMinutes, array $ingredients, array $steps, array $equipment = [], array $notices = [], ?string $notes = null, ?string $sourceUrl = null, ?string $idempotencyKey = null): Recipe
+    public function handle(Team $team, User $user, string $title, ?string $summary, float $servings, ?int $prepMinutes, ?int $cookMinutes, array $ingredients, array $steps, array $equipment = [], array $notices = [], ?string $notes = null, ?string $sourceUrl = null, ?string $idempotencyKey = null, ?string $storageGuidance = null): Recipe
     {
         if (! $user->memberships()->whereBelongsTo($team)->exists()) {
             throw new AuthorizationException('You cannot create recipes for this family.');
         }
 
-        return DB::transaction(function () use ($team, $user, $title, $summary, $servings, $prepMinutes, $cookMinutes, $ingredients, $steps, $equipment, $notices, $notes, $sourceUrl, $idempotencyKey): Recipe {
+        return DB::transaction(function () use ($team, $user, $title, $summary, $servings, $prepMinutes, $cookMinutes, $ingredients, $steps, $equipment, $notices, $notes, $sourceUrl, $idempotencyKey, $storageGuidance): Recipe {
             if ($idempotencyKey !== null) {
                 $existing = $team->recipes()->where('idempotency_key', $idempotencyKey)->first();
 
@@ -41,7 +41,7 @@ class CreateRecipe
                 'summary' => $summary,
                 'source_url' => $sourceUrl,
             ]);
-            $this->createVersion->handle($recipe, $user, $title, $summary, $servings, $prepMinutes, $cookMinutes, $ingredients, $steps, $equipment, $notices, $notes, $sourceUrl);
+            $this->createVersion->handle($recipe, $user, $title, $summary, $servings, $prepMinutes, $cookMinutes, $ingredients, $steps, $equipment, $notices, $notes, $sourceUrl, $storageGuidance);
 
             return $recipe->load('latestVersion');
         });

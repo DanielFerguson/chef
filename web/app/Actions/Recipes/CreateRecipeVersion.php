@@ -34,6 +34,7 @@ class CreateRecipeVersion
         array $notices = [],
         ?string $notes = null,
         ?string $sourceUrl = null,
+        ?string $storageGuidance = null,
     ): RecipeVersion {
         if (! $user->memberships()->where('team_id', $recipe->team_id)->exists()) {
             throw new AuthorizationException('You cannot edit recipes for this family.');
@@ -59,7 +60,7 @@ class CreateRecipeVersion
             throw ValidationException::withMessages(['notices' => 'Every preparation notice needs a valid kind and instruction.']);
         }
 
-        return DB::transaction(function () use ($recipe, $user, $title, $summary, $servings, $prepMinutes, $cookMinutes, $ingredients, $steps, $equipment, $notices, $notes, $sourceUrl): RecipeVersion {
+        return DB::transaction(function () use ($recipe, $user, $title, $summary, $servings, $prepMinutes, $cookMinutes, $ingredients, $steps, $equipment, $notices, $notes, $sourceUrl, $storageGuidance): RecipeVersion {
             Recipe::query()->whereKey($recipe)->lockForUpdate()->firstOrFail();
             $version = (int) $recipe->versions()->max('version') + 1;
             $recipeVersion = $recipe->versions()->create([
@@ -73,6 +74,7 @@ class CreateRecipeVersion
                 'cook_minutes' => $cookMinutes,
                 'source_url' => $sourceUrl,
                 'notes' => $notes,
+                'storage_guidance' => $storageGuidance,
                 'published_at' => now(),
             ]);
 

@@ -20,6 +20,7 @@ readonly class RecipeDraft
         public array $steps,
         public array $equipment,
         public array $notices,
+        public ?string $storageGuidance = null,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -35,6 +36,7 @@ readonly class RecipeDraft
             steps: array_values($data['steps'] ?? []),
             equipment: array_values($data['equipment'] ?? []),
             notices: array_values($data['notices'] ?? []),
+            storageGuidance: filled($data['storage_guidance'] ?? null) ? (string) $data['storage_guidance'] : null,
         );
     }
 
@@ -51,6 +53,7 @@ readonly class RecipeDraft
             'steps' => $this->steps,
             'equipment' => $this->equipment,
             'notices' => $this->notices,
+            'storage_guidance' => $this->storageGuidance,
         ];
     }
 }

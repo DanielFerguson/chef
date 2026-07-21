@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\MealPlans\ConfirmMealPlan;
+use App\Actions\MealPlans\ReviewMealPlanSafety;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\CreateMealSlot;
@@ -59,6 +60,7 @@ function shoppingListWorkspace(): array
     $secondSlot = app(CreateMealSlot::class)->handle($plan, $user, today()->addDay(), MealSlotKind::Dinner, $team->people);
     $firstMeal = app(SelectPlannedMeal::class)->handle($firstSlot, $user, PlannedMealType::Recipe, $recipe->latestVersion, servings: 4);
     $secondMeal = app(SelectPlannedMeal::class)->handle($secondSlot, $user, PlannedMealType::Recipe, $recipe->latestVersion, servings: 2);
+    app(ReviewMealPlanSafety::class)->handle($plan->refresh(), $user);
     app(ConfirmMealPlan::class)->handle($plan->refresh(), $user);
     $plan = $plan->refresh();
 
@@ -182,14 +184,15 @@ it('combines equivalent singular and plural shopping units', function () {
         'optional' => false,
         'position' => 2,
     ]);
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
 
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $rice = $list->items()->where('normalized_name', 'jasmine rice')->get();
 
     expect($rice)->toHaveCount(1)
-        ->and($rice->first()->unit)->toBe('cup')
-        ->and($rice->first()->quantity)->toBe(2.5);
+        ->and($rice->first()->unit)->toBe('ml')
+        ->and($rice->first()->quantity)->toBe(625.0);
 });
 
 it('supports manual editing pantry exclusions completion and revision history', function () {

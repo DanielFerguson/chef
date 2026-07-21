@@ -2,32 +2,108 @@
 
 namespace App\Actions\Shopping;
 
+use App\Actions\MealPlans\MealPlanSafetyContext;
 use App\Actions\MealPlans\RecordMealPlanMilestone;
+use App\Ai\Contracts\ShoppingListDrafter;
+use App\Ai\Data\ShoppingListDraftRequest;
+use App\Ai\Exceptions\ShoppingListDraftUnavailable;
 use App\Enums\MealPlanMilestoneKind;
+use App\Enums\ShoppingListGenerationMethod;
+use App\Enums\ShoppingListGenerationStatus;
 use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListItemSourceKind;
 use App\Enums\ShoppingListStatus;
 use App\Models\MealPlan;
+use App\Models\PlannedMeal;
 use App\Models\ShoppingList;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class GenerateShoppingList
 {
+    private const CLAIM_EXPIRY_MINUTES = 5;
+
     public function __construct(
         private readonly RecordShoppingListRevision $recordRevision,
         private readonly RecordMealPlanMilestone $recordMilestone,
+        private readonly ShoppingListDrafter $drafter,
+        private readonly BuildShoppingListDraftRequest $buildRequest,
+        private readonly BuildDeterministicShoppingListDraft $buildFallback,
+        private readonly ValidateShoppingListDraft $validateDraft,
+        private readonly ShoppingItemIdentity $identity,
+        private readonly MealPlanSafetyContext $safetyContext,
     ) {}
 
-    public function handle(MealPlan $mealPlan, User $user): ShoppingList
+    public function handle(MealPlan $mealPlan, User $user, bool $force = false): ShoppingList
     {
         if (! $user->can('update', $mealPlan)) {
             throw new AuthorizationException('You cannot generate a shopping list for this plan.');
         }
 
+        $this->assertGenerationAllowed($mealPlan);
+        $planRevision = $mealPlan->revision;
+        $safetyHash = $this->safetyContext->fingerprint($mealPlan);
+
+        if (! hash_equals((string) $mealPlan->confirmed_safety_context_hash, $safetyHash)) {
+            throw ValidationException::withMessages([
+                'safety' => 'Review and reconfirm the meal plan safety details before preparing its shopping list.',
+            ]);
+        }
+
+        try {
+            $plannedMeals = $this->loadPlannedMeals($mealPlan);
+            $request = $this->buildRequest->handle($mealPlan, $plannedMeals);
+        } catch (Throwable $exception) {
+            $this->markPreflightFailed($mealPlan, $user, $exception);
+
+            throw $exception;
+        }
+
+        $contextHash = $this->generationContextHash($planRevision, $safetyHash, $request);
+        $claim = $this->claim($mealPlan, $user, $contextHash, $force);
+
+        if ($claim instanceof ShoppingList) {
+            return $claim;
+        }
+
+        [$shoppingList, $claimToken] = $claim;
+
+        try {
+            [$requirements, $method] = $this->draftRequirements($mealPlan, $request);
+            $persisted = $this->persist(
+                $mealPlan,
+                $user,
+                $shoppingList,
+                $claimToken,
+                $planRevision,
+                $safetyHash,
+                $contextHash,
+                $requirements,
+                $method,
+            );
+
+            if ($persisted === null) {
+                throw ValidationException::withMessages([
+                    'meal_plan' => 'The plan or its safety requirements changed while the shopping list was being prepared. Try again.',
+                ]);
+            }
+
+            return $persisted;
+        } catch (Throwable $exception) {
+            $this->markFailed($shoppingList->id, $claimToken, $exception);
+
+            throw $exception;
+        }
+    }
+
+    private function assertGenerationAllowed(MealPlan $mealPlan): void
+    {
         if ($mealPlan->planning_confirmed_at === null) {
             throw ValidationException::withMessages([
                 'meal_plan' => 'Confirm the meal plan before generating its shopping list.',
@@ -47,171 +123,318 @@ class GenerateShoppingList
                 'recipes' => $unresolvedCookableMeals.' cookable '.($unresolvedCookableMeals === 1 ? 'meal still needs' : 'meals still need').' a prepared recipe.',
             ]);
         }
+    }
 
-        return DB::transaction(function () use ($mealPlan, $user): ShoppingList {
-            $mealPlan = MealPlan::query()->lockForUpdate()->findOrFail($mealPlan->id);
+    /** @return EloquentCollection<int, PlannedMeal> */
+    private function loadPlannedMeals(MealPlan $mealPlan): EloquentCollection
+    {
+        return $mealPlan->plannedMeals()
+            ->whereNotNull('recipe_version_id')
+            ->where('status', 'planned')
+            ->with([
+                'recipeVersion.ingredients',
+                'mealSlot.participants.constraints',
+            ])
+            ->get()
+            ->sortBy([
+                fn (PlannedMeal $meal) => $meal->mealSlot->date->toDateString(),
+                fn (PlannedMeal $meal) => $meal->mealSlot->position,
+            ])
+            ->values();
+    }
+
+    private function generationContextHash(int $planRevision, string $safetyHash, ShoppingListDraftRequest $request): string
+    {
+        return hash('sha256', json_encode([
+            'plan_revision' => $planRevision,
+            'safety_context_hash' => $safetyHash,
+            'requirements_hash' => $request->fingerprint(),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    /** @return ShoppingList|array{0: ShoppingList, 1: string} */
+    private function claim(MealPlan $mealPlan, User $user, string $contextHash, bool $force): ShoppingList|array
+    {
+        return DB::transaction(function () use ($mealPlan, $user, $contextHash, $force): ShoppingList|array {
+            $lockedPlan = MealPlan::query()->lockForUpdate()->findOrFail($mealPlan->id);
             $shoppingList = ShoppingList::query()->firstOrCreate(
-                ['meal_plan_id' => $mealPlan->id],
+                ['meal_plan_id' => $lockedPlan->id],
                 [
-                    'team_id' => $mealPlan->team_id,
+                    'team_id' => $lockedPlan->team_id,
                     'created_by_user_id' => $user->id,
-                    'source_plan_revision' => $mealPlan->revision,
+                    'source_plan_revision' => $lockedPlan->revision,
                     'status' => ShoppingListStatus::Draft,
+                    'generation_status' => ShoppingListGenerationStatus::Pending,
                 ],
             );
+            $shoppingList = ShoppingList::query()->lockForUpdate()->findOrFail($shoppingList->id);
 
-            if ($shoppingList->revision > 0
-                && $shoppingList->source_plan_revision === $mealPlan->revision
+            if (! $force
+                && $shoppingList->revision > 0
+                && $shoppingList->source_plan_revision === $lockedPlan->revision
+                && $shoppingList->generation_status === ShoppingListGenerationStatus::Ready
+                && hash_equals((string) $shoppingList->generation_context_hash, $contextHash)
                 && $shoppingList->stale_at === null) {
                 return $shoppingList;
             }
 
-            $plannedMeals = $mealPlan->plannedMeals()
-                ->whereNotNull('recipe_version_id')
-                ->where('status', 'planned')
-                ->with(['recipeVersion.ingredients', 'mealSlot'])
-                ->get();
-            $requirements = [];
+            $claimActive = $shoppingList->generation_status === ShoppingListGenerationStatus::Processing
+                && $shoppingList->generation_started_at?->isAfter(now()->subMinutes(self::CLAIM_EXPIRY_MINUTES));
 
-            foreach ($plannedMeals as $plannedMeal) {
-                $recipeVersion = $plannedMeal->recipeVersion;
-
-                if ($recipeVersion === null) {
-                    continue;
-                }
-
-                $scale = $recipeVersion->servings > 0
-                    ? $plannedMeal->servings / $recipeVersion->servings
-                    : 1;
-
-                foreach ($recipeVersion->ingredients as $recipeIngredient) {
-                    [$unit, $quantity] = $this->normaliseUnitAndQuantity(
-                        $recipeIngredient->unit,
-                        $recipeIngredient->quantity === null ? null : $recipeIngredient->quantity * $scale,
-                    );
-                    $normalisedName = Str::of($recipeIngredient->name)->squish()->lower()->toString();
-                    $key = $normalisedName.'|'.($unit ?? '');
-
-                    if (! isset($requirements[$key])) {
-                        $requirements[$key] = [
-                            'ingredient_id' => $recipeIngredient->ingredient_id,
-                            'name' => $recipeIngredient->name,
-                            'normalized_name' => $normalisedName,
-                            'quantity' => $quantity,
-                            'unit' => $unit,
-                            'optional' => $recipeIngredient->optional,
-                            'quantity_known' => $quantity !== null,
-                            'sources' => [],
-                        ];
-                    } else {
-                        $requirements[$key]['optional'] = $requirements[$key]['optional'] && $recipeIngredient->optional;
-                        $requirements[$key]['quantity_known'] = $requirements[$key]['quantity_known'] && $quantity !== null;
-
-                        if ($requirements[$key]['quantity_known']) {
-                            $requirements[$key]['quantity'] += $quantity;
-                        } else {
-                            $requirements[$key]['quantity'] = null;
-                        }
-                    }
-
-                    $requirements[$key]['sources'][] = [
-                        'team_id' => $mealPlan->team_id,
-                        'planned_meal_id' => $plannedMeal->id,
-                        'recipe_ingredient_id' => $recipeIngredient->id,
-                        'quantity' => $quantity,
-                        'unit' => $unit,
-                    ];
-                }
+            if ($claimActive) {
+                throw ValidationException::withMessages([
+                    'shopping_list' => 'This shopping list is already being prepared.',
+                ]);
             }
 
-            $existingRecipeCategories = $shoppingList->items()
-                ->where('source_kind', ShoppingListItemSourceKind::Recipe)
-                ->get(['normalized_name', 'unit', 'category'])
-                ->mapWithKeys(fn ($item) => [
-                    $item->normalized_name.'|'.($item->unit ?? '') => $item->getRawOriginal('category'),
+            $claimToken = (string) Str::uuid();
+            $shoppingList->update([
+                'generation_status' => ShoppingListGenerationStatus::Processing,
+                'generation_token' => $claimToken,
+                'generation_attempts' => $shoppingList->generation_attempts + 1,
+                'generation_context_hash' => $contextHash,
+                'generation_failure_code' => null,
+                'generation_failure_message' => null,
+                'generation_started_at' => now(),
+                'generation_completed_at' => null,
+            ]);
+
+            return [$shoppingList->refresh(), $claimToken];
+        });
+    }
+
+    /** @return array{0: array<string, array<string, mixed>>, 1: ShoppingListGenerationMethod} */
+    private function draftRequirements(MealPlan $mealPlan, ShoppingListDraftRequest $request): array
+    {
+        if ($request->requirements === []) {
+            return [[], ShoppingListGenerationMethod::DeterministicFallback];
+        }
+
+        try {
+            $draft = $this->drafter->draft($request);
+
+            return [
+                $this->validateDraft->handle($draft, $request, ShoppingListItemSourceKind::PlanGenerated),
+                ShoppingListGenerationMethod::OneShot,
+            ];
+        } catch (ShoppingListDraftUnavailable|ValidationException $exception) {
+            Log::warning('One-shot shopping-list consolidation failed; using deterministic fallback.', [
+                'meal_plan_id' => $mealPlan->id,
+                'team_id' => $mealPlan->team_id,
+                'failure_type' => $exception::class,
+            ]);
+        }
+
+        $fallback = $this->buildFallback->handle($request);
+
+        return [
+            $this->validateDraft->handle($fallback, $request, ShoppingListItemSourceKind::Recipe),
+            ShoppingListGenerationMethod::DeterministicFallback,
+        ];
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $requirements
+     */
+    private function persist(
+        MealPlan $mealPlan,
+        User $user,
+        ShoppingList $shoppingList,
+        string $claimToken,
+        int $planRevision,
+        string $safetyHash,
+        string $contextHash,
+        array $requirements,
+        ShoppingListGenerationMethod $method,
+    ): ?ShoppingList {
+        return DB::transaction(function () use ($mealPlan, $user, $shoppingList, $claimToken, $planRevision, $safetyHash, $contextHash, $requirements, $method): ?ShoppingList {
+            $lockedPlan = MealPlan::query()->lockForUpdate()->findOrFail($mealPlan->id);
+            $lockedList = ShoppingList::query()->lockForUpdate()->findOrFail($shoppingList->id);
+
+            if ($lockedList->generation_token !== $claimToken) {
+                throw ValidationException::withMessages([
+                    'shopping_list' => 'This shopping-list generation attempt is no longer current.',
                 ]);
-            $shoppingList->items()->where('source_kind', ShoppingListItemSourceKind::Recipe)->delete();
+            }
+
+            $currentSafetyHash = $this->safetyContext->fingerprint($lockedPlan);
+            $currentMeals = $this->loadPlannedMeals($lockedPlan);
+            $currentRequest = $this->buildRequest->handle($lockedPlan, $currentMeals);
+            $currentContextHash = $this->generationContextHash($lockedPlan->revision, $currentSafetyHash, $currentRequest);
+
+            if ($lockedPlan->revision !== $planRevision
+                || ! hash_equals($safetyHash, $currentSafetyHash)
+                || ! hash_equals($contextHash, $currentContextHash)
+                || ! hash_equals((string) $lockedPlan->confirmed_safety_context_hash, $currentSafetyHash)) {
+                $lockedList->update([
+                    'generation_status' => ShoppingListGenerationStatus::Pending,
+                    'generation_token' => null,
+                    'generation_context_hash' => $currentContextHash,
+                    'generation_failure_code' => 'context_changed',
+                    'generation_failure_message' => 'The plan changed while the shopping list was being prepared. Try again.',
+                    'generation_completed_at' => null,
+                ]);
+
+                return null;
+            }
+
+            [$categoriesBySignature, $categoriesByIdentity] = $this->existingCategoryCorrections($lockedList);
+            $generatedSourceKinds = [
+                ShoppingListItemSourceKind::Recipe->value,
+                ShoppingListItemSourceKind::PlanGenerated->value,
+            ];
+            $lockedList->items()->whereIn('source_kind', $generatedSourceKinds)->delete();
             ksort($requirements);
             $position = 1;
 
-            foreach ($requirements as $key => $requirement) {
+            foreach ($requirements as $requirement) {
                 $sources = $requirement['sources'];
-                unset($requirement['sources'], $requirement['quantity_known']);
-                $item = $shoppingList->items()->create([
+                $category = $categoriesBySignature[$requirement['_source_signature']] ?? null;
+                $category ??= $categoriesByIdentity[$requirement['_canonical_key']] ?? null;
+                $category ??= $requirement['category'] ?? ShoppingListItemCategory::classify($requirement['name'])->value;
+                unset(
+                    $requirement['sources'],
+                    $requirement['category'],
+                    $requirement['_source_signature'],
+                    $requirement['_canonical_key'],
+                );
+                $item = $lockedList->items()->create([
                     ...$requirement,
-                    'team_id' => $mealPlan->team_id,
+                    'team_id' => $lockedPlan->team_id,
                     'created_by_user_id' => $user->id,
-                    'source_kind' => ShoppingListItemSourceKind::Recipe,
-                    'category' => $existingRecipeCategories->get($key)
-                        ?? ShoppingListItemCategory::classify($requirement['name']),
+                    'category' => $category,
                     'included' => true,
                     'position' => $position++,
                 ]);
                 $item->sources()->createMany($sources);
             }
 
-            foreach ($shoppingList->items()->whereNot('source_kind', ShoppingListItemSourceKind::Recipe)->orderBy('position')->get() as $manualItem) {
-                $manualItem->update(['position' => $position++]);
+            foreach ($lockedList->items()->whereNotIn('source_kind', $generatedSourceKinds)->orderBy('position')->get() as $preservedItem) {
+                $preservedItem->update(['position' => $position++]);
             }
 
-            $currentCustomMealIds = $mealPlan->plannedMeals()
-                ->where('status', 'planned')
-                ->where('type', 'custom')
-                ->whereNull('recipe_version_id')
-                ->pluck('id');
-            $shoppingList->mealResolutions()->whereNotIn('planned_meal_id', $currentCustomMealIds)->delete();
-            $obsoleteMealItems = $shoppingList->items()
-                ->where('source_kind', ShoppingListItemSourceKind::PlannedMeal)
-                ->whereHas('sources', fn ($query) => $query->whereNotIn('planned_meal_id', $currentCustomMealIds))
-                ->get();
-
-            foreach ($obsoleteMealItems as $obsoleteMealItem) {
-                $obsoleteMealItem->delete();
-            }
-
-            $shoppingList->update([
-                'source_plan_revision' => $mealPlan->revision,
+            $this->removeObsoleteMealResolutions($lockedPlan, $lockedList);
+            $lockedList->update([
+                'source_plan_revision' => $lockedPlan->revision,
                 'status' => ShoppingListStatus::Draft,
+                'generation_status' => ShoppingListGenerationStatus::Ready,
+                'generation_token' => null,
+                'generation_context_hash' => $contextHash,
+                'last_generation_method' => $method,
+                'generation_failure_code' => null,
+                'generation_failure_message' => null,
+                'generation_completed_at' => now(),
                 'completed_at' => null,
                 'stale_at' => null,
                 'stale_reason' => null,
                 'stale_diff' => null,
             ]);
-            $this->recordRevision->handle($shoppingList, $user, 'Generated shopping list from confirmed plan');
-            $this->recordMilestone->handle($mealPlan, $user, MealPlanMilestoneKind::ShoppingListGenerated);
+            $summary = $method === ShoppingListGenerationMethod::OneShot
+                ? 'Generated shopping list from retained recipe requirements using one-shot consolidation'
+                : 'Generated shopping list from retained recipe requirements using deterministic fallback';
+            $this->recordRevision->handle($lockedList, $user, $summary);
+            $this->recordMilestone->handle($lockedPlan, $user, MealPlanMilestoneKind::ShoppingListGenerated);
 
-            return $shoppingList->refresh();
+            return $lockedList->refresh();
         });
     }
 
-    /** @return array{0: string|null, 1: float|null} */
-    private function normaliseUnitAndQuantity(?string $unit, ?float $quantity): array
+    /** @return array{0: array<string, string>, 1: array<string, string>} */
+    private function existingCategoryCorrections(ShoppingList $shoppingList): array
     {
-        if ($unit === null || trim($unit) === '') {
-            return [null, $quantity === null ? null : round($quantity, 3)];
+        $bySignature = [];
+        $byIdentity = [];
+        $generatedSourceKinds = [
+            ShoppingListItemSourceKind::Recipe->value,
+            ShoppingListItemSourceKind::PlanGenerated->value,
+        ];
+        $items = $shoppingList->items()
+            ->whereIn('source_kind', $generatedSourceKinds)
+            ->with('sources')
+            ->get();
+
+        foreach ($items as $item) {
+            $signature = $item->sources
+                ->map(fn ($source): string => $source->planned_meal_id.':'.$source->recipe_ingredient_id)
+                ->sort()
+                ->implode('|');
+            $category = (string) $item->getRawOriginal('category');
+            $bySignature[$signature] = $category;
+            $byIdentity[$this->identity->key($item->name)] = $category;
         }
 
-        $normalised = Str::of($unit)->squish()->lower()->toString();
-        $canonical = match ($normalised) {
-            'gram', 'grams', 'g' => 'g',
-            'kilogram', 'kilograms', 'kg' => 'kg',
-            'millilitre', 'millilitres', 'milliliter', 'milliliters', 'ml' => 'ml',
-            'litre', 'litres', 'liter', 'liters', 'l' => 'l',
-            'tablespoon', 'tablespoons', 'tbsp' => 'tbsp',
-            'teaspoon', 'teaspoons', 'tsp' => 'tsp',
-            'cup', 'cups' => 'cup',
-            'piece', 'pieces', 'each' => 'each',
-            default => $normalised,
-        };
+        return [$bySignature, $byIdentity];
+    }
 
-        if ($canonical === 'kg') {
-            return ['g', $quantity === null ? null : round($quantity * 1000, 3)];
+    private function removeObsoleteMealResolutions(MealPlan $mealPlan, ShoppingList $shoppingList): void
+    {
+        $currentCustomMealIds = $mealPlan->plannedMeals()
+            ->where('status', 'planned')
+            ->where('type', 'custom')
+            ->whereNull('recipe_version_id')
+            ->pluck('id');
+        $shoppingList->mealResolutions()->whereNotIn('planned_meal_id', $currentCustomMealIds)->delete();
+        $obsoleteMealItems = $shoppingList->items()
+            ->where('source_kind', ShoppingListItemSourceKind::PlannedMeal)
+            ->whereHas('sources', fn ($query) => $query->whereNotIn('planned_meal_id', $currentCustomMealIds))
+            ->get();
+
+        foreach ($obsoleteMealItems as $obsoleteMealItem) {
+            $obsoleteMealItem->delete();
         }
+    }
 
-        if ($canonical === 'l') {
-            return ['ml', $quantity === null ? null : round($quantity * 1000, 3)];
-        }
+    private function markFailed(int $shoppingListId, string $claimToken, Throwable $exception): void
+    {
+        DB::transaction(function () use ($shoppingListId, $claimToken): void {
+            $shoppingList = ShoppingList::query()->lockForUpdate()->find($shoppingListId);
 
-        return [$canonical, $quantity === null ? null : round($quantity, 3)];
+            if ($shoppingList === null || $shoppingList->generation_token !== $claimToken) {
+                return;
+            }
+
+            $shoppingList->update([
+                'generation_status' => ShoppingListGenerationStatus::Failed,
+                'generation_token' => null,
+                'generation_failure_code' => 'generation_failed',
+                'generation_failure_message' => 'Chef could not prepare this shopping list. Try again.',
+                'generation_completed_at' => now(),
+            ]);
+        });
+        Log::error('Shopping-list generation failed.', [
+            'shopping_list_id' => $shoppingListId,
+            'failure_type' => $exception::class,
+        ]);
+    }
+
+    private function markPreflightFailed(MealPlan $mealPlan, User $user, Throwable $exception): void
+    {
+        $shoppingListId = DB::transaction(function () use ($mealPlan, $user): int {
+            $lockedPlan = MealPlan::query()->lockForUpdate()->findOrFail($mealPlan->id);
+            $shoppingList = ShoppingList::query()->firstOrCreate(
+                ['meal_plan_id' => $lockedPlan->id],
+                [
+                    'team_id' => $lockedPlan->team_id,
+                    'created_by_user_id' => $user->id,
+                    'source_plan_revision' => $lockedPlan->revision,
+                    'status' => ShoppingListStatus::Draft,
+                ],
+            );
+            $shoppingList->update([
+                'generation_status' => ShoppingListGenerationStatus::Failed,
+                'generation_token' => null,
+                'generation_attempts' => $shoppingList->generation_attempts + 1,
+                'generation_failure_code' => 'request_build_failed',
+                'generation_failure_message' => 'Chef could not prepare this shopping list. Try again.',
+                'generation_started_at' => now(),
+                'generation_completed_at' => now(),
+            ]);
+
+            return $shoppingList->id;
+        });
+        Log::error('Shopping-list request preparation failed.', [
+            'shopping_list_id' => $shoppingListId,
+            'failure_type' => $exception::class,
+        ]);
     }
 }

@@ -27,6 +27,7 @@ class RecipeVersionController extends Controller
             $validated['notices'] ?? [],
             $validated['notes'] ?? null,
             $validated['source_url'] ?? null,
+            $validated['storage_guidance'] ?? null,
         );
 
         return back();

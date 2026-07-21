@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['team_id', 'recipe_id', 'created_by_user_id', 'version', 'title', 'summary', 'servings', 'prep_minutes', 'cook_minutes', 'source_url', 'notes', 'published_at'])]
+#[Fillable(['team_id', 'recipe_id', 'created_by_user_id', 'version', 'title', 'summary', 'servings', 'prep_minutes', 'cook_minutes', 'source_url', 'notes', 'storage_guidance', 'published_at'])]
 class RecipeVersion extends Model
 {
     use ResolvesWithinCurrentTeam;

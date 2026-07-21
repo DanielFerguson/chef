@@ -3,8 +3,8 @@
 namespace App\Ai\Tools;
 
 use App\Actions\Planning\AssessMealPlanReadiness;
+use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Models\MealPlan;
-use App\Models\PlannedMeal;
 use App\Models\ShoppingListItem;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -20,26 +20,27 @@ class InspectPlanShoppingList implements Tool
 
     public function description(): Stringable|string
     {
-        return 'Inspect recipe-preparation progress and the current structured shopping list, including item identifiers, pantry state, revision, and budget.';
+        return 'Inspect whole-plan recipe-generation progress and the current structured shopping list, including item identifiers, pantry state, revision, and budget.';
     }
 
     public function handle(Request $request): Stringable|string
     {
         $mealPlan = $this->mealPlan->load([
-            'plannedMeals.recipePreparation',
+            'plannedMeals:id,meal_plan_id,title,recipe_version_id',
             'shoppingList.items',
             'budget',
         ]);
 
         return json_encode([
             'plan_progress' => $this->assessReadiness->handle($mealPlan),
-            'recipe_preparations' => $mealPlan->plannedMeals->map(fn (PlannedMeal $meal) => [
-                'planned_meal_id' => $meal->id,
-                'title' => $meal->title,
-                'recipe_version_id' => $meal->recipe_version_id,
-                'status' => $meal->recipePreparation?->status->value,
-                'failure_message' => $meal->recipePreparation?->failure_message,
-            ]),
+            'recipe_generation' => [
+                'status' => $mealPlan->recipe_generation_status instanceof MealPlanRecipeGenerationStatus
+                    ? $mealPlan->recipe_generation_status->value
+                    : 'not_started',
+                'attempts' => $mealPlan->recipe_generation_attempts,
+                'failure_message' => $mealPlan->recipe_generation_failure_message,
+                'missing_recipe_count' => $mealPlan->plannedMeals->whereNull('recipe_version_id')->count(),
+            ],
             'shopping_list' => $mealPlan->shoppingList === null ? null : [
                 'id' => $mealPlan->shoppingList->id,
                 'revision' => $mealPlan->shoppingList->revision,
