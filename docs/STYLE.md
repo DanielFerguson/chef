@@ -223,6 +223,13 @@ explanation that the model is absent. Never mix password/MFA entry with agent
 activity or automatically continue into cart mutation after authentication;
 return to Shopping for a second explicit start action.
 
+Before that second action, show a compact product plan: exact matches, items
+that require retailer search, and the applicable explicit household safety
+constraints. Safety review and automatic search are separate acknowledgements.
+If strict constraints apply, name why automatic selection is blocked and keep
+each unresolved item next to an exact-product editor; do not hide the blocked
+state behind a disabled button alone.
+
 If a retailer cart is non-empty, show its observed lines and three concrete
 choices: merge, replace the existing cart, or cancel. Replace must name the
 consequence. Progress stays item-oriented and quiet, while interventions name

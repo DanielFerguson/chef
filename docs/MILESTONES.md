@@ -409,6 +409,39 @@ M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
   non-empty-cart decisions, normal-app/site visibility, retailer tolerance,
   privacy obligations, operating cost, and the human checkout boundary.
 
+M6 hardening evidence recorded 21 July 2026:
+
+- Cart preparation now has a server-authoritative preflight. It freezes the
+  safety fingerprint, constraints, explicit review, automatic-search approval,
+  and exact selected products with the shopping revision. Strict household
+  constraints require validated exact product URLs and force substitutions off.
+- The Shopping workspace exposes that preflight at desktop and 390 x 844,
+  keeps preparation disabled until required acknowledgements are present, and
+  provides an exact-product correction path for unmatched or non-exact rows.
+- Development listens to the dedicated `automation` queue and
+  `chef:automation:status` reports provider, worker, flag, queue, and proof
+  readiness without exposing secrets. Context verification includes an
+  explicit persistence delay before a new session may reuse the login.
+- A ready reconciled cart can now be linked to an immutable `Order`; its
+  retailer and line identity, quantity, prices, and substitutions come from the
+  verified cart snapshot while final checkout and actual-total entry remain
+  human actions.
+- The implementation and fake-provider intervention journeys are complete, but
+  the local environment has no Browserbase API key or project ID. Connection
+  and mutation flags therefore remain disabled. Cross-session authentication,
+  the one-item and five-item trials, real merge/replace/reauthentication,
+  normal-app visibility, and retailer review are still live evidence gates.
+- The exact live sequence and rollback rules are recorded in
+  [`web/plans/woolworths-live-pilot-runbook.md`](../web/plans/woolworths-live-pilot-runbook.md).
+- The final local gate passes 273 backend tests with 1,539 assertions and all
+  45 browser journeys with 377 assertions. Pint, PHPStan, ESLint, Prettier,
+  application and worker TypeScript, the production build, and a fresh
+  migration plus rollback/reapply pass. npm and Composer audits are clean after
+  updating Guzzle from 7.14.2 to 7.15.1 and PSR-7 from 2.12.5 to 2.13.0.
+  React Doctor's actionable lazy-initialisation and large-component findings
+  were fixed; its remaining four worker warnings are intentional sequential
+  cart clicks, ordered keypresses, and coherent live-page observations.
+
 ## M7 — Native voice experience
 
 Status: `[ ]`

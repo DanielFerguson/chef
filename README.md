@@ -23,9 +23,11 @@ retry state keeps manual ingredient entry out of the normal path. M5 adds a
 Today surface, focused step-by-step cooking with durable progress and timers,
 meal outcomes, person-specific feedback, and inspectable preference candidates
 that can never become safety rules. The first M6 Woolworths cart-preparation
-slice is now implemented behind disabled release flags; its authenticated live
-trial, retailer review, and normal-app cart-synchronisation evidence remain
-open, so M6 is not complete.
+slice is now implemented behind disabled release flags. It includes an explicit
+product-and-safety preflight, exact Woolworths product approval when household
+constraints apply, a dedicated automation queue, and immutable cart evidence
+linked into order history. Its authenticated live trial, retailer review, and
+normal-app cart-synchronisation evidence remain open, so M6 is not complete.
 
 The intended stack is:
 
@@ -458,14 +460,16 @@ contract without changing run creation, policy, or reconciliation actions.
 
 When a household approves a shopping list for cart preparation:
 
-1. Chef freezes the shopping-list revision used by the run.
-2. Laravel creates a scoped `AutomationRun` and dispatches it to a queue.
-3. The Responses API examines the current screenshot and returns structured computer actions.
-4. Chef validates the actions against retailer, tab, and risk policy.
-5. The worker executes allowed actions in the Browserbase session and returns a sanitised observation.
-6. The loop continues until the cart is prepared, a decision requires approval, or the run fails safely.
-7. Chef presents products, substitutions, unresolved items, estimated total, and material differences for review.
-8. The person takes over for checkout and payment.
+1. Chef shows the exact matches, unmatched search scope, and applicable explicit household safety constraints.
+2. The person approves the product plan and safety context. Automatic search requires separate approval, and is unavailable while strict constraints still have unmatched products.
+3. Chef freezes the shopping-list revision, approval, safety fingerprint, and product scope used by the run.
+4. Laravel creates a scoped `AutomationRun` and dispatches it to the dedicated `automation` queue.
+5. The Responses API examines the current screenshot and returns structured computer actions.
+6. Chef validates the actions against retailer, tab, and risk policy.
+7. The worker executes allowed actions in the Browserbase session and returns a sanitised observation.
+8. The loop continues until the cart is prepared, a decision requires approval, or the run fails safely.
+9. Chef presents products, substitutions, unresolved items, estimated total, and material differences for review.
+10. After human checkout, the reviewed cart snapshot can seed immutable order lines while the person records the actual total.
 
 Before the first mutation Chef inspects the actual Woolworths cart. A non-empty
 cart always pauses for an explicit merge, replace, or cancel decision. Replace

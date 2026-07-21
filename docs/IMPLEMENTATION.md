@@ -65,7 +65,12 @@ M6 now has a Browserbase-first Woolworths implementation behind disabled
 connection and cart-mutation flags. It adds team-scoped retailer connections,
 frozen revision runs, item outcomes, sessions, interventions, audit steps, and
 immutable cart snapshots; a queued Laravel engine; a direct Responses client;
-and an in-repo TypeScript/Playwright executor. Normal tests use provider,
+and an in-repo TypeScript/Playwright executor. Cart creation now requires an
+explicit product-and-safety preflight. Strict household constraints require a
+validated Woolworths product-detail URL for every item and disable
+substitutions; other unmatched items require a separate automatic-search
+approval. Reconciled cart snapshots can seed immutable order lines after the
+human completes checkout. Normal tests use provider,
 executor, and Responses fakes. The authorised live Woolworths trial, retailer
 and privacy review, operating-cost evidence, and proof that the resulting cart
 appears in the normal Woolworths app/site remain release gates. M6 therefore
@@ -284,6 +289,9 @@ regeneration.
 the culinary ingredient, while `ProductPreference` retains household brand,
 pack, maximum-price, and substitution choices for later lists. Matching is
 manual and deterministic in M4; retailer discovery and computer use remain M6.
+An exact Woolworths match retains both its product-detail URL and parsed product
+identifier. The URL host must match the selected retailer, so an arbitrary
+external identifier cannot satisfy the strict-constraint preflight by itself.
 
 `Budget` records a household default or a plan-specific override. The Shopping
 workspace compares the effective budget with the known matched-product subtotal
@@ -292,6 +300,11 @@ as complete. `Order` and `OrderLine` freeze the list revision, catalogue product
 description, matched price, and estimated line total, while `Order` retains the
 user-entered actual overall total. M6 reconciliation records actual retailer
 products, line prices, and substitutions when that evidence exists.
+When an order cites a ready-for-review `CartSnapshot`, Chef verifies that its
+frozen item structure still matches the completed list, inherits the cart's
+retailer, and creates lines from the reconciled remote cart rather than
+reconstructing them from catalogue guesses. Checkout and the actual total stay
+human-entered.
 There are no update or delete routes for historical order snapshots.
 
 `RetailerConnection` is family-owned and has one `owner_user_id`. Only that
@@ -564,8 +577,15 @@ Voice is an input and response mode, not a separate product state. A plan starte
 The Laravel AI SDK does not currently expose the complete OpenAI native computer-use protocol. Do not fork the SDK or inject unsupported provider payloads for the first version.
 
 `StartCartPreparation` creates an `AutomationRun` only from the current,
-non-stale revision after the connection owner explicitly approves cart
-mutation. A unique job on the `automation` queue advances a bounded chunk. A
+non-stale revision after the connection owner explicitly reviews the durable
+safety context and proposed product-search scope. Any allergy, medical,
+dietary, or religious constraint blocks automatic product selection until every
+included item has an approved exact retailer product; substitutions are frozen
+off for that run. Other unmatched items require an independent automatic-search
+approval. A unique job on the `automation` queue advances a bounded chunk. The
+local `composer dev` process listens to `default`, `ai`, and `automation`;
+deployments should operate a dedicated `automation` worker so retailer work
+cannot starve ordinary application jobs. A
 Chef-owned `ComputerUseEngine` calls the Responses API directly, handles
 `computer_call` and `computer_call_output`, validates every action twice, and
 communicates with the TypeScript `ComputerExecutor`.
@@ -616,6 +636,12 @@ session.
 Every add or quantity action is followed by a remote-cart verification, and
 the full run ends with an immutable reconciliation before the normal
 Woolworths cart link is shown.
+
+`php artisan chef:automation:status` reports whether Browserbase, OpenAI, the
+compiled worker, feature flags, normal-app proof, and queue configuration are
+ready without printing credentials. Persistent login verification closes the
+human session and waits for the configurable Browserbase Context sync delay
+before marking the connection ready for a fresh session.
 
 The connection owner may also pause an active run and take control through the
 same recording-disabled session. A run-level lock prevents the worker,
