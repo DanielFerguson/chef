@@ -1463,9 +1463,9 @@ function CartAutomationRunPanel({
                 <div className="mt-4" role="status">
                     <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                         <div
-                            className="h-full rounded-full bg-primary transition-[width]"
+                            className="h-full w-full origin-left rounded-full bg-primary transition-transform"
                             style={{
-                                width: `${run.progress.total === 0 ? 0 : (run.progress.resolved / run.progress.total) * 100}%`,
+                                transform: `scaleX(${run.progress.total === 0 ? 0 : run.progress.resolved / run.progress.total})`,
                             }}
                         />
                     </div>
@@ -1721,18 +1721,26 @@ function ExactProductMatchEditor({
 }
 
 function CartProductPreflight({
-    automaticSearchApproved,
-    onAutomaticSearchApprovedChange,
+    onBuildPlan,
+    onProductPlanReviewedChange,
+    onSelectCandidate,
     onSafetyAcknowledgedChange,
     preflight,
+    processing,
+    productPlan,
+    productPlanReviewed,
     retailers,
     safetyAcknowledged,
     shoppingList,
 }: {
-    automaticSearchApproved: boolean;
-    onAutomaticSearchApprovedChange: (checked: boolean) => void;
+    onBuildPlan: () => void;
+    onProductPlanReviewedChange: (checked: boolean) => void;
+    onSelectCandidate: (itemId: number, candidateIndex: number) => void;
     onSafetyAcknowledgedChange: (checked: boolean) => void;
     preflight: CartAutomation['preflight'];
+    processing: boolean;
+    productPlan: CartAutomation['product_plan'];
+    productPlanReviewed: boolean;
     retailers: ShoppingWorkspace['retailers'];
     safetyAcknowledged: boolean;
     shoppingList: PreparedShoppingList;
@@ -1741,9 +1749,9 @@ function CartProductPreflight({
         <div className="mb-5 rounded-xl border bg-muted/30 p-4">
             <p className="text-sm font-medium">Review the product plan</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {preflight.matched_items} exact product
-                {preflight.matched_items === 1 ? ' match' : ' matches'} ·{' '}
-                {preflight.automatic_search_items} requiring Woolworths search
+                {productPlan
+                    ? `${productPlan.exact_items} exact · ${productPlan.ambiguous_items} ambiguous · ${productPlan.unresolved_items} unresolved`
+                    : `${preflight.total_items} items need a read-only Woolworths product search before sign-in and cart mutation.`}
             </p>
             {preflight.constraints.length > 0 && (
                 <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
@@ -1760,39 +1768,119 @@ function CartProductPreflight({
                     </ul>
                 </div>
             )}
-            {preflight.requires_exact_matches &&
-                preflight.automatic_search_items > 0 && (
-                    <div className="mt-3">
-                        <p className="text-xs text-destructive" role="alert">
-                            Automatic product selection is blocked while safety
-                            constraints apply. Every included item needs an
-                            exact approved product match.
+            {(!productPlan || productPlan.status !== 'ready') && (
+                <div className="mt-3">
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={processing}
+                        onClick={onBuildPlan}
+                    >
+                        <RefreshCw />
+                        {productPlan
+                            ? 'Refresh product matches'
+                            : 'Find Woolworths products'}
+                    </Button>
+                    {productPlan?.discovery_failed && (
+                        <p
+                            className="mt-2 text-xs text-destructive"
+                            role="alert"
+                        >
+                            Product discovery could not reach Woolworths. No
+                            authenticated cart changes were attempted.
                         </p>
-                        <ExactProductMatchEditor
-                            shoppingList={shoppingList}
-                            retailers={retailers}
-                        />
-                    </div>
-                )}
-            {preflight.automatic_search_items > 0 &&
-                !preflight.requires_exact_matches && (
+                    )}
+                </div>
+            )}
+            {productPlan?.items.some((item) => item.status !== 'exact') && (
+                <div className="mt-3 space-y-3">
+                    {productPlan.items.map((item) =>
+                        item.status === 'exact' ? null : (
+                            <div
+                                key={item.id}
+                                className="rounded-lg border bg-background p-3"
+                            >
+                                <p className="text-xs font-medium">
+                                    {item.name}
+                                </p>
+                                {item.candidates.length > 0 ? (
+                                    <div className="mt-2 grid gap-2">
+                                        {item.candidates.map(
+                                            (candidate, index) => (
+                                                <Button
+                                                    key={`${item.id}-${String(candidate.external_id ?? index)}`}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-auto justify-start text-left whitespace-normal"
+                                                    disabled={processing}
+                                                    onClick={() =>
+                                                        onSelectCandidate(
+                                                            item.id,
+                                                            index,
+                                                        )
+                                                    }
+                                                >
+                                                    {String(
+                                                        candidate.product_name ??
+                                                            'Woolworths product',
+                                                    )}
+                                                    {candidate.current_price !==
+                                                    undefined
+                                                        ? ` · ${formatMoney(Number(candidate.current_price))}`
+                                                        : ''}
+                                                </Button>
+                                            ),
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        No confident Woolworths candidate was
+                                        found. Save an exact match, then refresh
+                                        this plan.
+                                    </p>
+                                )}
+                            </div>
+                        ),
+                    )}
+                    <ExactProductMatchEditor
+                        shoppingList={shoppingList}
+                        retailers={retailers}
+                    />
+                </div>
+            )}
+            {productPlan?.status === 'ready' && (
+                <>
                     <label className="mt-3 flex items-start gap-2 text-xs leading-5">
                         <Checkbox
-                            aria-label="Allow automatic Woolworths product search"
-                            checked={automaticSearchApproved}
+                            aria-label="Confirm exact Woolworths product plan review"
+                            checked={productPlanReviewed}
                             onCheckedChange={(checked) =>
-                                onAutomaticSearchApprovedChange(
-                                    Boolean(checked),
-                                )
+                                onProductPlanReviewedChange(Boolean(checked))
                             }
                         />
                         <span>
-                            Allow Chef to search Woolworths for{' '}
-                            {preflight.automatic_search_items} unmatched items
-                            and stop whenever the product choice is ambiguous.
+                            I reviewed the exact Woolworths products that Chef
+                            will add and verify.
                         </span>
                     </label>
-                )}
+                    <details className="mt-3 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">
+                            Exact products
+                        </summary>
+                        <ul className="mt-2 space-y-1">
+                            {productPlan.items.map((item) => (
+                                <li key={item.id}>
+                                    {item.name} —{' '}
+                                    {String(
+                                        item.selected_product?.product_name ??
+                                            'Exact product',
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                </>
+            )}
             <label className="mt-3 flex items-start gap-2 text-xs leading-5">
                 <Checkbox
                     aria-label="Confirm cart product plan safety review"
@@ -1806,20 +1894,6 @@ function CartProductPreflight({
                     plan.
                 </span>
             </label>
-            {preflight.automatic_search_item_names.length > 0 && (
-                <details className="mt-3 text-xs text-muted-foreground">
-                    <summary className="cursor-pointer">
-                        Items requiring search
-                    </summary>
-                    <p className="mt-1 leading-5">
-                        {preflight.automatic_search_item_names.join(', ')}
-                        {preflight.automatic_search_items >
-                        preflight.automatic_search_item_names.length
-                            ? '…'
-                            : ''}
-                    </p>
-                </details>
-            )}
         </div>
     );
 }
@@ -1835,8 +1909,7 @@ function CartAutomationSection({
 }) {
     const [processing, setProcessing] = useState(false);
     const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
-    const [automaticSearchApproved, setAutomaticSearchApproved] =
-        useState(false);
+    const [productPlanReviewed, setProductPlanReviewed] = useState(false);
     const connection = automation.connection;
     const run = automation.run;
     const intervention = run?.intervention;
@@ -1889,7 +1962,24 @@ function CartAutomationSection({
             retailer_connection_id: connection.id,
             idempotency_key: crypto.randomUUID(),
             safety_acknowledged: safetyAcknowledged,
-            allow_automatic_product_search: automaticSearchApproved,
+            product_plan_reviewed: productPlanReviewed,
+        });
+    };
+    const buildProductPlan = () => {
+        if (!connection || !automation.shopping_list_revision_id) {
+            return;
+        }
+
+        setProductPlanReviewed(false);
+        submit('post', `/shopping-lists/${shoppingList.id}/cart-product-plan`, {
+            shopping_list_revision_id: automation.shopping_list_revision_id,
+            retailer_connection_id: connection.id,
+        });
+    };
+    const selectProductCandidate = (itemId: number, candidateIndex: number) => {
+        setProductPlanReviewed(false);
+        submit('put', `/cart-product-plan-items/${itemId}`, {
+            candidate_index: candidateIndex,
         });
     };
     const cancel = () => {
@@ -2009,12 +2099,14 @@ function CartAutomationSection({
                 <div className="mt-5">
                     {(!run || runTerminal) && (
                         <CartProductPreflight
-                            automaticSearchApproved={automaticSearchApproved}
-                            onAutomaticSearchApprovedChange={
-                                setAutomaticSearchApproved
-                            }
+                            onBuildPlan={buildProductPlan}
+                            onProductPlanReviewedChange={setProductPlanReviewed}
+                            onSelectCandidate={selectProductCandidate}
                             onSafetyAcknowledgedChange={setSafetyAcknowledged}
                             preflight={automation.preflight}
+                            processing={processing}
+                            productPlan={automation.product_plan}
+                            productPlanReviewed={productPlanReviewed}
                             retailers={retailers}
                             safetyAcknowledged={safetyAcknowledged}
                             shoppingList={shoppingList}
@@ -2038,11 +2130,10 @@ function CartAutomationSection({
                                     processing ||
                                     !automation.ready ||
                                     !automation.cart_mutation_enabled ||
-                                    !automation.preflight.can_prepare ||
+                                    automation.product_plan?.status !==
+                                        'ready' ||
                                     !safetyAcknowledged ||
-                                    (automation.preflight
-                                        .automatic_search_items > 0 &&
-                                        !automaticSearchApproved)
+                                    !productPlanReviewed
                                 }
                                 onClick={prepare}
                             >

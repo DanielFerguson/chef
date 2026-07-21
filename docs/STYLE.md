@@ -231,11 +231,13 @@ If an already-approved cart run pauses for reauthentication, the explicit
 run after the protected cart check passes. This is a resume of the earlier
 approved work, not a new cart-preparation approval.
 
-Before that second action, show a compact product plan: exact matches, items
-that require retailer search, and the applicable explicit household safety
-constraints. Safety review and automatic search are separate acknowledgements.
-If strict constraints apply, name why automatic selection is blocked and keep
-each unresolved item next to an exact-product editor; do not hide the blocked
+Before that second action, complete bounded read-only retailer discovery and
+show the durable product plan: exact products, genuinely ambiguous or unresolved
+choices, and applicable explicit household safety constraints. Discovery is a
+separate visible action and never authorises cart mutation. Keep each ambiguous
+choice beside its candidates and each unresolved item beside the exact-product
+editor. Only a fully exact plan exposes the product-plan review acknowledgement;
+the separate safety acknowledgement remains required. Do not hide a blocked
 state behind a disabled button alone.
 
 If a retailer cart is non-empty, show its observed lines and three concrete

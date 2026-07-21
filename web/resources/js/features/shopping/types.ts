@@ -274,6 +274,23 @@ export type CartAutomation = {
             person: string | null;
         }[];
     };
+    product_plan: {
+        id: number;
+        status: 'needs_review' | 'ready' | 'frozen' | 'superseded' | 'failed';
+        exact_items: number;
+        ambiguous_items: number;
+        unresolved_items: number;
+        discovery_failed: boolean;
+        discovery_ms: number | null;
+        items: {
+            id: number;
+            name: string;
+            status: 'exact' | 'ambiguous' | 'unresolved';
+            decision_reason: string | null;
+            selected_product: Record<string, unknown> | null;
+            candidates: Record<string, unknown>[];
+        }[];
+    } | null;
     connection: {
         id: number;
         status:

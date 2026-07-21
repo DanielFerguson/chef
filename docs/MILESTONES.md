@@ -356,6 +356,9 @@ Status: `[ ]`
 - [ ] Build the permissioned Chrome extension and pairing flow.
 - [ ] Restrict execution to an explicitly selected tab and retailer origins.
 - [x] Implement the Responses API `computer_call` loop.
+- [x] Migrate the fallback to GPT-5.6 GA `computer` calls and ordered `actions[]` continuations.
+- [x] Keep one fenced session actor and one Playwright/CDP connection across a run.
+- [x] Complete or explicitly pause a durable product plan before authenticated mutation.
 - [ ] Broadcast progress, unresolved matches, substitutions, and failures.
 - [x] Add pause, cancel, expiry, takeover, and safe resume.
 - [x] Require approval at defined risk boundaries.
@@ -382,7 +385,7 @@ M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
   pauses for merge, replace, or cancel; only replace invokes removal.
 - Laravel owns a direct Responses `computer_call` loop, action/origin policy,
   safety interventions, bounded queue checkpoints, redacted steps, and final
-  reconciliation. The TypeScript worker connects to a supplied CDP URL and
+  reconciliation. The TypeScript actor connects once to a transient supplied CDP URL and
   independently blocks sensitive navigation, fields, pointer targets,
   downloads, uploads, unsafe keys, CAPTCHA handling, and non-Woolworths origins.
 - The connection owner can pause an active run into a recording-disabled Live
@@ -413,10 +416,11 @@ M6 Browserbase Woolworths implementation evidence recorded 20 July 2026:
 
 M6 hardening evidence recorded 21 July 2026:
 
-- Cart preparation now has a server-authoritative preflight. It freezes the
-  safety fingerprint, constraints, explicit review, automatic-search approval,
-  and exact selected products with the shopping revision. Strict household
-  constraints require validated exact product URLs and force substitutions off.
+- Cart preparation now has a server-authoritative product-plan preflight. It
+  completes read-only discovery first, pauses on ambiguous or unresolved
+  products, then freezes the safety fingerprint, constraints, exact product
+  review, and selected products with the shopping revision. Strict household
+  constraints require explicit exact choices and force substitutions off.
 - The Shopping workspace exposes that preflight at desktop and 390 x 844,
   keeps preparation disabled until required acknowledgements are present, and
   provides an exact-product correction path for unmatched or non-exact rows.
@@ -457,6 +461,30 @@ M6 hardening evidence recorded 21 July 2026:
   React Doctor's actionable lazy-initialisation and large-component findings
   were fixed; its remaining four worker warnings are intentional sequential
   cart clicks, ordered keypresses, and coherent live-page observations.
+
+M6 persistent-orchestration evidence recorded 21 July 2026:
+
+- A Browserbase connection now permits one active keep-alive session against
+  its encrypted Context. Initial login, reauthentication, deterministic work,
+  and manual takeover transfer exclusive control of that session wherever it
+  remains available; human control stays recording-disabled.
+- `BrowserActor` adds heartbeat, generation, encrypted fencing token, local RPC
+  ownership, and structured startup/command diagnostics. One long-lived Node
+  actor retains one Playwright/CDP connection. Stale actors are fenced; actor
+  recovery reconnects to the same session and forces real-cart reconciliation
+  before any failed mutation may be retried.
+- Exact product discovery is public and read-only, with bounded concurrency.
+  Ambiguous or unresolved plans create no automation run and send no cart
+  command. The owner resolves candidates and reviews a frozen exact plan before
+  authenticated mutation begins.
+- Deterministic item work is atomic at the protocol boundary:
+  `prepare_and_verify_item` returns before/after visible-cart evidence. GPT-5.6
+  GA `computer` calls are only a bounded fallback; recorded fixtures cover
+  `previous_response_id`, `computer_call_output`, and ordered multi-action
+  responses, while Laravel rechecks policy and page safety before each action.
+- Feature flags and milestone status remain open. Repository tests cannot prove
+  live Browserbase durability, a real five-plus-item cart, normal Woolworths
+  app/site visibility, retailer tolerance, operating cost, or privacy review.
 
 ## M7 — Native voice experience
 

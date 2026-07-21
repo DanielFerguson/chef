@@ -23,9 +23,10 @@ retry state keeps manual ingredient entry out of the normal path. M5 adds a
 Today surface, focused step-by-step cooking with durable progress and timers,
 meal outcomes, person-specific feedback, and inspectable preference candidates
 that can never become safety rules. The first M6 Woolworths cart-preparation
-slice is now implemented behind disabled release flags. It includes an explicit
-product-and-safety preflight, exact Woolworths product approval when household
-constraints apply, a dedicated automation queue, and immutable cart evidence
+slice is now implemented behind disabled release flags. It includes read-only
+product discovery and an exact reviewed product plan before authentication,
+one persistent fenced browser actor per keep-alive session, a dedicated
+automation queue, GPT-5.6 GA computer-use fallback, and immutable cart evidence
 linked into order history. Its authenticated live trial, retailer review, and
 normal-app cart-synchronisation evidence remain open, so M6 is not complete.
 
@@ -42,7 +43,7 @@ The intended stack is:
 - A Chef-owned OpenAI Responses API client for native computer-use agents
 - OpenAI Realtime API for native voice conversation
 - Browserbase Contexts and recording-disabled sessions for the first Woolworths execution slice
-- An in-repo TypeScript/Playwright worker behind a versioned JSON-lines protocol
+- An in-repo persistent TypeScript/Playwright session actor behind a versioned internal RPC protocol
 - A future permissioned Chef Chrome extension behind the same executor contract
 - An MCP server exposing Chef's household, planning, recipe, shopping, and feedback capabilities
 
@@ -412,9 +413,9 @@ Chef should remain one Laravel application rather than prematurely splitting int
 - The OpenAI Responses API provides the primary planning, tool-use, and computer-use agent loop.
 - The OpenAI Realtime API provides low-latency speech through WebRTC; Laravel creates the session or short-lived client credential so a permanent API key is never exposed to the browser.
 - Server-sent events or WebSockets stream assistant and automation progress without making the entire application a detached client-side API product.
-- Browserbase supplies one persistent Context per Woolworths login and recording-disabled human sessions. A verified reauthentication or manual-takeover session is handed directly back to its active cart run so authentication is not exposed to cross-session context-sync or proxy-identity changes; otherwise cart runs use fresh sessions.
-- An in-repo TypeScript worker connects only to a Laravel-supplied CDP URL, executes validated Playwright actions, and returns sanitised observations through `chef.browser.v1` JSON lines.
-- The worker is an executor, not a policy authority: it has no database access and never receives the permanent OpenAI key.
+- Browserbase supplies one persistent Context and at most one active keep-alive session per Woolworths connection. Initial authentication, reauthentication, deterministic preparation, and takeover transfer exclusive control of that same session wherever it remains safe and available.
+- One in-repo TypeScript actor connects once to Laravel's transient CDP URL, retains the Playwright connection, and accepts fenced, bounded commands through `chef.browser.actor.v1` internal RPC.
+- The actor is an executor, not a policy authority: it has no database access and never receives the permanent OpenAI key.
 - A future Chrome extension can implement the same executor boundary for a user-approved local retailer tab.
 - Domain actions should be reusable from HTTP controllers, queued jobs, console commands, and MCP tools.
 
@@ -425,8 +426,8 @@ flowchart LR
     APP --> DB["SQLite"]
     APP --> QUEUE["Laravel queues"]
     QUEUE <--> RESPONSES["OpenAI Responses API"]
-    QUEUE <--> WORKER["TypeScript browser worker"]
-    WORKER <--> BROWSERBASE["Browserbase session + Context"]
+    QUEUE <--> WORKER["Persistent TypeScript session actor"]
+    WORKER <--> BROWSERBASE["One keep-alive session + Context"]
     BROWSERBASE <--> RETAILER["Woolworths account"]
     APP --> MCP["Chef MCP server"]
     MCP <--> HOSTS["ChatGPT and other MCP hosts"]
@@ -450,9 +451,13 @@ for that Woolworths login. Chef stores only the encrypted Context identifier;
 credentials, cookies, CDP URLs, Live View URLs, screenshots, address history,
 and payment data are not stored.
 
-Every cart run opens a fresh session, checks authentication deterministically,
-and obtains an exclusive per-connection lease. Authentication loss stops the
-agent and closes its session before the owner is offered a new Live View. A
+Each connection holds an exclusive lease so no two Browserbase sessions can use
+the same Context concurrently. The first recording-disabled login session is
+retained for the approved run, and one fenced actor keeps its Playwright/CDP
+connection open across bounded commands. Human login or takeover yields
+exclusive control without starting a second session. Actor loss first reconnects
+to the keep-alive session; session loss restores the Context into a new session,
+then authenticates and reconciles the real cart before any mutation. A
 future local Chrome extension can implement the same `ComputerExecutor`
 contract without changing run creation, policy, or reconciliation actions.
 
@@ -460,13 +465,13 @@ contract without changing run creation, policy, or reconciliation actions.
 
 When a household approves a shopping list for cart preparation:
 
-1. Chef shows the exact matches, unmatched search scope, and applicable explicit household safety constraints.
-2. The person approves the product plan and safety context. Automatic search requires separate approval, and is unavailable while strict constraints still have unmatched products.
-3. Chef freezes the shopping-list revision, approval, safety fingerprint, and product scope used by the run.
+1. Chef performs bounded read-only catalogue discovery before opening an authenticated cart run.
+2. Chef shows exact products, genuinely ambiguous or unresolved choices, and applicable explicit household safety constraints. Strict constraints always require an explicit exact product.
+3. The person resolves ambiguity and reviews the exact product plan and safety context; Chef freezes that plan with the shopping-list revision.
 4. Laravel creates a scoped `AutomationRun` and dispatches it to the dedicated `automation` queue.
-5. The Responses API examines the current screenshot and returns structured computer actions.
+5. Deterministic Playwright prepares and visibly verifies each exact product atomically. GPT-5.6 GA computer use is a bounded fallback for unfamiliar UI and returns ordered `actions[]`.
 6. Chef validates the actions against retailer, tab, and risk policy.
-7. The worker executes allowed actions in the Browserbase session and returns a sanitised observation.
+7. The persistent actor executes allowed actions in the Browserbase session and returns a sanitised observation.
 8. The loop continues until the cart is prepared, a decision requires approval, or the run fails safely.
 9. Chef presents products, substitutions, unresolved items, estimated total, and material differences for review.
 10. After human checkout, the reviewed cart snapshot can seed immutable order lines while the person records the actual total.
@@ -490,7 +495,10 @@ Page content, retailer messages, advertisements, and on-screen instructions are 
 
 ### Approval boundaries
 
-Chef may automatically search, compare, and add ordinary products after the person starts a scoped cart-preparation run. It should pause immediately before:
+Chef may search and compare public catalogue products before authentication, but
+the authenticated run starts only from a reviewed exact product plan. It may
+then deterministically add and verify those products, using bounded computer
+use only for unfamiliar UI. It should pause immediately before:
 
 - a material substitution outside the household's stated policy;
 - exceeding the approved budget or tolerance;
@@ -585,7 +593,7 @@ Chef is a monorepo so each client can share one product model without forcing th
 
 ```text
 web/                 Laravel, Inertia, and React application
-web/automation/      TypeScript Browserbase CDP worker
+web/automation/      TypeScript Browserbase session actor and command harness
 docs/                Product, architecture, milestones, and style
 extensions/chrome/   Future permissioned retailer-tab executor
 ios/                 Future native iOS client

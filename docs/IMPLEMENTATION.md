@@ -63,13 +63,14 @@ feedback can never infer an allergy or other safety rule.
 
 M6 now has a Browserbase-first Woolworths implementation behind disabled
 connection and cart-mutation flags. It adds team-scoped retailer connections,
-frozen revision runs, item outcomes, sessions, interventions, audit steps, and
-immutable cart snapshots; a queued Laravel engine; a direct Responses client;
-and an in-repo TypeScript/Playwright executor. Cart creation now requires an
-explicit product-and-safety preflight. Strict household constraints require a
-validated Woolworths product-detail URL for every item and disable
-substitutions; other unmatched items require a separate automatic-search
-approval. Reconciled cart snapshots can seed immutable order lines after the
+frozen revision runs and exact product plans, item outcomes, sessions, fenced
+browser actors, interventions, audit steps, and immutable cart snapshots; a
+queued Laravel engine; a GPT-5.6 GA Responses client; and an in-repo persistent
+TypeScript/Playwright actor. Bounded read-only catalogue discovery is completed
+before an authenticated mutation run exists. Strict household constraints
+require an explicit exact Woolworths product for every item and disable
+substitutions; all other ambiguity also pauses before mutation. Reconciled cart
+snapshots can seed immutable order lines after the
 human completes checkout. Normal tests use provider,
 executor, and Responses fakes. The authorised live Woolworths trial, retailer
 and privacy review, operating-cost evidence, and proof that the resulting cart
@@ -93,7 +94,7 @@ remains open.
 - Laravel broadcasting or server-sent events for streamed progress
 - Laravel MCP for exposing reviewed Chef domain capabilities
 - Browserbase Contexts with recording-disabled human sessions and opt-in local-only agent-session recording for the first Woolworths execution surface
-- An in-repo TypeScript worker using Browserbase/Playwright dependencies behind `chef.browser.v1`
+- An in-repo persistent TypeScript actor using Browserbase/Playwright dependencies behind `chef.browser.actor.v1`
 - A future permissioned Manifest V3 Chrome extension behind `ComputerExecutor`
 
 SQLite must remain supported for personal and local installations. Before public launch, verify the expected concurrency and operational model; a hosted multi-team service will likely use PostgreSQL in production without changing the Eloquent domain model.
@@ -319,13 +320,16 @@ For local diagnosis only, `BROWSERBASE_RECORD_LOCAL_CART_SESSIONS=true` records
 new agent-controlled cart-preparation sessions. The default is false and the
 provider ignores the flag outside the local application environment.
 Browserbase sessions default to a `1024 × 768` viewport to reduce Live View
-rendering and transfer work while retaining Woolworths' desktop layout. The
-same configured dimensions are sent to OpenAI computer use so screenshot
-coordinates and browser actions remain aligned.
-Authentication, inspection, clearing, and item preparation reuse an already
-open protected cart surface instead of reloading Woolworths between adjacent
-worker commands. Optional empty-cart totals use a bounded lookup so the absence
-of a total-specific selector cannot consume the whole worker timeout.
+rendering and transfer work while retaining Woolworths' desktop layout.
+`BrowserActor` stores the encrypted fencing token, generation, heartbeat,
+ownership state, local socket metadata, and redacted timings for the one actor
+that owns a session. The actor receives the CDP URL only in its launch
+environment, connects once, serialises bounded commands, and never stores the
+URL. Authentication, inspection, clearing, and item preparation reuse that
+connection and an already open protected cart surface instead of reconnecting
+or reloading Woolworths between adjacent commands. Optional empty-cart totals
+use a bounded lookup so the absence of a total-specific selector cannot consume
+the whole actor-command timeout.
 The owner-only authentication Live View grants clipboard read/write permission
 to its iframe so the person can paste credentials or MFA values directly. That
 permission is not granted to manual cart takeover or agent-controlled browser
@@ -451,8 +455,8 @@ flowchart LR
     SDK --> RESPONSES["OpenAI Responses API"]
     QUEUE --> CUA["Chef computer-use client"]
     CUA --> RESPONSES
-    CUA <--> WORKER["TypeScript CDP worker"]
-    WORKER <--> BB["Browserbase session + Context"]
+    CUA <--> WORKER["Persistent TypeScript session actor"]
+    WORKER <--> BB["One keep-alive session + Context"]
     BB <--> WOOLIES["Woolworths account"]
     APP <--> MCP["Laravel MCP server"]
 ```
@@ -487,7 +491,7 @@ web/
     └── types/
 docs/
 extensions/chrome/   # added when retailer automation begins
-web/automation/      # Browserbase CDP worker source; built to automation/dist
+web/automation/      # Browserbase session actor and command harness; built to automation/dist
 ios/                 # added when the native client begins
 android/             # added when the native client begins
 marketing/           # Astro public marketing site
@@ -592,18 +596,21 @@ Voice is an input and response mode, not a separate product state. A plan starte
 
 The Laravel AI SDK does not currently expose the complete OpenAI native computer-use protocol. Do not fork the SDK or inject unsupported provider payloads for the first version.
 
-`StartCartPreparation` creates an `AutomationRun` only from the current,
-non-stale revision after the connection owner explicitly reviews the durable
-safety context and proposed product-search scope. Any allergy, medical,
-dietary, or religious constraint blocks automatic product selection until every
-included item has an approved exact retailer product; substitutions are frozen
-off for that run. Other unmatched items require an independent automatic-search
-approval. A unique job on the `automation` queue advances a bounded chunk. The
+`BuildCartProductPlan` performs bounded, read-only catalogue discovery before
+an authenticated mutation run exists. Confident matches and all candidates are
+stored against the current revision; ambiguous or unresolved items keep the
+plan in `needs_review`. Any allergy, medical, dietary, or religious constraint
+blocks automatic selection even when discovery has a high-confidence result.
+The owner must resolve every item and review the exact plan and durable safety
+context. `StartCartPreparation` then atomically freezes that plan and the
+current non-stale revision into the run; substitutions are frozen off when
+strict constraints apply. A unique job on the `automation` queue advances a bounded chunk. The
 local `composer dev` process listens to `default`, `ai`, and `automation`;
 deployments should operate a dedicated `automation` worker so retailer work
 cannot starve ordinary application jobs. A
-Chef-owned `ComputerUseEngine` calls the Responses API directly, handles
-`computer_call` and `computer_call_output`, validates every action twice, and
+Chef-owned `ComputerUseEngine` calls the Responses API directly using
+GPT-5.6 GA with the `computer` tool, handles ordered `computer_call.actions[]`
+and `computer_call_output` continuations, validates every action twice, and
 communicates with the TypeScript `ComputerExecutor`.
 
 ```php
@@ -617,15 +624,15 @@ interface ComputerUseEngine
 CDP lookup, session closure, and Context deletion. `RetailerCartAdapter` owns
 deterministic Woolworths login probes, cart inspection, known controls, and
 reconciliation. `ComputerUseClient` owns only the direct Responses protocol.
-`ComputerExecutor` owns the versioned JSON-lines worker process. A
-human-triggered authentication probe uses a shorter navigation and process
-deadline than queued cart work. Provider or worker timeouts return as a
+`ComputerExecutor` owns the versioned session-actor RPC. A
+human-triggered authentication probe uses a shorter navigation and command
+deadline than queued cart work. Provider or actor-command timeouts return as a
 recoverable in-session retry before the web request deadline rather than
 allowing PHP to terminate the request. These contracts leave Coles and a future
 Chrome extension as later adapters rather than new domain workflows.
 
-The worker connects only to a Laravel-supplied CDP URL, has no Chef database or
-authorisation access, and never receives the OpenAI key. Screenshots remain in
+The actor connects only to a Laravel-supplied transient CDP URL, has no Chef
+database or authorisation access, and never receives the OpenAI key. Screenshots remain in
 memory only until the next Responses call. Laravel owns response continuation
 IDs, run/action limits, state transitions, leases, intervention creation, and
 redacted audit records.
@@ -641,15 +648,20 @@ Required automation properties:
 - reconciliation of intended and actual products;
 - checkout and payment always performed by the person.
 
-Before mutation, every run performs a fresh protected-page authentication
+Each exact item uses one `prepare_and_verify_item` command that captures
+structured before and after cart observations around its deterministic action.
+Click success is never an outcome. Before mutation, every run performs a fresh protected-page authentication
 probe and cart inspection. A non-empty cart always pauses for merge, explicit
 replace, or cancel. Merge retains baseline lines separately; replace alone
-permits known remove controls. Authentication loss closes the agent session and
-preserves verified item outcomes before exposing a new owner-only Live View.
+permits known remove controls. Authentication loss yields the existing
+recording-disabled session to its owner wherever it remains available and
+preserves verified item outcomes.
 If Browserbase reports a deleted Context, Chef clears the encrypted reference,
-marks the connection revoked, and requires a new owner login. A lost session is
-expired with its lease released; the next queue checkpoint opens a fresh
-session and inspects the actual cart before any further mutation. A lost Live
+marks the connection revoked, and requires a new owner login. An actor failure
+is fenced and reconnected to the same keep-alive session; a failed mutating
+command is never replayed until Laravel has reconciled the actual cart. A lost
+session is expired with its lease released; the next checkpoint restores the
+Context into one new session and inspects the actual cart before mutation. A lost Live
 View is returned as expired rather than leaving the owner attached to a dead
 session.
 Every add or quantity action is followed by a remote-cart verification, and
@@ -657,13 +669,12 @@ the full run ends with an immutable reconciliation before the normal
 Woolworths cart link is shown.
 
 `php artisan chef:automation:status` reports whether Browserbase, OpenAI, the
-compiled worker, feature flags, normal-app proof, and queue configuration are
-ready without printing credentials. Initial persistent-login verification
-closes the human session and waits for the configurable Browserbase Context
-sync delay before marking the connection ready. When an active run is already
-waiting for reauthentication, verification instead transfers that same
-recording-disabled session to the run. This avoids a new Browserbase proxy and
-Context-restore boundary after the owner has already proved the protected cart.
+compiled actor, feature flags, normal-app proof, and queue configuration are
+ready without printing credentials. Initial verification changes the same
+recording-disabled login session to cart-preparation ownership so the approved
+run can claim it directly; reauthentication does the same for the active run.
+This avoids a new Browserbase proxy and Context-restore boundary after the owner
+has already proved the protected cart.
 
 The connection owner may also pause an active run and take control through a
 recording-disabled session. If local agent recording is active, Chef closes the
