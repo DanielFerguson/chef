@@ -14,7 +14,9 @@ use App\Actions\Shopping\GenerateShoppingList;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Automation\Contracts\ComputerExecutor;
+use App\Automation\Contracts\RetailerProductDiscovery;
 use App\Automation\Testing\FakeComputerExecutor;
+use App\Automation\Testing\FakeRetailerProductDiscovery;
 use App\Enums\MealSlotKind;
 use App\Enums\MessageResponseStatus;
 use App\Enums\PlannedMealType;
@@ -318,12 +320,13 @@ it('requires explicit product and safety review before preparing a cart', functi
 
     visit(route('meal-plans.shopping.show', $workspace['plan']))
         ->resize(390, 844)
-        ->assertSee('Review the product plan')
-        ->assertSee('2 items need a read-only Woolworths product search before sign-in and cart mutation.')
-        ->assertSee('I reviewed the household safety context and this product plan.')
-        ->assertScript('() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent.includes("Prepare Woolworths cart"))?.disabled', true)
+        ->assertSee('Find matching products')
+        ->assertSee('Chef will search Woolworths for 2 items before opening the authenticated cart.')
+        ->assertDontSee('I reviewed the household safety context and this product plan.')
+        ->assertDontSee('Prepare Woolworths cart')
         ->click('Find Woolworths products')
-        ->assertSee('2 exact · 0 ambiguous · 0 unresolved')
+        ->assertSee('Product plan ready')
+        ->assertSee('2 exact products are ready for your final review.')
         ->click('[data-slot="checkbox"][aria-label="Confirm exact Woolworths product plan review"]')
         ->click('[data-slot="checkbox"][aria-label="Confirm cart product plan safety review"]')
         ->assertScript('() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent.includes("Prepare Woolworths cart"))?.disabled', false)
@@ -331,6 +334,35 @@ it('requires explicit product and safety review before preparing a cart', functi
         ->assertNoJavaScriptErrors();
 
     expect($list->automationRuns)->toHaveCount(0);
+});
+
+it('turns a catalogue outage into one compact retry instead of a manual item list', function () {
+    $workspace = browserShoppingWorkspace();
+    app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    config()->set('automation.connection_enabled', true);
+    config()->set('automation.cart_mutation_enabled', true);
+    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
+    putenv('WOOLWORTHS_CART_MUTATION_ENABLED=true');
+    $session = app(StartRetailerConnection::class)->handle(
+        $workspace['user']->currentTeam,
+        $workspace['user'],
+    );
+    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
+    $discovery = app(RetailerProductDiscovery::class);
+    expect($discovery)->toBeInstanceOf(FakeRetailerProductDiscovery::class);
+    $discovery->fail = true;
+    $this->actingAs($workspace['user']);
+
+    visit(route('meal-plans.shopping.show', $workspace['plan']))
+        ->resize(390, 844)
+        ->click('Find Woolworths products')
+        ->assertSee('Product search needs another try')
+        ->assertSee('You do not need to match every item manually.')
+        ->assertSee('Try product search again')
+        ->assertDontSee('No confident Woolworths candidate was found')
+        ->assertDontSee('Prepare Woolworths cart')
+        ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->assertNoJavaScriptErrors();
 });
 
 it('reviews a non-empty cart decision and reconciled normal-Woolworths handoff', function () {
@@ -454,7 +486,8 @@ it('keeps a failed MFA probe in human control and verifies it before returning t
 
     $page->pressAndWaitFor('I’ve signed in')
         ->assertSee('Woolworths connected')
-        ->assertSee('Prepare Woolworths cart')
+        ->assertSee('Find matching products')
+        ->assertDontSee('Prepare Woolworths cart')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
 });

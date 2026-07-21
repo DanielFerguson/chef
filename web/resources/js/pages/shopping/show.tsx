@@ -1417,6 +1417,29 @@ function CartAutomationRunPanel({
     onResolve: (choice: AutomationResolutionChoice) => void;
     onTakeover: () => void;
 }) {
+    if (runTerminal && run.status !== 'ready_for_review') {
+        return (
+            <details className="mt-5 rounded-xl border bg-background p-4">
+                <summary className="cursor-pointer list-none text-sm font-medium capitalize">
+                    Previous cart attempt: {automationStatusLabel(run.status)}
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        {run.progress.resolved} of {run.progress.total} items
+                    </span>
+                </summary>
+                <p className="mt-2 text-xs text-muted-foreground">
+                    Frozen at shopping-list revision{' '}
+                    {run.shopping_list_revision}. This history does not block a
+                    new product plan.
+                </p>
+                {run.failure_message && (
+                    <p className="mt-2 text-xs text-destructive">
+                        {run.failure_message}
+                    </p>
+                )}
+            </details>
+        );
+    }
+
     return (
         <div className="mt-5 rounded-xl border bg-background p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1498,20 +1521,25 @@ function CartAutomationRunPanel({
                 </p>
             )}
 
-            {run.items.length > 0 && (
-                <ul className="mt-4 divide-y text-xs">
-                    {run.items.map((item) => (
-                        <li
-                            key={item.id}
-                            className="flex items-center justify-between gap-3 py-2"
-                        >
-                            <span>{item.name}</span>
-                            <span className="text-muted-foreground capitalize">
-                                {automationStatusLabel(item.status)}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
+            {run.items.length > 0 && !run.snapshot && (
+                <details className="mt-4 border-t pt-3 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">
+                        View item progress
+                    </summary>
+                    <ul className="mt-2 divide-y">
+                        {run.items.map((item) => (
+                            <li
+                                key={item.id}
+                                className="flex items-center justify-between gap-3 py-2"
+                            >
+                                <span>{item.name}</span>
+                                <span className="text-muted-foreground capitalize">
+                                    {automationStatusLabel(item.status)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </details>
             )}
 
             <CartSnapshotReview run={run} />
@@ -1520,9 +1548,11 @@ function CartAutomationRunPanel({
 }
 
 function ExactProductMatchEditor({
+    focusedItemId,
     shoppingList,
     retailers,
 }: {
+    focusedItemId?: number | null;
     shoppingList: PreparedShoppingList;
     retailers: ShoppingWorkspace['retailers'];
 }) {
@@ -1533,6 +1563,9 @@ function ExactProductMatchEditor({
         (item) =>
             item.included &&
             !item.in_pantry &&
+            (focusedItemId === undefined ||
+                focusedItemId === null ||
+                item.id === focusedItemId) &&
             (!item.product_match?.retail_product.external_id ||
                 !item.product_match.retail_product.product_url),
     );
@@ -1602,20 +1635,26 @@ function ExactProductMatchEditor({
                     );
                 }}
             >
-                <label className="grid gap-1 text-xs">
-                    Shopping item
-                    <select
-                        className="h-9 rounded-md border bg-background px-2"
-                        value={selectedItemId}
-                        onChange={(event) => setItemId(event.target.value)}
-                    >
-                        {unmatchedItems.map((item) => (
-                            <option key={item.id} value={item.id}>
-                                {item.name}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                {unmatchedItems.length > 1 ? (
+                    <label className="grid gap-1 text-xs">
+                        Shopping item
+                        <select
+                            className="h-9 rounded-md border bg-background px-2"
+                            value={selectedItemId}
+                            onChange={(event) => setItemId(event.target.value)}
+                        >
+                            {unmatchedItems.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                    {item.name}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                ) : (
+                    <p className="text-xs font-medium">
+                        {unmatchedItems[0]?.name}
+                    </p>
+                )}
                 <label className="grid gap-1 text-xs">
                     Exact product name
                     <Input
@@ -1745,13 +1784,30 @@ function CartProductPreflight({
     safetyAcknowledged: boolean;
     shoppingList: PreparedShoppingList;
 }) {
+    const pendingItems =
+        productPlan?.items.filter((item) => item.status !== 'exact') ?? [];
+    const currentItem = pendingItems[0] ?? null;
+    const planReady = productPlan?.status === 'ready';
+
     return (
         <div className="mb-5 rounded-xl border bg-muted/30 p-4">
-            <p className="text-sm font-medium">Review the product plan</p>
+            <p className="text-sm font-medium">
+                {!productPlan
+                    ? 'Find matching products'
+                    : productPlan.discovery_failed
+                      ? 'Product search needs another try'
+                      : planReady
+                        ? 'Product plan ready'
+                        : 'Review product choices'}
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {productPlan
-                    ? `${productPlan.exact_items} exact · ${productPlan.ambiguous_items} ambiguous · ${productPlan.unresolved_items} unresolved`
-                    : `${preflight.total_items} items need a read-only Woolworths product search before sign-in and cart mutation.`}
+                {!productPlan
+                    ? `Chef will search Woolworths for ${preflight.total_items} items before opening the authenticated cart.`
+                    : productPlan.discovery_failed
+                      ? 'Woolworths did not return usable catalogue results. No cart changes were attempted.'
+                      : planReady
+                        ? `${productPlan.exact_items} exact products are ready for your final review.`
+                        : `${pendingItems.length} ${pendingItems.length === 1 ? 'choice' : 'choices'} remaining. Review one product at a time.`}
             </p>
             {preflight.constraints.length > 0 && (
                 <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
@@ -1768,17 +1824,16 @@ function CartProductPreflight({
                     </ul>
                 </div>
             )}
-            {(!productPlan || productPlan.status !== 'ready') && (
+            {(!productPlan || productPlan.discovery_failed) && (
                 <div className="mt-3">
                     <Button
                         size="sm"
-                        variant="outline"
                         disabled={processing}
                         onClick={onBuildPlan}
                     >
                         <RefreshCw />
-                        {productPlan
-                            ? 'Refresh product matches'
+                        {productPlan?.discovery_failed
+                            ? 'Try product search again'
                             : 'Find Woolworths products'}
                     </Button>
                     {productPlan?.discovery_failed && (
@@ -1786,69 +1841,83 @@ function CartProductPreflight({
                             className="mt-2 text-xs text-destructive"
                             role="alert"
                         >
-                            Product discovery could not reach Woolworths. No
-                            authenticated cart changes were attempted.
+                            If this keeps failing, leave the cart untouched and
+                            try again later. You do not need to match every item
+                            manually.
                         </p>
                     )}
                 </div>
             )}
-            {productPlan?.items.some((item) => item.status !== 'exact') && (
-                <div className="mt-3 space-y-3">
-                    {productPlan.items.map((item) =>
-                        item.status === 'exact' ? null : (
-                            <div
-                                key={item.id}
-                                className="rounded-lg border bg-background p-3"
-                            >
-                                <p className="text-xs font-medium">
-                                    {item.name}
-                                </p>
-                                {item.candidates.length > 0 ? (
-                                    <div className="mt-2 grid gap-2">
-                                        {item.candidates.map(
-                                            (candidate, index) => (
-                                                <Button
-                                                    key={`${item.id}-${String(candidate.external_id ?? index)}`}
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-auto justify-start text-left whitespace-normal"
-                                                    disabled={processing}
-                                                    onClick={() =>
-                                                        onSelectCandidate(
-                                                            item.id,
-                                                            index,
-                                                        )
-                                                    }
-                                                >
-                                                    {String(
-                                                        candidate.product_name ??
-                                                            'Woolworths product',
-                                                    )}
-                                                    {candidate.current_price !==
-                                                    undefined
-                                                        ? ` · ${formatMoney(Number(candidate.current_price))}`
-                                                        : ''}
-                                                </Button>
-                                            ),
+            {currentItem && !productPlan?.discovery_failed && (
+                <div className="mt-3 rounded-lg border bg-background p-3">
+                    <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                        Next choice · {pendingItems.length} remaining
+                    </p>
+                    <p className="mt-1 text-sm font-medium">
+                        {currentItem.name}
+                    </p>
+                    {currentItem.candidates.length > 0 ? (
+                        <div className="mt-3 grid gap-2">
+                            {currentItem.candidates.map((candidate, index) => (
+                                <Button
+                                    key={`${currentItem.id}-${String(candidate.external_id ?? index)}`}
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-auto justify-start px-3 py-2 text-left whitespace-normal"
+                                    disabled={processing}
+                                    onClick={() =>
+                                        onSelectCandidate(currentItem.id, index)
+                                    }
+                                >
+                                    <span>
+                                        {String(
+                                            candidate.product_name ??
+                                                'Woolworths product',
                                         )}
-                                    </div>
-                                ) : (
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                        No confident Woolworths candidate was
-                                        found. Save an exact match, then refresh
-                                        this plan.
-                                    </p>
-                                )}
-                            </div>
-                        ),
+                                        {candidate.current_price !==
+                                            undefined ||
+                                        candidate.price !== undefined
+                                            ? ` · ${formatMoney(Number(candidate.current_price ?? candidate.price))}`
+                                            : ''}
+                                        {candidate.pack_size
+                                            ? ` · ${String(candidate.pack_size)}`
+                                            : ''}
+                                    </span>
+                                </Button>
+                            ))}
+                        </div>
+                    ) : (
+                        <>
+                            <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                                Chef could not find a safe catalogue match for
+                                this item. Add one exact Woolworths product, or
+                                adjust the shopping item and search again.
+                            </p>
+                            <ExactProductMatchEditor
+                                focusedItemId={
+                                    currentItem.shopping_list_item_id
+                                }
+                                shoppingList={shoppingList}
+                                retailers={retailers}
+                            />
+                        </>
                     )}
-                    <ExactProductMatchEditor
-                        shoppingList={shoppingList}
-                        retailers={retailers}
-                    />
+                    {pendingItems.length > 1 && (
+                        <details className="mt-3 text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">
+                                View the other {pendingItems.length - 1}{' '}
+                                remaining items
+                            </summary>
+                            <ul className="mt-2 columns-1 space-y-1 gap-x-6 sm:columns-2">
+                                {pendingItems.slice(1).map((item) => (
+                                    <li key={item.id}>{item.name}</li>
+                                ))}
+                            </ul>
+                        </details>
+                    )}
                 </div>
             )}
-            {productPlan?.status === 'ready' && (
+            {planReady && productPlan && (
                 <>
                     <label className="mt-3 flex items-start gap-2 text-xs leading-5">
                         <Checkbox
@@ -1879,21 +1948,21 @@ function CartProductPreflight({
                             ))}
                         </ul>
                     </details>
+                    <label className="mt-3 flex items-start gap-2 text-xs leading-5">
+                        <Checkbox
+                            aria-label="Confirm cart product plan safety review"
+                            checked={safetyAcknowledged}
+                            onCheckedChange={(checked) =>
+                                onSafetyAcknowledgedChange(Boolean(checked))
+                            }
+                        />
+                        <span>
+                            I reviewed the household safety context and this
+                            product plan.
+                        </span>
+                    </label>
                 </>
             )}
-            <label className="mt-3 flex items-start gap-2 text-xs leading-5">
-                <Checkbox
-                    aria-label="Confirm cart product plan safety review"
-                    checked={safetyAcknowledged}
-                    onCheckedChange={(checked) =>
-                        onSafetyAcknowledgedChange(Boolean(checked))
-                    }
-                />
-                <span>
-                    I reviewed the household safety context and this product
-                    plan.
-                </span>
-            </label>
         </div>
     );
 }
@@ -2123,23 +2192,24 @@ function CartAutomationSection({
                                     : 'Authentication will be checked again before every run.'}
                             </p>
                         </div>
-                        {(!run || runTerminal) && (
-                            <Button
-                                size="sm"
-                                disabled={
-                                    processing ||
-                                    !automation.ready ||
-                                    !automation.cart_mutation_enabled ||
-                                    automation.product_plan?.status !==
-                                        'ready' ||
-                                    !safetyAcknowledged ||
-                                    !productPlanReviewed
-                                }
-                                onClick={prepare}
-                            >
-                                <ShoppingBasket /> Prepare Woolworths cart
-                            </Button>
-                        )}
+                        {(!run || runTerminal) &&
+                            automation.product_plan?.status === 'ready' && (
+                                <Button
+                                    size="sm"
+                                    disabled={
+                                        processing ||
+                                        !automation.ready ||
+                                        !automation.cart_mutation_enabled ||
+                                        automation.product_plan?.status !==
+                                            'ready' ||
+                                        !safetyAcknowledged ||
+                                        !productPlanReviewed
+                                    }
+                                    onClick={prepare}
+                                >
+                                    <ShoppingBasket /> Prepare Woolworths cart
+                                </Button>
+                            )}
                     </div>
                     {!automation.cart_mutation_enabled && (
                         <p className="mt-3 text-xs text-muted-foreground">

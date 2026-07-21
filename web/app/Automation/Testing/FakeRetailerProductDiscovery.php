@@ -5,12 +5,15 @@ namespace App\Automation\Testing;
 use App\Automation\Contracts\RetailerProductDiscovery;
 use App\Models\Retailer;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class FakeRetailerProductDiscovery implements RetailerProductDiscovery
 {
     public bool $returnAmbiguousCandidates = false;
 
     public bool $returnNoCandidates = false;
+
+    public bool $fail = false;
 
     public int $calls = 0;
 
@@ -20,6 +23,11 @@ class FakeRetailerProductDiscovery implements RetailerProductDiscovery
     public function discover(Retailer $retailer, array $requirements): array
     {
         $this->calls++;
+
+        if ($this->fail) {
+            throw new RuntimeException('Fake catalogue discovery failure.');
+        }
+
         $results = [];
 
         foreach ($requirements as $index => $requirement) {
@@ -44,6 +52,7 @@ class FakeRetailerProductDiscovery implements RetailerProductDiscovery
                 'product_url' => 'https://www.woolworths.com.au/shop/productdetails/'.$externalId,
                 'price' => 3.5,
                 'pack_size' => $requirement['unit'],
+                'pack_count' => 1,
                 'in_stock' => true,
                 'confidence' => 0.99,
                 'source' => 'fake_public_catalogue',
@@ -56,6 +65,7 @@ class FakeRetailerProductDiscovery implements RetailerProductDiscovery
                     'product_url' => 'https://www.woolworths.com.au/shop/productdetails/'.$externalId.'-alt',
                     'price' => 3.75,
                     'pack_size' => $requirement['unit'],
+                    'pack_count' => 1,
                     'in_stock' => true,
                     'confidence' => 0.96,
                     'source' => 'fake_public_catalogue',

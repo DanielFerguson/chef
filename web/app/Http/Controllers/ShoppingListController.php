@@ -208,6 +208,7 @@ class ShoppingListController extends Controller
                             : null,
                         'items' => $cartProductPlan->items->map(fn ($item) => [
                             'id' => $item->id,
+                            'shopping_list_item_id' => $item->shopping_list_item_id,
                             'name' => (string) ($item->requirement_snapshot['name'] ?? 'Shopping item'),
                             'status' => $item->status->value,
                             'decision_reason' => $item->decision_reason,

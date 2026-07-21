@@ -40,7 +40,8 @@ it('discovers bounded Woolworths candidates without opening an authenticated bro
                 'Stockcode' => 123456,
                 'Name' => 'Woolworths Full Cream Milk 2L',
                 'Price' => 4.5,
-                'CupString' => '2L',
+                'PackageSize' => '2L',
+                'CupString' => '$2.25 / 1L',
                 'IsInStock' => true,
             ]],
         ]),
@@ -55,8 +56,70 @@ it('discovers bounded Woolworths candidates without opening an authenticated bro
     expect($results)->toHaveCount(1)
         ->and($results[0][0]['external_id'])->toBe('123456')
         ->and($results[0][0]['product_url'])->toBe('https://www.woolworths.com.au/shop/productdetails/123456')
+        ->and($results[0][0]['pack_size'])->toBe('2L')
+        ->and($results[0][0]['pack_count'])->toBe(1)
         ->and($results[0][0]['source'])->toBe('woolworths_public_catalogue');
     Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->hasHeader('Accept', 'application/json')
+        && $request->hasHeader('User-Agent', 'Chef product-plan discovery'));
+});
+
+it('uses catalogue relevance and computes the packs needed for a confident ingredient match', function () {
+    $retailer = Retailer::query()->firstOrCreate(
+        ['slug' => 'woolworths'],
+        ['name' => 'Woolworths', 'active' => true],
+    );
+    Http::fake([
+        'www.woolworths.com.au/apis/ui/Search/products*' => Http::response([
+            'Products' => [
+                ['Products' => [[
+                    'Stockcode' => 1127633937,
+                    'Name' => "Mr Fothergill's Spinach Seeds",
+                    'Price' => 4.5,
+                    'PackageSize' => '',
+                    'IsAvailable' => true,
+                    'Source' => 'SearchServiceSearchProducts.Promoted',
+                    'IsMarketProduct' => true,
+                ]]],
+                ['Products' => [[
+                    'Stockcode' => 524322,
+                    'Name' => 'Woolworths Baby Leaf Spinach',
+                    'Price' => 3.3,
+                    'PackageSize' => '120g',
+                    'IsAvailable' => true,
+                    'Source' => 'SearchServiceSearchProducts',
+                ]]],
+            ],
+        ]),
+    ]);
+
+    $results = app(WoolworthsCatalogueDiscovery::class)->discover($retailer, [[
+        'name' => 'baby spinach',
+        'quantity' => 180,
+        'unit' => 'g',
+    ]]);
+
+    expect($results[0][0]['product_name'])->toBe('Woolworths Baby Leaf Spinach')
+        ->and($results[0][0]['confidence'])->toBeGreaterThan(0.92)
+        ->and($results[0][0]['pack_size'])->toBe('120g')
+        ->and($results[0][0]['pack_count'])->toBe(2)
+        ->and($results[0])->toHaveCount(1);
+});
+
+it('does not misclassify a rejected Woolworths catalogue request as no candidates', function () {
+    $retailer = Retailer::query()->firstOrCreate(
+        ['slug' => 'woolworths'],
+        ['name' => 'Woolworths', 'active' => true],
+    );
+    Http::fake([
+        'www.woolworths.com.au/apis/ui/Search/products*' => Http::response([], 403),
+    ]);
+
+    expect(fn () => app(WoolworthsCatalogueDiscovery::class)->discover($retailer, [[
+        'name' => 'avocado',
+        'quantity' => 1,
+        'unit' => 'each',
+    ]]))->toThrow(RuntimeException::class, 'did not return a usable response');
 });
 
 /** @return array<string, mixed> */

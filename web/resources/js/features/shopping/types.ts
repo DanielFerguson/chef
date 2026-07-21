@@ -284,6 +284,7 @@ export type CartAutomation = {
         discovery_ms: number | null;
         items: {
             id: number;
+            shopping_list_item_id: number | null;
             name: string;
             status: 'exact' | 'ambiguous' | 'unresolved';
             decision_reason: string | null;
