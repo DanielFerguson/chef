@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\PlannedMealRecipePreparationStatus;
+use App\Actions\Planning\AssessMealPlanReadiness;
+use App\Automation\AutomationRunView;
+use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\ShoppingListItemCategory;
 use App\Models\Budget;
 use App\Models\MealPlan;
+use App\Models\PlannedMeal;
 use App\Models\Retailer;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -22,15 +25,26 @@ class ShoppingListController extends Controller
 
         $plans = $team->mealPlans()
             ->whereNotNull('planning_confirmed_at')
-            ->with('shoppingList:id,meal_plan_id,status,revision,stale_at,updated_at')
+            ->with(['shoppingList' => fn ($query) => $query
+                ->select('id', 'meal_plan_id', 'status', 'revision', 'stale_at', 'updated_at')
+                ->withCount([
+                    'items as remaining_count' => fn ($items) => $items
+                        ->where('included', true)
+                        ->where('in_pantry', false)
+                        ->where('checked', false),
+                ])])
             ->latest('starts_on')
             ->get(['id', 'team_id', 'title', 'starts_on', 'ends_on', 'planning_confirmed_at']);
 
         return Inertia::render('shopping/index', ['plans' => $plans]);
     }
 
-    public function show(Request $request, MealPlan $mealPlan): Response
-    {
+    public function show(
+        Request $request,
+        MealPlan $mealPlan,
+        AutomationRunView $automationRunView,
+        AssessMealPlanReadiness $assessReadiness,
+    ): Response {
         $this->authorize('view', $mealPlan);
         $mealPlan->load([
             'conversations.messages.author:id,name',
@@ -42,7 +56,6 @@ class ShoppingListController extends Controller
             'shoppingList.mealResolutions',
             'shoppingList.orders.retailer',
             'plannedMeals.mealSlot',
-            'plannedMeals.recipePreparation',
             'plannedMeals.recipeVersion:id,team_id,recipe_id,title,servings',
         ]);
         $shoppingList = $mealPlan->shoppingList;
@@ -53,24 +66,26 @@ class ShoppingListController extends Controller
                 && $meal->recipe_version_id === null
                 && ! $resolvedMealIds->contains($meal->id))
             ->values()
-            ->map(fn ($meal) => [
+            ->map(fn (PlannedMeal $meal): array => [
                 'id' => $meal->id,
                 'title' => $meal->title,
                 'date' => $meal->mealSlot->date->toDateString(),
                 'kind' => $meal->mealSlot->kind->value,
-                'preparation_id' => $meal->recipePreparation?->id,
-                'preparation_status' => $meal->recipePreparation?->status->value ?? 'not_started',
-                'failure_message' => $meal->recipePreparation?->failure_message,
+                'preparation_id' => null,
+                'preparation_status' => $mealPlan->recipe_generation_status instanceof MealPlanRecipeGenerationStatus
+                    ? $mealPlan->recipe_generation_status->value
+                    : 'not_started',
+                'failure_message' => $mealPlan->recipe_generation_failure_message,
             ]);
         $cookableMeals = $mealPlan->plannedMeals
             ->filter(fn ($meal) => $meal->getRawOriginal('status') === PlannedMealStatus::Planned->value
                 && in_array($meal->getRawOriginal('type'), [PlannedMealType::Recipe->value, PlannedMealType::Custom->value], true));
         $recipesReady = $cookableMeals->whereNotNull('recipe_version_id')->count();
         $recipesPreparing = $missingMeals->whereIn('preparation_status', [
-            PlannedMealRecipePreparationStatus::Pending->value,
-            PlannedMealRecipePreparationStatus::Processing->value,
+            MealPlanRecipeGenerationStatus::Pending->value,
+            MealPlanRecipeGenerationStatus::Processing->value,
         ])->count();
-        $recipesFailed = $missingMeals->where('preparation_status', PlannedMealRecipePreparationStatus::Failed->value)->count();
+        $recipesFailed = $missingMeals->where('preparation_status', MealPlanRecipeGenerationStatus::Failed->value)->count();
         $householdBudget = $mealPlan->team->budgets()->whereNull('meal_plan_id')->latest()->first();
         $planBudget = Budget::query()->where('team_id', $mealPlan->team_id)->where('meal_plan_id', $mealPlan->id)->first();
         $projectedTotal = $shoppingList?->items
@@ -81,6 +96,33 @@ class ShoppingListController extends Controller
             ->count() ?? 0;
 
         $effectiveBudget = $planBudget !== null ? $planBudget->amount : $householdBudget?->amount;
+        $woolworths = Retailer::query()->where('slug', 'woolworths')->first();
+        $retailerConnection = $woolworths === null
+            ? null
+            : $mealPlan->team->retailerConnections()
+                ->where('retailer_id', $woolworths->id)
+                ->where('owner_user_id', $request->user()->id)
+                ->first();
+        $automationRun = $shoppingList === null || $retailerConnection === null
+            ? null
+            : $shoppingList->automationRuns()
+                ->where('retailer_connection_id', $retailerConnection->id)
+                ->latest()
+                ->first();
+        $cartItemCount = $shoppingList?->items
+            ->filter(fn ($item) => $item->included && ! $item->in_pantry)
+            ->count() ?? 0;
+        $currentShoppingRevision = $shoppingList?->revisions
+            ->firstWhere('revision', $shoppingList->revision);
+        $readiness = $assessReadiness->handle($mealPlan);
+        $cartReadinessReasons = collect([
+            $shoppingList === null ? 'Generate the shopping list first.' : null,
+            $shoppingList !== null && $shoppingList->generation_status->value !== 'ready' ? 'Wait for the shopping list to finish preparing.' : null,
+            $shoppingList !== null && $shoppingList->stale_at !== null ? 'Refresh the shopping list from the current meal plan.' : null,
+            $missingMeals->isNotEmpty() ? 'Resolve every planned meal’s ingredients.' : null,
+            $cartItemCount === 0 ? 'Add at least one included item that is not already in the pantry.' : null,
+            $currentShoppingRevision === null ? 'Save a current shopping-list revision.' : null,
+        ])->filter()->values();
 
         return Inertia::render('shopping/show', [
             'workspace' => [
@@ -91,6 +133,7 @@ class ShoppingListController extends Controller
                     'ends_on' => $mealPlan->ends_on->toDateString(),
                     'revision' => $mealPlan->revision,
                     'planning_confirmed_at' => $mealPlan->planning_confirmed_at?->toIso8601String(),
+                    'safety_review_required' => $readiness['safety_review_required'] || $readiness['ready_for_safety_confirmation'],
                 ],
                 'shopping_list' => $shoppingList,
                 'missing_meals' => $missingMeals,
@@ -121,6 +164,21 @@ class ShoppingListController extends Controller
                     'projected_total' => round($projectedTotal, 2),
                     'unmatched_items' => $unmatchedItems,
                     'currency' => 'AUD',
+                ],
+                'cart_automation' => [
+                    'connection_enabled' => (bool) config('automation.connection_enabled'),
+                    'cart_mutation_enabled' => (bool) config('automation.cart_mutation_enabled'),
+                    'normal_app_sync_proven' => (bool) config('automation.normal_app_sync_proven'),
+                    'ready' => $cartReadinessReasons->isEmpty(),
+                    'readiness_reasons' => $cartReadinessReasons,
+                    'shopping_list_revision_id' => $currentShoppingRevision?->id,
+                    'connection' => $retailerConnection === null ? null : [
+                        'id' => $retailerConnection->id,
+                        'status' => $retailerConnection->status->value,
+                        'owner_user_id' => $retailerConnection->owner_user_id,
+                        'last_verified_at' => $retailerConnection->last_verified_at?->toIso8601String(),
+                    ],
+                    'run' => $automationRun === null ? null : $automationRunView->make($automationRun),
                 ],
             ],
         ]);

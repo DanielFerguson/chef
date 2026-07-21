@@ -35,4 +35,37 @@ return [
         ],
     ],
 
+    'browserbase' => [
+        'api_key' => env('BROWSERBASE_API_KEY'),
+        'project_id' => env('BROWSERBASE_PROJECT_ID'),
+        'base_url' => env('BROWSERBASE_BASE_URL', 'https://api.browserbase.com'),
+        'region' => env('BROWSERBASE_REGION', 'ap-southeast-1'),
+        'proxy_city' => env('BROWSERBASE_PROXY_CITY', 'MELBOURNE'),
+        'proxy_country' => env('BROWSERBASE_PROXY_COUNTRY', 'AU'),
+        'session_timeout' => (int) env('BROWSERBASE_SESSION_TIMEOUT', 900),
+        'viewport_width' => (int) env('BROWSERBASE_VIEWPORT_WIDTH', 1280),
+        'viewport_height' => (int) env('BROWSERBASE_VIEWPORT_HEIGHT', 900),
+    ],
+
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com'),
+        'store' => env('OPENAI_STORE', false),
+        'computer_use_model' => env('OPENAI_COMPUTER_USE_MODEL', 'computer-use-preview'),
+        'computer_tool_type' => env('OPENAI_COMPUTER_TOOL_TYPE', 'computer_use_preview'),
+        'computer_use_timeout' => (int) env('OPENAI_COMPUTER_USE_TIMEOUT', 90),
+    ],
+
+    'chef_automation' => [
+        'node_binary' => env('AUTOMATION_NODE_BINARY', 'node'),
+        'worker_path' => env('AUTOMATION_WORKER_PATH', base_path('automation/dist/worker.js')),
+        'worker_timeout' => (int) env('AUTOMATION_WORKER_TIMEOUT', 45),
+    ],
+
+    'woolworths' => [
+        'login_url' => env('WOOLWORTHS_LOGIN_URL', 'https://www.woolworths.com.au/shop/securelogin'),
+        'cart_url' => env('WOOLWORTHS_CART_URL', 'https://www.woolworths.com.au/shop/checkout/cart'),
+        'open_cart_url' => env('WOOLWORTHS_OPEN_CART_URL', 'https://www.woolworths.com.au/shop/checkout/cart'),
+    ],
+
 ];

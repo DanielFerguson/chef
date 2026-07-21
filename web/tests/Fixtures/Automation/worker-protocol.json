@@ -1,0 +1,162 @@
+{
+    "version": "chef.browser.v1",
+    "cases": [
+        {
+            "name": "authenticated protected cart",
+            "command": "probe_authentication",
+            "response": {
+                "authenticated": true,
+                "reason": "Protected Woolworths cart probe passed.",
+                "bot_detected": false,
+                "sensitive_screen": false
+            }
+        },
+        {
+            "name": "authentication required",
+            "command": "probe_authentication",
+            "response": {
+                "authenticated": false,
+                "reason": "Woolworths requested login.",
+                "bot_detected": false,
+                "sensitive_screen": false
+            }
+        },
+        {
+            "name": "empty cart",
+            "command": "inspect_cart",
+            "response": {
+                "lines": [],
+                "total": 0,
+                "currency": "AUD",
+                "bot_detected": false,
+                "sensitive_screen": false
+            }
+        },
+        {
+            "name": "non-empty cart",
+            "command": "inspect_cart",
+            "response": {
+                "lines": [
+                    {
+                        "external_product_id": "fixture-bread",
+                        "product_name": "Wholemeal bread",
+                        "quantity": 1,
+                        "unit": "loaf",
+                        "unit_price": 4,
+                        "total_price": 4
+                    }
+                ],
+                "total": 4,
+                "currency": "AUD",
+                "bot_detected": false,
+                "sensitive_screen": false
+            }
+        },
+        {
+            "name": "verified item add",
+            "command": "prepare_item",
+            "response": {
+                "status": "matched",
+                "product": {
+                    "external_product_id": "fixture-milk",
+                    "product_name": "Full cream milk",
+                    "quantity": 1,
+                    "unit": "litre",
+                    "unit_price": 3.5,
+                    "total_price": 3.5
+                },
+                "reason": "Product identity and visible cart persistence were verified."
+            }
+        },
+        {
+            "name": "false-positive add click",
+            "command": "prepare_item",
+            "response": {
+                "status": "searching",
+                "reason": "The add click did not produce a verified cart line.",
+                "requires_computer_use": true
+            }
+        },
+        {
+            "name": "duplicate line was not added",
+            "command": "prepare_item",
+            "response": {
+                "status": "searching",
+                "reason": "The verified cart quantity did not increase beyond the pre-existing cart line.",
+                "requires_computer_use": true
+            }
+        },
+        {
+            "name": "quantity increase beyond baseline",
+            "command": "prepare_item",
+            "response": {
+                "status": "matched",
+                "product": {
+                    "external_product_id": "fixture-milk",
+                    "product_name": "Full cream milk",
+                    "quantity": 2,
+                    "unit": "litre",
+                    "unit_price": 3.5,
+                    "total_price": 7
+                },
+                "reason": "The cart quantity increased beyond the pre-existing line."
+            }
+        },
+        {
+            "name": "known modal recovery",
+            "command": "execute_action",
+            "response": {
+                "url": "https://www.woolworths.com.au/shop/search/products?searchTerm=milk",
+                "verified": true,
+                "bot_detected": false,
+                "sensitive_screen": false
+            }
+        },
+        {
+            "name": "bot detection",
+            "command": "capture",
+            "response": {
+                "bot_detected": true,
+                "sensitive_screen": false,
+                "sensitive_field": false
+            }
+        },
+        {
+            "name": "unexpected sensitive screen",
+            "command": "capture",
+            "response": {
+                "bot_detected": false,
+                "sensitive_screen": true,
+                "sensitive_field": true
+            }
+        },
+        {
+            "name": "unavailable item",
+            "command": "prepare_item",
+            "response": {
+                "status": "unavailable",
+                "reason": "No suitable Woolworths product was available."
+            }
+        },
+        {
+            "name": "final reconciliation",
+            "command": "reconcile_cart",
+            "response": {
+                "lines": [
+                    {
+                        "external_product_id": "fixture-milk",
+                        "product_name": "Full cream milk",
+                        "quantity": 1,
+                        "unit": "litre",
+                        "unit_price": 3.5,
+                        "total_price": 3.5
+                    }
+                ],
+                "total": 3.5,
+                "currency": "AUD",
+                "bot_detected": false,
+                "sensitive_screen": false
+            }
+        }
+    ]
+}

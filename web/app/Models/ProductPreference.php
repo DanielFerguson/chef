@@ -7,6 +7,11 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $normalized_item_name
+ * @property bool $accept_substitutes
+ * @property float|null $maximum_price
+ */
 #[Fillable(['team_id', 'identity_key', 'retailer_id', 'ingredient_id', 'normalized_item_name', 'preferred_brand', 'preferred_pack', 'accept_substitutes', 'maximum_price', 'note'])]
 class ProductPreference extends Model
 {

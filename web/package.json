@@ -3,14 +3,16 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
-        "build:ssr": "vite build && vite build --ssr",
+        "build": "npm run automation:build && vite build",
+        "build:ssr": "npm run automation:build && vite build && vite build --ssr",
+        "automation:build": "tsc -p automation/tsconfig.json",
+        "automation:check": "tsc -p automation/tsconfig.json --noEmit",
         "dev": "vite",
-        "format": "prettier --write resources/",
-        "format:check": "prettier --check resources/",
+        "format": "prettier --write resources/ automation/",
+        "format:check": "prettier --check resources/ automation/",
         "lint": "eslint . --fix",
         "lint:check": "eslint .",
-        "types:check": "tsc --noEmit"
+        "types:check": "tsc --noEmit && npm run automation:check"
     },
     "devDependencies": {
         "@eslint/js": "^9.19.0",
@@ -32,6 +34,7 @@
     },
     "dependencies": {
         "@base-ui/react": "^1.6.0",
+        "@browserbasehq/sdk": "^2.16.0",
         "@fontsource-variable/geist": "^5.2.9",
         "@fontsource/newsreader": "^5.2.10",
         "@fontsource/source-sans-3": "^5.2.9",
@@ -62,6 +65,7 @@
         "input-otp": "^1.4.2",
         "laravel-vite-plugin": "^3.0.0",
         "lucide-react": "^0.475.0",
+        "playwright-core": "^1.61.1",
         "radix-ui": "^1.6.2",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",

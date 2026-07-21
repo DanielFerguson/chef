@@ -1,19 +1,27 @@
+import type { RequestPayload } from '@inertiajs/core';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import {
-    ArrowLeft,
     ArrowUp,
     Check,
+    ChevronDown,
     CircleAlert,
     Ellipsis,
+    ExternalLink,
+    Hand,
+    List as ListIcon,
     LoaderCircle,
+    LogIn,
     MessageCircle,
     PackageCheck,
+    Pencil,
     Plus,
     ReceiptText,
     RefreshCw,
     ShoppingBasket,
-    Store,
+    ShieldCheck,
+    Table2,
     Trash2,
+    Unplug,
     Wallet,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -39,10 +47,26 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { AssistantMessage } from '@/features/meal-plans/assistant-message';
 import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
 import type {
-    ProductPreference,
+    AutomationRun,
+    CartAutomation,
+    CartSnapshotLine,
     ShoppingListItem,
     ShoppingListItemCategory,
     ShoppingWorkspace,
@@ -69,37 +93,89 @@ function formatMoney(value: number) {
 function ShoppingConversation({
     conversation,
     planId,
+    shoppingList,
 }: {
     conversation: ShoppingWorkspace['conversation'];
     planId: number;
+    shoppingList: ShoppingWorkspace['shopping_list'];
 }) {
-    const { error, input, messages, sending, sendMessage, setInput } =
-        useChefConversation(conversation);
+    const {
+        error,
+        input,
+        messages,
+        retryMessage,
+        sending,
+        sendMessage,
+        setInput,
+    } = useChefConversation(conversation);
     const latestAssistant = messages.findLast(
         (message) => message.role === 'assistant' && message.content !== '',
     );
+    const [initialAssistantId] = useState(latestAssistant?.id ?? null);
+    const showLatestAssistant = Boolean(
+        latestAssistant &&
+        (latestAssistant.id !== initialAssistantId ||
+            (latestAssistant.created_at &&
+                shoppingList?.generation_completed_at &&
+                new Date(latestAssistant.created_at) >
+                    new Date(shoppingList.generation_completed_at))),
+    );
+    const latestFailedMessage = messages.findLast(
+        (message) =>
+            message.role === 'user' &&
+            message.response_status === 'failed' &&
+            message.client_message_id,
+    );
 
     return (
-        <section className="mt-6 border-y py-4">
-            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="flex items-center gap-2 text-sm font-medium">
-                    <MessageCircle className="size-4 text-primary" /> Continue
-                    with Chef
-                </p>
-                <Button
-                    asChild
-                    size="sm"
-                    variant="ghost"
-                    className="-ml-3 sm:ml-0"
-                >
+        <details className="group border-y py-4">
+            <summary
+                aria-label="Plan recap"
+                className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium [&::-webkit-details-marker]:hidden"
+            >
+                <span className="flex items-center gap-2">
+                    <MessageCircle className="size-4 text-primary" /> Plan recap
+                </span>
+                <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-3 flex justify-end">
+                <Button asChild size="sm" variant="ghost">
                     <Link href={`/meal-plans/${planId}`}>
                         View full conversation
                     </Link>
                 </Button>
             </div>
-            {latestAssistant && (
-                <div className="mt-3 max-w-[48em] text-sm">
+            <p className="mt-3 max-w-[48em] text-sm leading-6 text-muted-foreground">
+                {shoppingList === null
+                    ? 'This plan is confirmed. Prepare the list when you are ready to review ingredients and pantry stock.'
+                    : shoppingList.generation_status !== 'ready'
+                      ? 'Chef is preparing the current plan into one structured shopping list.'
+                      : `${shoppingList.items.filter((item) => item.included && !item.in_pantry).length} items are on the current list, ${shoppingList.items.filter((item) => item.in_pantry).length} are marked as already in the pantry, and ${shoppingList.items.filter((item) => item.included && !item.in_pantry && !item.checked).length} remain to buy.`}
+            </p>
+            {showLatestAssistant && latestAssistant && (
+                <div className="mt-3 max-w-[48em] border-l-2 pl-3 text-sm">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">
+                        Latest shopping update
+                    </p>
                     <AssistantMessage content={latestAssistant.content} />
+                </div>
+            )}
+            {latestFailedMessage && (
+                <div className="mt-3 flex max-w-[48em] items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+                    <p className="text-xs text-destructive" role="status">
+                        {latestFailedMessage.response_error ??
+                            'Chef could not respond to the last shopping message.'}
+                    </p>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Retry failed shopping message"
+                        disabled={sending}
+                        onClick={() => void retryMessage(latestFailedMessage)}
+                    >
+                        <RefreshCw /> Retry
+                    </Button>
                 </div>
             )}
             <form
@@ -145,205 +221,115 @@ function ShoppingConversation({
                     </Button>
                 </div>
             </form>
-        </section>
+        </details>
     );
 }
 
-function ProductMatchForm({
+function updateShoppingItemState(
+    item: ShoppingListItem,
+    revision: number,
+    changes: Record<string, boolean | string>,
+    mergeSafe = false,
+) {
+    router.put(
+        `/shopping-list-items/${item.id}`,
+        {
+            ...changes,
+            ...(mergeSafe ? {} : { expected_revision: revision }),
+        },
+        { preserveScroll: true },
+    );
+}
+
+function shoppingItemSourceMeals(item: ShoppingListItem) {
+    return [
+        ...new Set(
+            item.sources
+                .map((source) => source.planned_meal?.title)
+                .filter((title): title is string => Boolean(title)),
+        ),
+    ];
+}
+
+function ShoppingItemActions({
     item,
     revision,
-    retailers,
-    preference,
+    shoppingCategories,
+    stale,
 }: {
     item: ShoppingListItem;
     revision: number;
-    retailers: { id: number; name: string }[];
-    preference: ProductPreference | null;
+    shoppingCategories: ShoppingWorkspace['shopping_categories'];
+    stale: boolean;
 }) {
-    const [open, setOpen] = useState(false);
-    const form = useForm({
-        retailer_id:
-            item.product_match?.retail_product.retailer.id.toString() ??
-            preference?.retailer_id?.toString() ??
-            retailers[0]?.id.toString() ??
-            '',
-        name: item.product_match?.retail_product.name ?? '',
-        brand:
-            item.product_match?.retail_product.brand ??
-            preference?.preferred_brand ??
-            '',
-        pack_quantity:
-            item.product_match?.retail_product.pack_quantity?.toString() ?? '',
-        pack_unit: item.product_match?.retail_product.pack_unit ?? '',
-        price:
-            item.product_match?.retail_product.current_price?.toString() ?? '',
-        pack_count: item.product_match?.pack_count.toString() ?? '1',
-        preferred: item.product_match?.preferred ?? preference !== null,
-        accept_substitutes: preference?.accept_substitutes ?? true,
-        maximum_price: preference?.maximum_price?.toString() ?? '',
-        note: preference?.note ?? '',
-        expected_revision: revision,
-    });
-
     return (
-        <div className="mt-2 px-1">
-            <button
-                type="button"
-                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                onClick={() => setOpen((value) => !value)}
-            >
-                <Store className="size-3.5" />
-                {item.product_match
-                    ? `${item.product_match.retail_product.retailer.name}: ${item.product_match.retail_product.name} · ${formatMoney(item.product_match.estimated_total)}`
-                    : preference
-                      ? `Match product · prefers ${preference.preferred_brand ?? preference.retailer?.name ?? 'saved choice'}`
-                      : 'Match retailer product'}
-            </button>
-            {open && (
-                <form
-                    className="mt-3 grid gap-2 rounded-lg bg-muted/50 p-3 sm:grid-cols-2"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        form.transform((data) => ({
-                            ...data,
-                            retailer_id: Number(data.retailer_id),
-                            pack_quantity: data.pack_quantity
-                                ? Number(data.pack_quantity)
-                                : null,
-                            price: Number(data.price),
-                            pack_count: Number(data.pack_count),
-                            maximum_price: data.maximum_price
-                                ? Number(data.maximum_price)
-                                : null,
-                            expected_revision: revision,
-                        }));
-                        form.put(
-                            `/shopping-list-items/${item.id}/product-match`,
-                            {
-                                preserveScroll: true,
-                                onSuccess: () => setOpen(false),
-                            },
-                        );
-                    }}
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Actions for ${item.name}`}
+                    disabled={stale}
                 >
-                    <Select
-                        value={form.data.retailer_id}
-                        onValueChange={(value) =>
-                            form.setData('retailer_id', value)
-                        }
-                    >
-                        <SelectTrigger
-                            aria-label={`Retailer for ${item.name}`}
-                            className="w-full"
-                        >
-                            <SelectValue placeholder="Retailer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {retailers.map((retailer) => (
-                                <SelectItem
-                                    key={retailer.id}
-                                    value={retailer.id.toString()}
-                                >
-                                    {retailer.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Input
-                        aria-label={`Product name for ${item.name}`}
-                        placeholder="Product name"
-                        required
-                        value={form.data.name}
-                        onChange={(event) =>
-                            form.setData('name', event.target.value)
-                        }
-                    />
-                    <Input
-                        aria-label={`Brand for ${item.name}`}
-                        placeholder="Brand (optional)"
-                        value={form.data.brand}
-                        onChange={(event) =>
-                            form.setData('brand', event.target.value)
-                        }
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                        <Input
-                            aria-label={`Pack quantity for ${item.name}`}
-                            placeholder="Pack qty"
-                            type="number"
-                            min="0"
-                            step="any"
-                            value={form.data.pack_quantity}
-                            onChange={(event) =>
-                                form.setData(
-                                    'pack_quantity',
-                                    event.target.value,
-                                )
-                            }
-                        />
-                        <Input
-                            aria-label={`Pack unit for ${item.name}`}
-                            placeholder="Pack unit"
-                            value={form.data.pack_unit}
-                            onChange={(event) =>
-                                form.setData('pack_unit', event.target.value)
-                            }
-                        />
-                    </div>
-                    <Input
-                        aria-label={`Unit price for ${item.name}`}
-                        placeholder="Unit price"
-                        required
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={form.data.price}
-                        onChange={(event) =>
-                            form.setData('price', event.target.value)
-                        }
-                    />
-                    <Input
-                        aria-label={`Pack count for ${item.name}`}
-                        placeholder="Packs"
-                        required
-                        type="number"
-                        min="1"
-                        value={form.data.pack_count}
-                        onChange={(event) =>
-                            form.setData('pack_count', event.target.value)
-                        }
-                    />
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Checkbox
-                            checked={form.data.preferred}
-                            onCheckedChange={(checked) =>
-                                form.setData('preferred', Boolean(checked))
-                            }
-                        />
-                        Remember this product preference
-                    </label>
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Checkbox
-                            checked={form.data.accept_substitutes}
-                            onCheckedChange={(checked) =>
-                                form.setData(
-                                    'accept_substitutes',
-                                    Boolean(checked),
-                                )
-                            }
-                        />
-                        Accept substitutes
-                    </label>
-                    <Button
-                        size="sm"
-                        className="sm:col-span-2"
-                        disabled={form.processing}
-                    >
-                        Save product match
-                    </Button>
-                </form>
-            )}
-        </div>
+                    <Ellipsis />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                    onSelect={() =>
+                        updateShoppingItemState(item, revision, {
+                            in_pantry: !item.in_pantry,
+                        })
+                    }
+                >
+                    <PackageCheck />
+                    {item.in_pantry ? 'Move back to list' : 'Already in pantry'}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onSelect={() =>
+                        updateShoppingItemState(item, revision, {
+                            included: !item.included,
+                        })
+                    }
+                >
+                    {item.included ? 'Exclude item' : 'Include item'}
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Move to</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        {shoppingCategories.map((category) => (
+                            <DropdownMenuItem
+                                key={category.value}
+                                onSelect={() =>
+                                    updateShoppingItemState(item, revision, {
+                                        category: category.value,
+                                    })
+                                }
+                            >
+                                <span className="w-4">
+                                    {item.category === category.value && (
+                                        <Check />
+                                    )}
+                                </span>
+                                {category.label}
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() =>
+                        router.delete(`/shopping-list-items/${item.id}`, {
+                            data: { expected_revision: revision },
+                            preserveScroll: true,
+                        })
+                    }
+                >
+                    <Trash2 /> Remove
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }
 
@@ -352,16 +338,15 @@ function ShoppingItemRow({
     revision,
     stale,
     shoppingCategories,
-    retailers,
-    preference,
+    pantryReview,
 }: {
     item: ShoppingListItem;
     revision: number;
     stale: boolean;
     shoppingCategories: ShoppingWorkspace['shopping_categories'];
-    retailers: { id: number; name: string }[];
-    preference: ProductPreference | null;
+    pantryReview: boolean;
 }) {
+    const [editing, setEditing] = useState(false);
     const form = useForm<{
         name: string;
         quantity: string | number | null;
@@ -375,28 +360,7 @@ function ShoppingItemRow({
         note: item.note ?? '',
         expected_revision: revision,
     });
-    const updateState = (
-        changes: Record<string, boolean | string>,
-        mergeSafe = false,
-    ) => {
-        router.put(
-            `/shopping-list-items/${item.id}`,
-            {
-                ...changes,
-                ...(mergeSafe ? {} : { expected_revision: revision }),
-            },
-            {
-                preserveScroll: true,
-            },
-        );
-    };
-    const sourceMeals = [
-        ...new Set(
-            item.sources
-                .map((source) => source.planned_meal?.title)
-                .filter((title): title is string => Boolean(title)),
-        ),
-    ];
+    const sourceMeals = shoppingItemSourceMeals(item);
     const submitItem = (event: FormEvent) => {
         event.preventDefault();
         form.transform((data) => ({
@@ -421,159 +385,236 @@ function ShoppingItemRow({
                 checked={item.checked}
                 disabled={stale || !item.included || item.in_pantry}
                 onCheckedChange={(checked) =>
-                    updateState({ checked: Boolean(checked) }, true)
+                    updateShoppingItemState(
+                        item,
+                        revision,
+                        { checked: Boolean(checked) },
+                        true,
+                    )
                 }
             />
-            <div className="min-w-0">
-                <form onSubmit={submitItem}>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(10rem,1fr)_6rem_5rem]">
-                        <Input
-                            aria-label={`${item.name} name`}
-                            value={form.data.name}
-                            disabled={stale}
-                            onChange={(event) =>
-                                form.setData('name', event.target.value)
-                            }
-                            className={`h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input ${item.checked ? 'line-through' : ''}`}
-                        />
-                        <Input
-                            aria-label={`${item.name} quantity`}
-                            value={form.data.quantity ?? ''}
-                            disabled={stale}
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="Qty"
-                            onChange={(event) =>
-                                form.setData('quantity', event.target.value)
-                            }
-                            className="h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input"
-                        />
-                        <Input
-                            aria-label={`${item.name} unit`}
-                            value={form.data.unit}
-                            disabled={stale}
-                            placeholder="Unit"
-                            onChange={(event) =>
-                                form.setData('unit', event.target.value)
-                            }
-                            className="h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input"
-                        />
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
-                        {sourceMeals.length > 0 && (
-                            <span>For {sourceMeals.join(', ')}</span>
-                        )}
-                        {item.source_kind !== 'recipe' && (
-                            <span>
-                                {item.source_kind === 'staple'
-                                    ? 'Household staple'
-                                    : 'Added manually'}
-                            </span>
-                        )}
-                        {item.optional && <span>Optional</span>}
-                        {item.in_pantry && <span>Already in pantry</span>}
-                        {!item.included && <span>Excluded</span>}
-                    </div>
-                    <div className="mt-1 flex items-center gap-2">
-                        <Input
-                            aria-label={`${item.name} note`}
-                            value={form.data.note}
-                            disabled={stale}
-                            placeholder="Add a note"
-                            onChange={(event) =>
-                                form.setData('note', event.target.value)
-                            }
-                            className="h-8 border-transparent bg-transparent px-1 text-xs shadow-none hover:border-input focus-visible:border-input"
-                        />
-                        {form.isDirty && (
+            <div className="min-w-0 py-1">
+                {editing ? (
+                    <form onSubmit={submitItem}>
+                        <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.5rem] gap-2">
+                            <Input
+                                aria-label={`${item.name} name`}
+                                value={form.data.name}
+                                disabled={stale}
+                                onChange={(event) =>
+                                    form.setData('name', event.target.value)
+                                }
+                                className={`h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input ${item.checked ? 'line-through' : ''}`}
+                            />
+                            <Input
+                                aria-label={`${item.name} quantity`}
+                                value={form.data.quantity ?? ''}
+                                disabled={stale}
+                                type="number"
+                                min="0"
+                                step="any"
+                                placeholder="Qty"
+                                onChange={(event) =>
+                                    form.setData('quantity', event.target.value)
+                                }
+                                className="h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input"
+                            />
+                            <Input
+                                aria-label={`${item.name} unit`}
+                                value={form.data.unit}
+                                disabled={stale}
+                                placeholder="Unit"
+                                onChange={(event) =>
+                                    form.setData('unit', event.target.value)
+                                }
+                                className="h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input"
+                            />
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-muted-foreground">
+                            {sourceMeals.length > 0 && (
+                                <span>For {sourceMeals.join(', ')}</span>
+                            )}
+                            {!['recipe', 'plan_generated'].includes(
+                                item.source_kind,
+                            ) && (
+                                <span>
+                                    {item.source_kind === 'staple'
+                                        ? 'Household staple'
+                                        : 'Added manually'}
+                                </span>
+                            )}
+                            {item.optional && <span>Optional</span>}
+                            {item.in_pantry && <span>Already in pantry</span>}
+                            {!item.included && <span>Excluded</span>}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                            <Input
+                                aria-label={`${item.name} note`}
+                                value={form.data.note}
+                                disabled={stale}
+                                placeholder="Add a note"
+                                onChange={(event) =>
+                                    form.setData('note', event.target.value)
+                                }
+                                className="h-8 border-transparent bg-transparent px-1 text-xs shadow-none hover:border-input focus-visible:border-input"
+                            />
+                            {form.isDirty && (
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={form.processing || stale}
+                                >
+                                    Save
+                                </Button>
+                            )}
                             <Button
-                                type="submit"
+                                type="button"
                                 size="sm"
                                 variant="ghost"
-                                disabled={form.processing || stale}
+                                onClick={() => setEditing(false)}
                             >
-                                Save
+                                Done
+                            </Button>
+                        </div>
+                    </form>
+                ) : (
+                    <div>
+                        <div className="flex items-baseline justify-between gap-3">
+                            <p
+                                className={`min-w-0 truncate text-sm font-medium ${item.checked ? 'line-through' : ''}`}
+                            >
+                                {item.name}
+                            </p>
+                            <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+                                {[item.quantity, item.unit]
+                                    .filter(
+                                        (value) =>
+                                            value !== null && value !== '',
+                                    )
+                                    .join(' ') || '—'}
+                            </span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                            {sourceMeals.length > 0 && (
+                                <span>For {sourceMeals.join(', ')}</span>
+                            )}
+                            {item.note && <span>{item.note}</span>}
+                            {item.in_pantry && <span>Already in pantry</span>}
+                            {!item.included && <span>Excluded</span>}
+                        </div>
+                        {pantryReview && (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="mt-2 min-h-9"
+                                disabled={stale}
+                                onClick={() =>
+                                    updateShoppingItemState(item, revision, {
+                                        in_pantry: true,
+                                    })
+                                }
+                            >
+                                <PackageCheck /> I have this
                             </Button>
                         )}
                     </div>
-                </form>
-                {!stale && item.included && !item.in_pantry && (
-                    <ProductMatchForm
-                        item={item}
-                        revision={revision}
-                        retailers={retailers}
-                        preference={preference}
-                    />
                 )}
             </div>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={`Actions for ${item.name}`}
-                        disabled={stale}
-                        className="mt-1"
-                    >
-                        <Ellipsis />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                        onSelect={() =>
-                            updateState({ in_pantry: !item.in_pantry })
-                        }
-                    >
-                        <PackageCheck />
-                        {item.in_pantry
-                            ? 'Move back to list'
-                            : 'Already in pantry'}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onSelect={() =>
-                            updateState({ included: !item.included })
-                        }
-                    >
-                        {item.included ? 'Exclude item' : 'Include item'}
-                    </DropdownMenuItem>
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>Move to</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            {shoppingCategories.map((category) => (
-                                <DropdownMenuItem
-                                    key={category.value}
-                                    onSelect={() =>
-                                        updateState({
-                                            category: category.value,
-                                        })
-                                    }
-                                >
-                                    <span className="w-4">
-                                        {item.category === category.value && (
-                                            <Check />
-                                        )}
-                                    </span>
-                                    {category.label}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() =>
-                            router.delete(`/shopping-list-items/${item.id}`, {
-                                data: { expected_revision: revision },
-                                preserveScroll: true,
-                            })
-                        }
-                    >
-                        <Trash2 /> Remove
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center">
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Edit ${item.name}`}
+                    disabled={stale}
+                    onClick={() => setEditing((value) => !value)}
+                >
+                    <Pencil />
+                </Button>
+                <ShoppingItemActions
+                    item={item}
+                    revision={revision}
+                    shoppingCategories={shoppingCategories}
+                    stale={stale}
+                />
+            </div>
         </div>
+    );
+}
+
+function ShoppingItemTableRow({
+    item,
+    revision,
+    shoppingCategories,
+    stale,
+}: {
+    item: ShoppingListItem;
+    revision: number;
+    shoppingCategories: ShoppingWorkspace['shopping_categories'];
+    stale: boolean;
+}) {
+    const sourceMeals = shoppingItemSourceMeals(item);
+    const stateLabels = [
+        item.in_pantry ? 'Pantry' : null,
+        !item.included ? 'Excluded' : null,
+        item.optional ? 'Optional' : null,
+    ].filter((label): label is string => label !== null);
+
+    return (
+        <TableRow
+            className={!item.included || item.in_pantry ? 'opacity-60' : ''}
+        >
+            <TableCell className="w-12 min-w-12 p-1">
+                <input
+                    type="checkbox"
+                    data-testid="shopping-item-checkbox"
+                    className="m-2 size-5 min-h-5 min-w-5 shrink-0 accent-primary"
+                    style={{ width: 20, minWidth: 20, height: 20 }}
+                    aria-label={`Mark ${item.name} as ${item.checked ? 'not bought' : 'bought'}`}
+                    checked={item.checked}
+                    disabled={stale || !item.included || item.in_pantry}
+                    onChange={(event) =>
+                        updateShoppingItemState(
+                            item,
+                            revision,
+                            { checked: event.currentTarget.checked },
+                            true,
+                        )
+                    }
+                />
+            </TableCell>
+            <TableCell className="w-[30%] py-2 whitespace-normal">
+                <p
+                    className={`font-medium ${item.checked ? 'line-through' : ''}`}
+                >
+                    {item.name}
+                </p>
+                {(item.note || stateLabels.length > 0) && (
+                    <p className="mt-0.5 text-xs break-words text-muted-foreground">
+                        {[item.note, ...stateLabels]
+                            .filter(Boolean)
+                            .join(' · ')}
+                    </p>
+                )}
+            </TableCell>
+            <TableCell className="w-20 py-2 text-right tabular-nums">
+                {item.quantity ?? '—'}
+            </TableCell>
+            <TableCell className="w-24 py-2">{item.unit ?? '—'}</TableCell>
+            <TableCell className="w-[38%] py-2 text-xs whitespace-normal text-muted-foreground">
+                {sourceMeals.length > 0 ? sourceMeals.join(', ') : '—'}
+            </TableCell>
+            <TableCell className="w-12 px-1 py-1 text-right">
+                <ShoppingItemActions
+                    item={item}
+                    revision={revision}
+                    shoppingCategories={shoppingCategories}
+                    stale={stale}
+                />
+            </TableCell>
+        </TableRow>
     );
 }
 
@@ -650,6 +691,229 @@ function AddItemForm({
                 Household staple
             </label>
         </form>
+    );
+}
+
+function ShoppingItemsSection({
+    included,
+    shoppingCategories,
+    shoppingList,
+}: {
+    included: number;
+    shoppingCategories: ShoppingWorkspace['shopping_categories'];
+    shoppingList: PreparedShoppingList;
+}) {
+    const [itemsView, setItemsView] = useState<ShoppingItemsView>(
+        initialShoppingItemsView,
+    );
+    const [pantryReview, setPantryReview] = useState(false);
+    const pantryCandidates = shoppingList.items.filter(
+        (item) =>
+            item.category === 'pantry' && item.included && !item.in_pantry,
+    );
+    const visibleItems = pantryReview ? pantryCandidates : shoppingList.items;
+    const groupedItems: {
+        value: ShoppingListItemCategory;
+        label: string;
+        items: ShoppingListItem[];
+    }[] = [];
+
+    for (const category of shoppingCategories) {
+        const items = visibleItems.filter(
+            (item) => item.category === category.value,
+        );
+
+        if (items.length > 0) {
+            groupedItems.push({ ...category, items });
+        }
+    }
+
+    const changeItemsView = (value: string) => {
+        if (value !== 'list' && value !== 'table') {
+            return;
+        }
+
+        setItemsView(value);
+
+        try {
+            window.localStorage.setItem(shoppingItemsViewStorageKey, value);
+        } catch {
+            // The selected view still applies for this visit.
+        }
+    };
+
+    return (
+        <section className="mt-8">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 className="font-medium">Items</h2>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {included} included
+                    </p>
+                </div>
+                <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    size="sm"
+                    value={itemsView}
+                    onValueChange={changeItemsView}
+                    aria-label="Shopping items view"
+                >
+                    <ToggleGroupItem
+                        value="table"
+                        aria-label="Table view"
+                        className="px-2.5"
+                    >
+                        <Table2 /> Table
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                        value="list"
+                        aria-label="List view"
+                        className="px-2.5"
+                    >
+                        <ListIcon /> List
+                    </ToggleGroupItem>
+                </ToggleGroup>
+            </div>
+            {pantryCandidates.length > 0 && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-3">
+                    <div>
+                        <p className="text-sm font-medium">Pantry review</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            Check {pantryCandidates.length}{' '}
+                            {pantryCandidates.length === 1
+                                ? 'staple'
+                                : 'staples'}{' '}
+                            before shopping.
+                        </p>
+                    </div>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={pantryReview ? 'secondary' : 'outline'}
+                        onClick={() => {
+                            setPantryReview((value) => !value);
+                            setItemsView('list');
+                        }}
+                    >
+                        <PackageCheck />
+                        {pantryReview ? 'Show all items' : 'Review pantry'}
+                    </Button>
+                </div>
+            )}
+            {itemsView === 'list' && (
+                <div className="mt-5 space-y-7">
+                    {groupedItems.map((category) => (
+                        <section
+                            key={category.value}
+                            aria-labelledby={`shopping-category-${category.value}`}
+                        >
+                            <div className="flex items-baseline justify-between gap-3 px-1">
+                                <h3
+                                    id={`shopping-category-${category.value}`}
+                                    className="text-sm font-medium"
+                                >
+                                    {category.label}
+                                </h3>
+                                <span className="text-xs text-muted-foreground">
+                                    {category.items.length}{' '}
+                                    {category.items.length === 1
+                                        ? 'item'
+                                        : 'items'}
+                                </span>
+                            </div>
+                            <div className="mt-2 divide-y border-y">
+                                {category.items.map((item) => (
+                                    <ShoppingItemRow
+                                        key={item.id}
+                                        item={item}
+                                        revision={shoppingList.revision}
+                                        stale={shoppingList.stale_at !== null}
+                                        shoppingCategories={shoppingCategories}
+                                        pantryReview={pantryReview}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ))}
+                </div>
+            )}
+            {itemsView === 'table' && shoppingList.items.length > 0 && (
+                <div className="mt-5 overflow-x-auto border-y">
+                    <Table className="min-w-[44rem] table-fixed">
+                        <colgroup>
+                            <col className="w-12" />
+                            <col className="w-[30%]" />
+                            <col className="w-20" />
+                            <col className="w-24" />
+                            <col />
+                            <col className="w-14" />
+                        </colgroup>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-10">
+                                    <span className="sr-only">Bought</span>
+                                </TableHead>
+                                <TableHead className="w-[30%]">Item</TableHead>
+                                <TableHead className="text-right">
+                                    Qty
+                                </TableHead>
+                                <TableHead>Unit</TableHead>
+                                <TableHead className="w-[38%]">
+                                    Used for
+                                </TableHead>
+                                <TableHead>
+                                    <span className="sr-only">Actions</span>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        {groupedItems.map((category) => (
+                            <TableBody key={category.value}>
+                                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                                    <TableCell
+                                        colSpan={6}
+                                        className="px-2 py-2"
+                                    >
+                                        <div className="flex items-baseline justify-between gap-3">
+                                            <span className="font-medium">
+                                                {category.label}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {category.items.length}{' '}
+                                                {category.items.length === 1
+                                                    ? 'item'
+                                                    : 'items'}
+                                            </span>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                                {category.items.map((item) => (
+                                    <ShoppingItemTableRow
+                                        key={item.id}
+                                        item={item}
+                                        revision={shoppingList.revision}
+                                        stale={shoppingList.stale_at !== null}
+                                        shoppingCategories={shoppingCategories}
+                                    />
+                                ))}
+                            </TableBody>
+                        ))}
+                    </Table>
+                </div>
+            )}
+            {shoppingList.items.length === 0 && (
+                <p className="mt-5 px-1 py-8 text-sm text-muted-foreground">
+                    This plan does not need any groceries yet. Add a household
+                    item or return to the plan to review its meals.
+                </p>
+            )}
+            {!shoppingList.stale_at && (
+                <AddItemForm
+                    listId={shoppingList.id}
+                    revision={shoppingList.revision}
+                />
+            )}
+        </section>
     );
 }
 
@@ -900,8 +1164,630 @@ function OrderRecorder({
     );
 }
 
+const activeAutomationStatuses = new Set([
+    'checking_connection',
+    'inspecting_existing_cart',
+    'queued',
+    'running',
+    'reconciling',
+]);
+const terminalAutomationStatuses = new Set([
+    'ready_for_review',
+    'superseded',
+    'cancelled',
+    'failed',
+    'expired',
+]);
+
+function automationStatusLabel(status: string) {
+    return status.replaceAll('_', ' ');
+}
+
+function snapshotLineLabel(line: CartSnapshotLine) {
+    return line.classification.replaceAll('_', ' ');
+}
+
+type AutomationResolutionChoice =
+    | 'merge'
+    | 'replace'
+    | 'cancel'
+    | 'retry'
+    | 'skip'
+    | 'accept_substitution'
+    | 'accept_product';
+
+function AutomationInterventionCard({
+    intervention,
+    processing,
+    onReauthenticate,
+    onResolve,
+}: {
+    intervention: NonNullable<AutomationRun['intervention']>;
+    processing: boolean;
+    onReauthenticate: () => void;
+    onResolve: (choice: AutomationResolutionChoice) => void;
+}) {
+    return (
+        <div className="mt-4 rounded-lg bg-muted/50 p-3">
+            <p className="text-sm font-medium">
+                {intervention.payload?.message ??
+                    'Chef needs a decision before continuing.'}
+            </p>
+            {intervention.type === 'existing_cart' &&
+                intervention.payload?.lines && (
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        {intervention.payload.lines.map((line) => (
+                            <li
+                                key={
+                                    line.external_product_id ??
+                                    `${line.product_name}-${line.unit ?? ''}`
+                                }
+                            >
+                                {line.product_name}
+                                {line.quantity ? ` × ${line.quantity}` : ''}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            <div className="mt-3 flex flex-wrap gap-2">
+                {(intervention.type === 'existing_cart' ||
+                    (intervention.type === 'cart_changed' &&
+                        intervention.automation_run_item_id === null)) && (
+                    <>
+                        <Button
+                            size="sm"
+                            disabled={processing}
+                            onClick={() => onResolve('merge')}
+                        >
+                            Merge carts
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={processing}
+                            onClick={() => onResolve('replace')}
+                        >
+                            Replace existing cart
+                        </Button>
+                    </>
+                )}
+                {intervention.type === 'reauthentication' && (
+                    <Button
+                        size="sm"
+                        disabled={processing}
+                        onClick={onReauthenticate}
+                    >
+                        <LogIn /> Reauthenticate
+                    </Button>
+                )}
+                {intervention.type === 'manual_takeover' &&
+                    intervention.takeover_url && (
+                        <Button asChild size="sm">
+                            <Link href={intervention.takeover_url}>
+                                <Hand /> Continue manual control
+                            </Link>
+                        </Button>
+                    )}
+                {[
+                    'item_decision',
+                    'price_limit',
+                    'substitution',
+                    'cart_changed',
+                ].includes(intervention.type) &&
+                    intervention.automation_run_item_id !== null && (
+                        <>
+                            {intervention.type === 'price_limit' && (
+                                <Button
+                                    size="sm"
+                                    disabled={processing}
+                                    onClick={() => onResolve('accept_product')}
+                                >
+                                    Accept price
+                                </Button>
+                            )}
+                            {intervention.type === 'substitution' && (
+                                <Button
+                                    size="sm"
+                                    disabled={processing}
+                                    onClick={() =>
+                                        onResolve('accept_substitution')
+                                    }
+                                >
+                                    Accept substitution
+                                </Button>
+                            )}
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={processing}
+                                onClick={() => onResolve('retry')}
+                            >
+                                Retry item
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={processing}
+                                onClick={() => onResolve('skip')}
+                            >
+                                Skip item
+                            </Button>
+                        </>
+                    )}
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={processing}
+                    onClick={() => onResolve('cancel')}
+                >
+                    Cancel run
+                </Button>
+            </div>
+        </div>
+    );
+}
+
+function CartSnapshotReview({ run }: { run: AutomationRun }) {
+    if (!run.snapshot) {
+        return null;
+    }
+
+    return (
+        <div className="mt-5 border-t pt-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <p className="text-sm font-medium">Verified cart review</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Chef items{' '}
+                        {formatMoney(Number(run.snapshot.chef_subtotal ?? 0))} ·
+                        whole cart{' '}
+                        {formatMoney(Number(run.snapshot.cart_total ?? 0))}
+                    </p>
+                </div>
+                {run.can_open_woolworths_cart &&
+                    run.open_woolworths_cart_url && (
+                        <Button asChild size="sm">
+                            <a
+                                href={run.open_woolworths_cart_url}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                Open Woolworths cart <ExternalLink />
+                            </a>
+                        </Button>
+                    )}
+            </div>
+            <ul className="mt-3 divide-y text-xs">
+                {run.snapshot.lines.map((line) => (
+                    <li
+                        key={line.id}
+                        className="flex items-start justify-between gap-3 py-2"
+                    >
+                        <span>{line.product_name}</span>
+                        <span className="text-right text-muted-foreground capitalize">
+                            {snapshotLineLabel(line)}
+                            {line.total_price !== null
+                                ? ` · ${formatMoney(Number(line.total_price))}`
+                                : ''}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+            {!run.normal_app_sync_proven && (
+                <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                    The normal-app cart synchronisation release trial is not yet
+                    recorded as proven. Do not treat this run as M6 release
+                    evidence.
+                </p>
+            )}
+        </div>
+    );
+}
+
+function CartAutomationRunPanel({
+    intervention,
+    processing,
+    run,
+    runTerminal,
+    onCancel,
+    onReauthenticate,
+    onResolve,
+    onTakeover,
+}: {
+    intervention: AutomationRun['intervention'] | undefined;
+    processing: boolean;
+    run: AutomationRun;
+    runTerminal: boolean;
+    onCancel: () => void;
+    onReauthenticate: () => void;
+    onResolve: (choice: AutomationResolutionChoice) => void;
+    onTakeover: () => void;
+}) {
+    return (
+        <div className="mt-5 rounded-xl border bg-background p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium capitalize">
+                            {automationStatusLabel(run.status)}
+                        </p>
+                        <Badge variant="secondary">
+                            {run.progress.resolved} of {run.progress.total}{' '}
+                            items
+                        </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Frozen at shopping-list revision{' '}
+                        {run.shopping_list_revision}
+                    </p>
+                </div>
+                {!runTerminal && !intervention && (
+                    <div className="flex flex-wrap gap-2">
+                        {activeAutomationStatuses.has(run.status) && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={processing}
+                                onClick={onTakeover}
+                            >
+                                <Hand /> Pause and take over
+                            </Button>
+                        )}
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={processing}
+                            onClick={onCancel}
+                        >
+                            Cancel run
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            {activeAutomationStatuses.has(run.status) && (
+                <div className="mt-4" role="status">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                            className="h-full rounded-full bg-primary transition-[width]"
+                            style={{
+                                width: `${run.progress.total === 0 ? 0 : (run.progress.resolved / run.progress.total) * 100}%`,
+                            }}
+                        />
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        Chef verifies the remote cart after every item.
+                    </p>
+                </div>
+            )}
+
+            {run.revision_diverged && !runTerminal && (
+                <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                    The shopping list changed after this run was approved.
+                    Cancel this frozen run and prepare a new one from revision{' '}
+                    {run.current_shopping_list_revision}.
+                </div>
+            )}
+
+            {intervention && (
+                <AutomationInterventionCard
+                    intervention={intervention}
+                    processing={processing}
+                    onReauthenticate={onReauthenticate}
+                    onResolve={onResolve}
+                />
+            )}
+
+            {run.failure_message && (
+                <p className="mt-4 text-xs text-destructive">
+                    {run.failure_message}
+                </p>
+            )}
+
+            {run.items.length > 0 && (
+                <ul className="mt-4 divide-y text-xs">
+                    {run.items.map((item) => (
+                        <li
+                            key={item.id}
+                            className="flex items-center justify-between gap-3 py-2"
+                        >
+                            <span>{item.name}</span>
+                            <span className="text-muted-foreground capitalize">
+                                {automationStatusLabel(item.status)}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            <CartSnapshotReview run={run} />
+        </div>
+    );
+}
+
+function CartAutomationSection({
+    automation,
+    shoppingList,
+}: {
+    automation: CartAutomation;
+    shoppingList: PreparedShoppingList;
+}) {
+    const [processing, setProcessing] = useState(false);
+    const connection = automation.connection;
+    const run = automation.run;
+    const intervention = run?.intervention;
+    const runTerminal = run ? terminalAutomationStatuses.has(run.status) : true;
+    const submit = (
+        method: 'post' | 'put' | 'delete',
+        url: string,
+        data: RequestPayload = {},
+    ) => {
+        setProcessing(true);
+        const options = {
+            preserveScroll: true,
+            onFinish: () => setProcessing(false),
+        };
+
+        if (method === 'delete') {
+            router.delete(url, { ...options, data });
+
+            return;
+        }
+
+        if (method === 'put') {
+            router.put(url, data, options);
+
+            return;
+        }
+
+        router.post(url, data, options);
+    };
+    const connect = () =>
+        submit(
+            'post',
+            `/shopping-lists/${shoppingList.id}/retailer-connections`,
+        );
+    const reauthenticate = () => {
+        if (connection) {
+            submit(
+                'post',
+                `/retailer-connections/${connection.id}/authenticate`,
+            );
+        }
+    };
+    const prepare = () => {
+        if (!connection || !automation.shopping_list_revision_id) {
+            return;
+        }
+
+        submit('post', `/shopping-lists/${shoppingList.id}/automation-runs`, {
+            shopping_list_revision_id: automation.shopping_list_revision_id,
+            retailer_connection_id: connection.id,
+            idempotency_key: crypto.randomUUID(),
+        });
+    };
+    const cancel = () => {
+        if (run) {
+            submit('delete', `/automation-runs/${run.id}`);
+        }
+    };
+    const takeover = () => {
+        if (run) {
+            submit('post', `/automation-runs/${run.id}/takeover`);
+        }
+    };
+    const resolve = (choice: AutomationResolutionChoice) => {
+        if (!intervention) {
+            return;
+        }
+
+        submit('put', `/automation-interventions/${intervention.id}`, {
+            choice,
+        });
+    };
+
+    if (!automation.connection_enabled) {
+        return null;
+    }
+
+    return (
+        <section
+            className="mt-8 border-y py-6"
+            aria-labelledby="woolworths-cart-heading"
+        >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="max-w-2xl">
+                    <p className="flex items-center gap-2 text-sm font-medium">
+                        <ShieldCheck className="size-4 text-primary" />
+                        <span id="woolworths-cart-heading">
+                            Woolworths cart
+                        </span>
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Chef can prepare and verify this revision in your
+                        Woolworths account. You review the result and complete
+                        checkout in your normal Woolworths app or browser.
+                    </p>
+                </div>
+                {connection && connection.status !== 'disconnected' && (
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={processing || (run !== null && !runTerminal)}
+                        onClick={() => {
+                            if (
+                                window.confirm(
+                                    'Disconnect Woolworths and delete its saved browser context?',
+                                )
+                            ) {
+                                submit(
+                                    'delete',
+                                    `/retailer-connections/${connection.id}`,
+                                );
+                            }
+                        }}
+                    >
+                        <Unplug /> Disconnect
+                    </Button>
+                )}
+            </div>
+
+            {!connection || connection.status === 'disconnected' ? (
+                <div className="mt-5 rounded-xl bg-muted/40 p-4">
+                    <p className="text-sm font-medium">
+                        Connect Woolworths when the list is ready
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        A private, recording-disabled browser opens for you to
+                        enter your password and MFA. Chef&rsquo;s model is not
+                        attached during sign-in.
+                    </p>
+                    <Button
+                        className="mt-4"
+                        size="sm"
+                        disabled={processing || !automation.ready}
+                        onClick={connect}
+                    >
+                        <LogIn /> Connect Woolworths
+                    </Button>
+                    {!automation.ready && (
+                        <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                            {automation.readiness_reasons.map((reason) => (
+                                <li key={reason}>{reason}</li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            ) : connection.status !== 'connected' ? (
+                <div className="mt-5 rounded-xl bg-muted/40 p-4">
+                    <p className="text-sm font-medium">
+                        {connection.status === 'pending_login' ||
+                        connection.status === 'checking'
+                            ? 'Finish the secure Woolworths sign-in'
+                            : 'Woolworths needs to be reconnected'}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Cart automation remains stopped until a deterministic
+                        protected-page check passes.
+                    </p>
+                    <Button
+                        className="mt-4"
+                        size="sm"
+                        disabled={processing}
+                        onClick={reauthenticate}
+                    >
+                        <LogIn /> Open secure sign-in
+                    </Button>
+                </div>
+            ) : (
+                <div className="mt-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-medium">
+                                Woolworths connected
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {connection.last_verified_at
+                                    ? `Verified ${new Date(connection.last_verified_at).toLocaleString('en-AU')}`
+                                    : 'Authentication will be checked again before every run.'}
+                            </p>
+                        </div>
+                        {(!run || runTerminal) && (
+                            <Button
+                                size="sm"
+                                disabled={
+                                    processing ||
+                                    !automation.ready ||
+                                    !automation.cart_mutation_enabled
+                                }
+                                onClick={prepare}
+                            >
+                                <ShoppingBasket /> Prepare Woolworths cart
+                            </Button>
+                        )}
+                    </div>
+                    {!automation.cart_mutation_enabled && (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                            Cart mutation is disabled until the configured
+                            provider and live release gates are ready.
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {run && (
+                <CartAutomationRunPanel
+                    intervention={intervention}
+                    processing={processing}
+                    run={run}
+                    runTerminal={runTerminal}
+                    onCancel={cancel}
+                    onReauthenticate={reauthenticate}
+                    onResolve={resolve}
+                    onTakeover={takeover}
+                />
+            )}
+        </section>
+    );
+}
+
 type PreparedShoppingList = NonNullable<ShoppingWorkspace['shopping_list']>;
 type MissingMeal = ShoppingWorkspace['missing_meals'][number];
+type ShoppingItemsView = 'list' | 'table';
+
+const shoppingItemsViewStorageKey = 'chef.shopping.items-view';
+
+function initialShoppingItemsView(): ShoppingItemsView {
+    if (typeof window === 'undefined') {
+        return 'list';
+    }
+
+    try {
+        if (window.matchMedia('(max-width: 767px)').matches) {
+            return 'list';
+        }
+
+        return window.localStorage.getItem(shoppingItemsViewStorageKey) ===
+            'table'
+            ? 'table'
+            : 'list';
+    } catch {
+        return 'list';
+    }
+}
+
+function shoppingCompletionDisabledReason(
+    shoppingList: PreparedShoppingList,
+    remaining: number,
+    missingMeals: MissingMeal[],
+    processing: boolean,
+): string | null {
+    if (processing) {
+        return 'Chef is completing this shop now.';
+    }
+
+    if (shoppingList.generation_status !== 'ready') {
+        return 'Wait for Chef to finish preparing the shopping list.';
+    }
+
+    if (shoppingList.stale_at !== null) {
+        return 'Review the latest plan changes and refresh this shopping list first.';
+    }
+
+    if (shoppingList.items.length === 0) {
+        return 'Add at least one item before completing this shop.';
+    }
+
+    if (missingMeals.length > 0) {
+        return 'Resolve the meals with missing ingredients before completing this shop.';
+    }
+
+    if (remaining > 0) {
+        return `Mark the ${remaining} remaining ${remaining === 1 ? 'item' : 'items'} as bought to complete this shop.`;
+    }
+
+    return null;
+}
 
 function StartShoppingList({ onPrepare }: { onPrepare: () => void }) {
     return (
@@ -917,6 +1803,29 @@ function StartShoppingList({ onPrepare }: { onPrepare: () => void }) {
                 </p>
                 <Button className="mt-5" onClick={onPrepare}>
                     <ShoppingBasket /> Prepare shopping list
+                </Button>
+            </div>
+        </section>
+    );
+}
+
+function SafetyReviewRequired({ planId }: { planId: number }) {
+    return (
+        <section className="py-12">
+            <div className="mx-auto max-w-lg rounded-xl bg-amber-500/5 px-5 py-4 text-center">
+                <ShieldCheck className="mx-auto size-6 text-amber-700 dark:text-amber-300" />
+                <p className="mt-3 text-sm font-medium">
+                    Review the plan&rsquo;s safety details
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Participants or household safety constraints changed after
+                    this plan was confirmed. Review them and explicitly
+                    reconfirm the plan before preparing this list.
+                </p>
+                <Button asChild className="mt-4" size="sm">
+                    <Link href={`/meal-plans/${planId}`}>
+                        <ShieldCheck /> Review plan safety
+                    </Link>
                 </Button>
             </div>
         </section>
@@ -966,9 +1875,27 @@ function PreparingShoppingList({
     recipePreparation: ShoppingWorkspace['recipe_preparation'];
     shoppingList: PreparedShoppingList;
 }) {
+    const generationFailed =
+        shoppingList.generation_status === 'failed' ||
+        shoppingList.generation_failure_code === 'context_changed';
+
     return (
         <section className="py-12">
-            {recipePreparation.failed > 0 ? (
+            {generationFailed ? (
+                <div className="mx-auto max-w-lg rounded-xl bg-destructive/5 px-5 py-4 text-center">
+                    <p className="flex items-center justify-center gap-2 text-sm font-medium">
+                        <CircleAlert className="size-4" /> Chef could not finish
+                        this shopping list
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                        {shoppingList.generation_failure_message ??
+                            'The list is safe to retry.'}
+                    </p>
+                    <Button className="mt-4" size="sm" onClick={onPrepare}>
+                        <RefreshCw /> Retry
+                    </Button>
+                </div>
+            ) : recipePreparation.failed > 0 ? (
                 <div className="mx-auto max-w-lg rounded-xl bg-destructive/5 px-5 py-4">
                     <p className="flex items-center gap-2 text-sm font-medium">
                         <CircleAlert className="size-4" /> Chef could not
@@ -1008,45 +1935,30 @@ function PreparingShoppingList({
 
 function ReadyShoppingList({
     budget,
+    cartAutomation,
     failedMeals,
     included,
     missingMeals,
     onPrepare,
     planId,
-    productPreferences,
     recipePreparation,
     retailers,
     shoppingCategories,
     shoppingList,
 }: {
     budget: ShoppingWorkspace['budget'];
+    cartAutomation: ShoppingWorkspace['cart_automation'];
     failedMeals: MissingMeal[];
     included: number;
     missingMeals: ShoppingWorkspace['missing_meals'];
     onPrepare: () => void;
     planId: number;
-    productPreferences: ShoppingWorkspace['product_preferences'];
     recipePreparation: ShoppingWorkspace['recipe_preparation'];
     retailers: ShoppingWorkspace['retailers'];
     shoppingCategories: ShoppingWorkspace['shopping_categories'];
     shoppingList: PreparedShoppingList;
 }) {
     const active = recipePreparation.preparing > 0;
-    const groupedItems: {
-        value: ShoppingListItemCategory;
-        label: string;
-        items: ShoppingListItem[];
-    }[] = [];
-
-    for (const category of shoppingCategories) {
-        const items = shoppingList.items.filter(
-            (item) => item.category === category.value,
-        );
-
-        if (items.length > 0) {
-            groupedItems.push({ ...category, items });
-        }
-    }
 
     return (
         <>
@@ -1065,7 +1977,6 @@ function ReadyShoppingList({
                                 {shoppingList.stale_diff.changes.map(
                                     (change) => (
                                         <li key={change.revision}>
-                                            Revision {change.revision}:{' '}
                                             {change.summary}
                                         </li>
                                     ),
@@ -1116,71 +2027,17 @@ function ReadyShoppingList({
                 </section>
             )}
 
-            <section className="mt-8">
-                <div>
-                    <h2 className="font-medium">Items</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        {included} included · revision {shoppingList.revision}
-                    </p>
-                </div>
-                <div className="mt-5 space-y-7">
-                    {groupedItems.map((category) => (
-                        <section
-                            key={category.value}
-                            aria-labelledby={`shopping-category-${category.value}`}
-                        >
-                            <div className="flex items-baseline justify-between gap-3 px-1">
-                                <h3
-                                    id={`shopping-category-${category.value}`}
-                                    className="text-sm font-medium"
-                                >
-                                    {category.label}
-                                </h3>
-                                <span className="text-xs text-muted-foreground">
-                                    {category.items.length}{' '}
-                                    {category.items.length === 1
-                                        ? 'item'
-                                        : 'items'}
-                                </span>
-                            </div>
-                            <div className="mt-2 divide-y border-y">
-                                {category.items.map((item) => (
-                                    <ShoppingItemRow
-                                        key={item.id}
-                                        item={item}
-                                        revision={shoppingList.revision}
-                                        stale={shoppingList.stale_at !== null}
-                                        shoppingCategories={shoppingCategories}
-                                        retailers={retailers}
-                                        preference={
-                                            productPreferences.find(
-                                                (preference) =>
-                                                    preference.normalized_item_name ===
-                                                    item.normalized_name,
-                                            ) ?? null
-                                        }
-                                    />
-                                ))}
-                            </div>
-                        </section>
-                    ))}
-                    {shoppingList.items.length === 0 && (
-                        <p className="px-1 py-8 text-sm text-muted-foreground">
-                            This plan does not need any groceries yet. Add a
-                            household item or return to the plan to review its
-                            meals.
-                        </p>
-                    )}
-                </div>
-                {!shoppingList.stale_at && (
-                    <AddItemForm
-                        listId={shoppingList.id}
-                        revision={shoppingList.revision}
-                    />
-                )}
-            </section>
+            <ShoppingItemsSection
+                included={included}
+                shoppingCategories={shoppingCategories}
+                shoppingList={shoppingList}
+            />
+            <CartAutomationSection
+                automation={cartAutomation}
+                shoppingList={shoppingList}
+            />
             {shoppingList.items.length > 0 && (
-                <details className="mt-8 border-t pt-4">
+                <details className="mt-8 border-t py-4">
                     <summary className="cursor-pointer text-sm font-medium">
                         Budget and estimate
                     </summary>
@@ -1215,8 +2072,8 @@ export default function ShoppingShow({
         conversation,
         shopping_categories: shoppingCategories,
         retailers,
-        product_preferences: productPreferences,
         budget,
+        cart_automation: cartAutomation,
     } = workspace;
     const remaining =
         shoppingList?.items.filter(
@@ -1236,9 +2093,28 @@ export default function ShoppingShow({
         expected_revision: shoppingList?.revision ?? 0,
     });
     const completionError = Object.values(completionForm.errors)[0];
-    const listPreparing = shoppingList !== null && shoppingList.revision === 0;
-    const preparationActive = recipePreparation.preparing > 0;
-    const shouldPoll = preparationActive || listPreparing;
+    const completionDisabledReason = shoppingList
+        ? shoppingCompletionDisabledReason(
+              shoppingList,
+              remaining,
+              missingMeals,
+              completionForm.processing,
+          )
+        : null;
+    const listPreparing =
+        shoppingList !== null && shoppingList.generation_status !== 'ready';
+    const preparationActive =
+        recipePreparation.preparing > 0 ||
+        shoppingList?.generation_status === 'processing';
+    const automationPolling = Boolean(
+        cartAutomation.run &&
+        activeAutomationStatuses.has(cartAutomation.run.status),
+    );
+    const generationQueued =
+        shoppingList?.generation_status === 'pending' &&
+        shoppingList.generation_failure_code === null;
+    const shouldPoll =
+        preparationActive || generationQueued || automationPolling;
 
     useEffect(() => {
         if (!shouldPoll) {
@@ -1268,13 +2144,7 @@ export default function ShoppingShow({
             <Head title={`Shopping — ${plan.title}`} />
             <main className="min-h-0 flex-1 overflow-y-auto bg-background">
                 <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-8 lg:py-10">
-                    <Button asChild variant="ghost" size="sm" className="-ml-2">
-                        <Link href={`/meal-plans/${plan.id}`}>
-                            <ArrowLeft /> Back to plan
-                        </Link>
-                    </Button>
-
-                    <header className="mt-5 flex flex-col items-start gap-5 border-b pb-6 sm:flex-row sm:justify-between">
+                    <header className="flex flex-col items-start gap-5 border-b pb-6 sm:flex-row sm:justify-between">
                         <div>
                             <div className="flex items-center gap-2">
                                 <ShoppingBasket className="size-5 text-primary" />
@@ -1288,9 +2158,13 @@ export default function ShoppingShow({
                                     >
                                         {shoppingList.status === 'completed'
                                             ? 'Completed'
-                                            : shoppingList.items.length === 0
-                                              ? 'Preparing'
-                                              : `${remaining} remaining`}
+                                            : shoppingList.generation_status ===
+                                                'failed'
+                                              ? 'Needs attention'
+                                              : shoppingList.generation_status !==
+                                                  'ready'
+                                                ? 'Preparing'
+                                                : `${remaining} remaining`}
                                     </Badge>
                                 )}
                                 {!shoppingList && (
@@ -1310,27 +2184,44 @@ export default function ShoppingShow({
                             </p>
                         </div>
                         {shoppingList && !listPreparing && (
-                            <Button
-                                disabled={
-                                    shoppingList.items.length === 0 ||
-                                    remaining > 0 ||
-                                    missingMeals.length > 0 ||
-                                    shoppingList.stale_at !== null ||
-                                    completionForm.processing
-                                }
-                                onClick={() => {
-                                    completionForm.transform(() => ({
-                                        expected_revision:
-                                            shoppingList.revision,
-                                    }));
-                                    completionForm.post(
-                                        `/shopping-lists/${shoppingList.id}/complete`,
-                                        { preserveScroll: true },
-                                    );
-                                }}
-                            >
-                                <Check /> Complete shop
-                            </Button>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <span
+                                        className="inline-flex"
+                                        data-testid="complete-shop-tooltip-trigger"
+                                        tabIndex={
+                                            completionDisabledReason
+                                                ? 0
+                                                : undefined
+                                        }
+                                    >
+                                        <Button
+                                            disabled={Boolean(
+                                                completionDisabledReason,
+                                            )}
+                                            onClick={() => {
+                                                completionForm.transform(
+                                                    () => ({
+                                                        expected_revision:
+                                                            shoppingList.revision,
+                                                    }),
+                                                );
+                                                completionForm.post(
+                                                    `/shopping-lists/${shoppingList.id}/complete`,
+                                                    { preserveScroll: true },
+                                                );
+                                            }}
+                                        >
+                                            <Check /> Complete shop
+                                        </Button>
+                                    </span>
+                                </TooltipTrigger>
+                                {completionDisabledReason && (
+                                    <TooltipContent align="end" side="bottom">
+                                        {completionDisabledReason}
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
                         )}
                     </header>
                     {completionError && (
@@ -1342,12 +2233,9 @@ export default function ShoppingShow({
                         </p>
                     )}
 
-                    <ShoppingConversation
-                        conversation={conversation}
-                        planId={plan.id}
-                    />
-
-                    {!shoppingList ? (
+                    {plan.safety_review_required ? (
+                        <SafetyReviewRequired planId={plan.id} />
+                    ) : !shoppingList ? (
                         <StartShoppingList onPrepare={prepareShopping} />
                     ) : listPreparing ? (
                         <PreparingShoppingList
@@ -1360,20 +2248,32 @@ export default function ShoppingShow({
                     ) : (
                         <ReadyShoppingList
                             budget={budget}
+                            cartAutomation={cartAutomation}
                             failedMeals={failedMeals}
                             included={included}
                             missingMeals={missingMeals}
                             onPrepare={prepareShopping}
                             planId={plan.id}
-                            productPreferences={productPreferences}
                             recipePreparation={recipePreparation}
                             retailers={retailers}
                             shoppingCategories={shoppingCategories}
                             shoppingList={shoppingList}
                         />
                     )}
+                    <ShoppingConversation
+                        conversation={conversation}
+                        planId={plan.id}
+                        shoppingList={shoppingList}
+                    />
                 </div>
             </main>
         </>
     );
 }
+
+ShoppingShow.layout = ({ workspace }: { workspace: ShoppingWorkspace }) => ({
+    headerBackLink: {
+        title: 'Back to plan',
+        href: `/meal-plans/${workspace.plan.id}`,
+    },
+});

@@ -108,6 +108,7 @@ export default [
             'node_modules',
             'public',
             'bootstrap/ssr',
+            'automation/dist/**',
             'tailwind.config.js',
             'vite.config.ts',
             'resources/js/actions/**',

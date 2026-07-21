@@ -1,5 +1,9 @@
 <?php
 
+use App\Http\Controllers\AutomationInterventionController;
+use App\Http\Controllers\AutomationRunController;
+use App\Http\Controllers\AutomationRunStatusController;
+use App\Http\Controllers\AutomationTakeoverController;
 use App\Http\Controllers\ConstraintController;
 use App\Http\Controllers\ConversationFeedbackController;
 use App\Http\Controllers\ConversationMessageStreamController;
@@ -12,6 +16,7 @@ use App\Http\Controllers\MealOutcomeController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\MealPlanMilestoneController;
 use App\Http\Controllers\MealPlanRecipePreparationController;
+use App\Http\Controllers\MealPlanSafetyReviewController;
 use App\Http\Controllers\MealProposalDecisionController;
 use App\Http\Controllers\MealSlotController;
 use App\Http\Controllers\MealSlotParticipantController;
@@ -26,6 +31,8 @@ use App\Http\Controllers\ProductMatchController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\RecipeImportController;
 use App\Http\Controllers\RecipeVersionController;
+use App\Http\Controllers\RetailerConnectionAuthenticationController;
+use App\Http\Controllers\RetailerConnectionController;
 use App\Http\Controllers\ShoppingBudgetController;
 use App\Http\Controllers\ShoppingListCompletionController;
 use App\Http\Controllers\ShoppingListController;
@@ -62,8 +69,22 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::put('meal-plans/{mealPlan}/shopping-budget', ShoppingBudgetController::class)->name('meal-plans.shopping-budget.update');
     Route::put('shopping-list-items/{shoppingListItem}/product-match', ProductMatchController::class)->name('shopping-list-items.product-match.update');
     Route::post('shopping-lists/{shoppingList}/orders', OrderSnapshotController::class)->name('shopping-lists.orders.store');
+    Route::post('shopping-lists/{shoppingList}/retailer-connections', [RetailerConnectionController::class, 'store'])->name('shopping-lists.retailer-connections.store');
+    Route::post('shopping-lists/{shoppingList}/automation-runs', [AutomationRunController::class, 'store'])->name('shopping-lists.automation-runs.store');
+    Route::post('retailer-connections/{retailerConnection}/authenticate', [RetailerConnectionAuthenticationController::class, 'start'])->name('retailer-connections.authenticate.start');
+    Route::delete('retailer-connections/{retailerConnection}', [RetailerConnectionController::class, 'destroy'])->name('retailer-connections.destroy');
+    Route::get('browser-sessions/{browserSession}/authenticate', [RetailerConnectionAuthenticationController::class, 'show'])->name('browser-sessions.authenticate.show');
+    Route::get('browser-sessions/{browserSession}/live-view', [RetailerConnectionAuthenticationController::class, 'liveView'])->name('browser-sessions.live-view');
+    Route::post('browser-sessions/{browserSession}/verify', [RetailerConnectionAuthenticationController::class, 'verify'])->name('browser-sessions.verify');
+    Route::get('automation-runs/{automationRun}/status', AutomationRunStatusController::class)->name('automation-runs.status');
+    Route::post('automation-runs/{automationRun}/takeover', [AutomationTakeoverController::class, 'store'])->name('automation-runs.takeover.store');
+    Route::get('browser-sessions/{browserSession}/takeover', [AutomationTakeoverController::class, 'show'])->name('browser-sessions.takeover.show');
+    Route::post('browser-sessions/{browserSession}/takeover/finish', [AutomationTakeoverController::class, 'finish'])->name('browser-sessions.takeover.finish');
+    Route::delete('automation-runs/{automationRun}', [AutomationRunController::class, 'destroy'])->name('automation-runs.destroy');
+    Route::put('automation-interventions/{automationIntervention}', [AutomationInterventionController::class, 'update'])->name('automation-interventions.update');
     Route::post('meal-plans/{mealPlan}/slots', [MealSlotController::class, 'store'])->name('meal-plans.slots.store');
     Route::post('meal-plans/{mealPlan}/milestones', [MealPlanMilestoneController::class, 'store'])->name('meal-plans.milestones.store');
+    Route::post('meal-plans/{mealPlan}/safety-review', MealPlanSafetyReviewController::class)->name('meal-plans.safety-review.store');
     Route::post('meal-slots/{mealSlot}/planned-meal', [MealSlotPlannedMealController::class, 'store'])->name('meal-slots.planned-meal.store');
     Route::put('meal-slots/{mealSlot}/participants', [MealSlotParticipantController::class, 'update'])->name('meal-slots.participants.update');
     Route::post('conversations/{conversation}/messages/stream', ConversationMessageStreamController::class)
@@ -83,6 +104,7 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::post('recipes/{recipe}/versions', [RecipeVersionController::class, 'store'])->name('recipes.versions.store');
     Route::put('preferences/{preference}', [PreferenceController::class, 'update'])->name('preferences.update');
     Route::delete('preferences/{preference}', [PreferenceController::class, 'destroy'])->name('preferences.destroy');
+    Route::post('constraints', [ConstraintController::class, 'store'])->name('constraints.store');
     Route::put('constraints/{constraint}', [ConstraintController::class, 'update'])->name('constraints.update');
     Route::delete('constraints/{constraint}', [ConstraintController::class, 'destroy'])->name('constraints.destroy');
     Route::post('team-invitations', [TeamInvitationController::class, 'store'])->name('team-invitations.store');
