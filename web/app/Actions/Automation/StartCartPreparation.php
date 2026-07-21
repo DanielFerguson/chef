@@ -18,12 +18,16 @@ use Illuminate\Validation\ValidationException;
 
 class StartCartPreparation
 {
+    public function __construct(private readonly BuildCartPreparationPreflight $buildPreflight) {}
+
     public function handle(
         ShoppingList $shoppingList,
         ShoppingListRevision $revision,
         RetailerConnection $connection,
         User $user,
         string $idempotencyKey,
+        bool $safetyAcknowledged = false,
+        bool $allowAutomaticProductSearch = false,
     ): AutomationRun {
         if (! (bool) config('automation.cart_mutation_enabled')) {
             throw ValidationException::withMessages(['automation' => 'Woolworths cart preparation is not enabled in this environment.']);
@@ -48,6 +52,20 @@ class StartCartPreparation
         }
 
         $this->validateReadiness($shoppingList, $revision, $connection);
+        $preflight = $this->buildPreflight->handle($shoppingList, $revision);
+
+        if (! $safetyAcknowledged) {
+            throw ValidationException::withMessages(['safety_acknowledged' => 'Review the household safety context before preparing the cart.']);
+        }
+
+        if (! $preflight['can_prepare']) {
+            throw ValidationException::withMessages(['shopping_list' => 'Every included item needs an exact approved Woolworths product while household safety constraints apply.']);
+        }
+
+        if ($preflight['automatic_search_items'] > 0 && ! $allowAutomaticProductSearch) {
+            throw ValidationException::withMessages(['allow_automatic_product_search' => 'Approve automatic Woolworths search for the unmatched items, or match them before continuing.']);
+        }
+
         $snapshotItems = collect($this->includedSnapshotItems($revision));
 
         if ($snapshotItems->isEmpty()) {
@@ -58,7 +76,7 @@ class StartCartPreparation
             ->where(fn ($query) => $query->whereNull('retailer_id')->orWhere('retailer_id', $connection->retailer_id))
             ->get()
             ->keyBy(fn ($preference) => Str::lower((string) $preference->normalized_item_name));
-        $frozenItems = $snapshotItems->map(function (array $item) use ($preferences): array {
+        $frozenItems = $snapshotItems->map(function (array $item) use ($preferences, $preflight): array {
             $normalizedName = Str::of((string) ($item['name'] ?? ''))->squish()->lower()->toString();
             $acceptSubstitutes = true;
             $maximumPrice = null;
@@ -78,7 +96,7 @@ class StartCartPreparation
                 'optional' => (bool) ($item['optional'] ?? false),
                 'estimated_price' => $item['estimated_price'] ?? null,
                 'product_match' => $item['product_match'] ?? null,
-                'accept_substitutes' => $acceptSubstitutes,
+                'accept_substitutes' => ! $preflight['requires_exact_matches'] && $acceptSubstitutes,
                 'maximum_price' => $maximumPrice,
                 'source_planned_meal_ids' => $item['source_planned_meal_ids'] ?? [],
             ];
@@ -90,6 +108,15 @@ class StartCartPreparation
             'source_plan_revision' => $revision->snapshot['source_plan_revision'] ?? null,
             'approved_by_user_id' => $user->id,
             'approved_at' => now()->toIso8601String(),
+            'approval' => [
+                'safety_acknowledged' => true,
+                'automatic_product_search_approved' => $allowAutomaticProductSearch,
+            ],
+            'safety_context' => [
+                'fingerprint' => $preflight['safety_fingerprint'],
+                'constraints' => $preflight['constraints'],
+                'requires_exact_matches' => $preflight['requires_exact_matches'],
+            ],
             'items' => $frozenItems,
         ];
         $encoded = json_encode($frozenSnapshot, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);

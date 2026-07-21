@@ -57,6 +57,8 @@ class RecordShoppingListRevision
                         'product_match' => $item->productMatch === null ? null : [
                             'retail_product_id' => $item->productMatch->retail_product_id,
                             'product_name' => $item->productMatch->retailProduct->name,
+                            'external_id' => $item->productMatch->retailProduct->external_id,
+                            'product_url' => $item->productMatch->retailProduct->product_url,
                             'pack_count' => $item->productMatch->pack_count,
                             'estimated_total' => $item->productMatch->estimated_total,
                         ],

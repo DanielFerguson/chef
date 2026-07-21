@@ -240,6 +240,8 @@ it('retries the shared plan conversation from shopping', function () {
         $workspace['user'],
         'Please retry the shopping update.',
         (string) Str::uuid(),
+        true,
+        true,
     );
     $message->update([
         'response_status' => MessageResponseStatus::Failed,
@@ -298,6 +300,35 @@ it('keeps human login separate from cart mutation in the recording-disabled view
         ->assertNoJavaScriptErrors();
 });
 
+it('requires explicit product and safety review before preparing a cart', function () {
+    $workspace = browserShoppingWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    config()->set('automation.connection_enabled', true);
+    config()->set('automation.cart_mutation_enabled', true);
+    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
+    putenv('WOOLWORTHS_CART_MUTATION_ENABLED=true');
+    $session = app(StartRetailerConnection::class)->handle(
+        $workspace['user']->currentTeam,
+        $workspace['user'],
+    );
+    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
+    $this->actingAs($workspace['user']);
+
+    visit(route('meal-plans.shopping.show', $workspace['plan']))
+        ->resize(390, 844)
+        ->assertSee('Review the product plan')
+        ->assertSee('0 exact product matches · 2 requiring Woolworths search')
+        ->assertSee('I reviewed the household safety context and this product plan.')
+        ->assertScript('() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent.includes("Prepare Woolworths cart"))?.disabled', true)
+        ->click('[data-slot="checkbox"][aria-label="Allow automatic Woolworths product search"]')
+        ->click('[data-slot="checkbox"][aria-label="Confirm cart product plan safety review"]')
+        ->assertScript('() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent.includes("Prepare Woolworths cart"))?.disabled', false)
+        ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->assertNoJavaScriptErrors();
+
+    expect($list->automationRuns)->toHaveCount(0);
+});
+
 it('reviews a non-empty cart decision and reconciled normal-Woolworths handoff', function () {
     $workspace = browserShoppingWorkspace();
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
@@ -327,6 +358,8 @@ it('reviews a non-empty cart decision and reconciled normal-Woolworths handoff',
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
     $this->actingAs($workspace['user']);
 
@@ -365,6 +398,8 @@ it('lets the connection owner pause for recording-disabled manual takeover', fun
         $session->retailerConnection->refresh(),
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $this->actingAs($workspace['user']);
 
@@ -438,6 +473,8 @@ it('shows bounded progress and lets the owner cancel an active run', function ()
         $session->retailerConnection->refresh(),
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $this->actingAs($workspace['user']);
 
@@ -473,6 +510,8 @@ it('surfaces bot detection as a calm intervention before cancellation', function
         $session->retailerConnection->refresh(),
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $this->actingAs($workspace['user']);
 

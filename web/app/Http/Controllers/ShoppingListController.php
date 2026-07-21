@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Automation\BuildCartPreparationPreflight;
 use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Automation\AutomationRunView;
 use App\Enums\MealPlanRecipeGenerationStatus;
@@ -43,6 +44,7 @@ class ShoppingListController extends Controller
         Request $request,
         MealPlan $mealPlan,
         AutomationRunView $automationRunView,
+        BuildCartPreparationPreflight $buildCartPreparationPreflight,
         AssessMealPlanReadiness $assessReadiness,
     ): Response {
         $this->authorize('view', $mealPlan);
@@ -123,6 +125,17 @@ class ShoppingListController extends Controller
             $cartItemCount === 0 ? 'Add at least one included item that is not already in the pantry.' : null,
             $currentShoppingRevision === null ? 'Save a current shopping-list revision.' : null,
         ])->filter()->values();
+        $cartPreflight = $shoppingList !== null && $currentShoppingRevision !== null
+            ? $buildCartPreparationPreflight->handle($shoppingList, $currentShoppingRevision)
+            : [
+                'total_items' => 0,
+                'matched_items' => 0,
+                'automatic_search_items' => 0,
+                'automatic_search_item_names' => [],
+                'requires_exact_matches' => false,
+                'can_prepare' => false,
+                'constraints' => [],
+            ];
 
         return Inertia::render('shopping/show', [
             'workspace' => [
@@ -172,6 +185,7 @@ class ShoppingListController extends Controller
                     'ready' => $cartReadinessReasons->isEmpty(),
                     'readiness_reasons' => $cartReadinessReasons,
                     'shopping_list_revision_id' => $currentShoppingRevision?->id,
+                    'preflight' => $cartPreflight,
                     'connection' => $retailerConnection === null ? null : [
                         'id' => $retailerConnection->id,
                         'status' => $retailerConnection->status->value,

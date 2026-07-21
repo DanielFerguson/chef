@@ -11,4 +11,5 @@ return [
     'max_runtime_seconds' => (int) env('AUTOMATION_MAX_RUNTIME_SECONDS', 180),
     'max_actions_per_job' => (int) env('AUTOMATION_MAX_ACTIONS_PER_JOB', 8),
     'max_item_attempts' => (int) env('AUTOMATION_MAX_ITEM_ATTEMPTS', 4),
+    'context_sync_delay_milliseconds' => (int) env('AUTOMATION_CONTEXT_SYNC_DELAY_MILLISECONDS', 3000),
 ];

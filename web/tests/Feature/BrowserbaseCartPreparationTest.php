@@ -8,6 +8,8 @@ use App\Actions\Automation\StartAutomationTakeover;
 use App\Actions\Automation\StartCartPreparation;
 use App\Actions\Automation\StartRetailerConnection;
 use App\Actions\Automation\VerifyRetailerConnection;
+use App\Actions\Shopping\CompleteShoppingList;
+use App\Actions\Shopping\RecordOrderSnapshot;
 use App\Actions\Teams\AddUserToTeam;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Automation\Contracts\BrowserSessionProvider;
@@ -23,6 +25,7 @@ use App\Enums\BrowserSessionStatus;
 use App\Enums\RetailerConnectionStatus;
 use App\Jobs\AdvanceAutomationRunJob;
 use App\Models\AutomationIntervention;
+use App\Models\Constraint;
 use App\Models\MealPlan;
 use App\Models\ProductPreference;
 use App\Models\RetailerConnection;
@@ -234,6 +237,8 @@ it('freezes the exact current revision and makes run creation idempotent', funct
         $connection,
         $workspace['user'],
         $key,
+        true,
+        true,
     );
     $replay = app(StartCartPreparation::class)->handle(
         $workspace['list'],
@@ -241,6 +246,8 @@ it('freezes the exact current revision and makes run creation idempotent', funct
         $connection,
         $workspace['user'],
         $key,
+        true,
+        true,
     );
 
     $workspace['item']->update(['name' => 'Changed after approval']);
@@ -256,6 +263,78 @@ it('freezes the exact current revision and makes run creation idempotent', funct
     Queue::assertPushed(AdvanceAutomationRunJob::class, 1);
 });
 
+it('requires an explicit safe product preflight before cart mutation', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+
+    expect(fn () => app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+    ))->toThrow(ValidationException::class, 'Review the household safety context');
+
+    expect(fn () => app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        false,
+    ))->toThrow(ValidationException::class, 'Approve automatic Woolworths search');
+});
+
+it('requires exact approved products and disables substitutions when safety constraints apply', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+    Queue::fake();
+    Constraint::factory()->create([
+        'team_id' => $workspace['team']->id,
+        'person_id' => null,
+        'kind' => 'allergy',
+        'subject' => 'peanuts',
+        'explicitly_confirmed_at' => now(),
+    ]);
+
+    expect(fn () => app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    ))->toThrow(ValidationException::class, 'exact approved Woolworths product');
+
+    $snapshot = $workspace['revision']->snapshot;
+    $snapshot['items'][0]['product_match'] = [
+        'retail_product_id' => 123,
+        'product_name' => 'Woolworths Full Cream Milk 2L',
+        'external_id' => '123456',
+        'product_url' => 'https://www.woolworths.com.au/shop/productdetails/123456',
+        'pack_count' => 1,
+        'estimated_total' => 4.5,
+    ];
+    $workspace['revision']->update(['snapshot' => $snapshot]);
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision']->refresh(),
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        false,
+    );
+
+    expect($run->frozen_snapshot['safety_context']['constraints'][0]['subject'])->toBe('peanuts')
+        ->and($run->items()->sole()->requirement_snapshot['accept_substitutes'])->toBeFalse();
+});
+
 it('rejects stale empty mismatched and unauthorised cart run inputs', function () {
     $workspace = browserbaseCartWorkspace();
     $connection = connectedWoolworths($workspace);
@@ -269,6 +348,8 @@ it('rejects stale empty mismatched and unauthorised cart run inputs', function (
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     ))->toThrow(ValidationException::class, 'Refresh this shopping list');
 
     $workspace['list']->update(['stale_at' => null, 'stale_reason' => null]);
@@ -286,6 +367,8 @@ it('rejects stale empty mismatched and unauthorised cart run inputs', function (
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     ))->toThrow(ValidationException::class, 'current shopping-list revision');
 
     $outsider = User::factory()->create();
@@ -296,6 +379,8 @@ it('rejects stale empty mismatched and unauthorised cart run inputs', function (
         $connection,
         $outsider,
         (string) Str::uuid(),
+        true,
+        true,
     ))->toThrow(AuthorizationException::class);
 });
 
@@ -320,6 +405,8 @@ it('pauses for every non-empty cart and reconciles merge lines separately', func
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::AwaitingExistingCartDecision)
@@ -355,6 +442,8 @@ it('clears a non-empty cart only after an explicit replace decision', function (
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
     expect(collect($executor->commands)->pluck('type'))->not->toContain('clear_cart');
 
@@ -384,6 +473,8 @@ it('stops for reauthentication and resumes only after the owner passes a fresh p
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::AwaitingReauthentication)
@@ -410,6 +501,8 @@ it('replaces a revoked Browserbase Context through owner reauthentication', func
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $provider = app(BrowserSessionProvider::class);
     expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
@@ -442,6 +535,8 @@ it('expires an old session and resumes through a fresh authenticated cart inspec
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $expiredSession = app(CreateBrowserSession::class)->handle(
         $connection,
@@ -469,6 +564,8 @@ it('recovers from an unexpected Browserbase session loss before mutating the car
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $executor = app(ComputerExecutor::class);
     expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
@@ -500,6 +597,8 @@ it('pauses without mutation when bot detection appears during cart inspection', 
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::AwaitingItemDecision)
@@ -526,6 +625,8 @@ it('pauses when a verified cart line breaches the saved item price limit', funct
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::AwaitingItemDecision)
@@ -555,6 +656,8 @@ it('requires an explicit decision for a substitution outside saved policy', func
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::AwaitingItemDecision)
@@ -582,6 +685,8 @@ it('classifies verified price and quantity changes in the final review', functio
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::ReadyForReview)
@@ -611,6 +716,8 @@ it('does not duplicate an already verified remote line after a safe retry', func
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
     app(ResolveAutomationIntervention::class)->handle(
         $run->interventions()->sole(),
@@ -637,6 +744,8 @@ it('pauses and safely rebuilds an item removed before final reconciliation', fun
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
 
     expect($run->status)->toBe(AutomationRunStatus::AwaitingItemDecision)
@@ -665,6 +774,8 @@ it('enforces team route isolation and connection-owner authentication policy', f
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $outsider = User::factory()->create();
     app(CreateTeamForUser::class)->handle($outsider, 'Isolated family');
@@ -692,6 +803,8 @@ it('prevents concurrent human and agent control of one Browserbase context', fun
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $agentSession = app(CreateBrowserSession::class)->handle(
         $connection,
@@ -716,6 +829,8 @@ it('stops the model for owner-only manual takeover and reconciles before resumin
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $agentSession = app(CreateBrowserSession::class)->handle(
         $connection,
@@ -760,6 +875,8 @@ it('denies cross-family access to every team-owned automation record', function 
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     )->refresh();
     $run->load(['items', 'browserSessions', 'steps', 'latestSnapshot.lines']);
     $intervention = AutomationIntervention::factory()->create([
@@ -797,6 +914,8 @@ it('deletes the provider context and cancels active work on disconnect', functio
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $provider = app(BrowserSessionProvider::class);
     expect($provider)->toBeInstanceOf(FakeBrowserSessionProvider::class);
@@ -807,4 +926,39 @@ it('deletes the provider context and cancels active work on disconnect', functio
         ->and($connection->provider_context_id)->toBeNull()
         ->and($run->refresh()->status)->toBe(AutomationRunStatus::Cancelled)
         ->and($provider->contextsDeleted)->toBe(1);
+});
+
+it('records the final order from the reconciled cart instead of reconstructed list guesses', function () {
+    $workspace = browserbaseCartWorkspace();
+    $connection = connectedWoolworths($workspace);
+    config()->set('automation.cart_mutation_enabled', true);
+
+    $run = app(StartCartPreparation::class)->handle(
+        $workspace['list'],
+        $workspace['revision'],
+        $connection,
+        $workspace['user'],
+        (string) Str::uuid(),
+        true,
+        true,
+    )->refresh()->load('latestSnapshot.lines');
+    $workspace['item']->update(['checked' => true]);
+    $completed = app(CompleteShoppingList::class)->handle(
+        $workspace['list']->refresh(),
+        $workspace['user'],
+        1,
+    );
+    $order = app(RecordOrderSnapshot::class)->handle(
+        $completed,
+        $workspace['user'],
+        4.5,
+        null,
+        $run->latestSnapshot,
+    );
+
+    expect($order->cart_snapshot_id)->toBe($run->latestSnapshot->id)
+        ->and($order->retailer_id)->toBe($connection->retailer_id)
+        ->and($order->lines)->toHaveCount(1)
+        ->and($order->lines->first()->product_name)->toBe('Full cream milk')
+        ->and($order->lines->first()->total_price)->toBe(4.5);
 });

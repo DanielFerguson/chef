@@ -15,6 +15,8 @@ class ProductMatchController extends Controller
         $validated = $request->validate([
             'retailer_id' => ['required', 'integer', 'exists:retailers,id'],
             'name' => ['required', 'string', 'max:255'],
+            'external_id' => ['nullable', 'string', 'max:255'],
+            'product_url' => ['nullable', 'url', 'max:2048'],
             'brand' => ['nullable', 'string', 'max:255'],
             'pack_quantity' => ['nullable', 'numeric', 'min:0'],
             'pack_unit' => ['nullable', 'string', 'max:50'],

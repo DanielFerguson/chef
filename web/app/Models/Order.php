@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['team_id', 'shopping_list_id', 'retailer_id', 'recorded_by_user_id', 'shopping_list_revision', 'status', 'currency', 'estimated_total', 'actual_total', 'recorded_at'])]
+#[Fillable(['team_id', 'shopping_list_id', 'cart_snapshot_id', 'retailer_id', 'recorded_by_user_id', 'shopping_list_revision', 'status', 'currency', 'estimated_total', 'actual_total', 'recorded_at'])]
 class Order extends Model
 {
     use ResolvesWithinCurrentTeam;
@@ -23,6 +23,12 @@ class Order extends Model
     public function retailer(): BelongsTo
     {
         return $this->belongsTo(Retailer::class);
+    }
+
+    /** @return BelongsTo<CartSnapshot, $this> */
+    public function cartSnapshot(): BelongsTo
+    {
+        return $this->belongsTo(CartSnapshot::class);
     }
 
     /** @return HasMany<OrderLine, $this> */

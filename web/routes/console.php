@@ -41,3 +41,31 @@ Artisan::command('chef:shopping-list:regenerate {mealPlan} {--user= : User ID pe
 
     return Command::SUCCESS;
 })->purpose('Force-regenerate a meal plan shopping list as an authorised user');
+
+Artisan::command('chef:automation:status', function (): int {
+    $checks = [
+        'Browserbase API key' => filled(config('services.browserbase.api_key')),
+        'Browserbase project ID' => filled(config('services.browserbase.project_id')),
+        'OpenAI API key' => filled(config('services.openai.api_key')),
+        'Compiled browser worker' => is_file((string) config('services.chef_automation.worker_path')),
+    ];
+
+    $this->table(['Requirement', 'Status'], collect($checks)
+        ->map(fn (bool $ready, string $label): array => [$label, $ready ? 'ready' : 'missing'])
+        ->values()
+        ->all());
+    $this->newLine();
+    $this->line('Connection flag: '.(config('automation.connection_enabled') ? 'enabled' : 'disabled'));
+    $this->line('Cart mutation flag: '.(config('automation.cart_mutation_enabled') ? 'enabled' : 'disabled'));
+    $this->line('Normal-app sync proof: '.(config('automation.normal_app_sync_proven') ? 'recorded' : 'not recorded'));
+    $this->line('Automation queue: '.config('automation.queue'));
+
+    $providerReady = $checks['Browserbase API key'] && $checks['Browserbase project ID'];
+    if (config('automation.connection_enabled') && ! $providerReady) {
+        $this->error('Connection mode is enabled without complete Browserbase configuration.');
+
+        return Command::FAILURE;
+    }
+
+    return Command::SUCCESS;
+})->purpose('Report the safe configuration state of Woolworths cart preparation');

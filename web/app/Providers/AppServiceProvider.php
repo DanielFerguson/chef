@@ -24,6 +24,7 @@ use App\Automation\Testing\FakeBrowserSessionProvider;
 use App\Automation\Testing\FakeComputerExecutor;
 use App\Automation\Testing\FakeComputerUseClient;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -76,6 +77,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        if ($this->app->runningInConsole()) {
+            DevCommands::artisan(
+                'queue:listen --queue=default,ai,automation --tries=1 --timeout=0',
+                'queue',
+            )->purple();
+        }
+
         $this->configureDefaults();
     }
 

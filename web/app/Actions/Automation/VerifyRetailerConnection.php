@@ -45,6 +45,10 @@ class VerifyRetailerConnection
         }
 
         $this->closeSession->handle($session);
+        $syncDelay = max(0, (int) config('automation.context_sync_delay_milliseconds', 3000));
+        if ($syncDelay > 0) {
+            usleep($syncDelay * 1000);
+        }
         $connection->update([
             'status' => RetailerConnectionStatus::Connected,
             'last_verified_at' => now(),

@@ -192,6 +192,8 @@ it('uses the direct Responses computer-call protocol without persisting screensh
         $connection,
         $workspace['user'],
         (string) Str::uuid(),
+        true,
+        true,
     );
     $item = $run->items()->sole();
     $screenshot = 'data:image/png;base64,'.base64_encode('transient pixels');
@@ -235,4 +237,25 @@ it('uses the direct Responses computer-call protocol without persisting screensh
     Http::assertSent(fn (Request $request) => ($request['previous_response_id'] ?? null) === 'resp_1'
         && $request['input'][0]['type'] === 'computer_call_output'
         && $request['input'][0]['call_id'] === 'call_1');
+});
+
+it('reports automation readiness and fails closed on incomplete enabled provider configuration', function () {
+    config()->set('services.browserbase.api_key', 'secret-test-key');
+    config()->set('services.browserbase.project_id', 'project-test');
+    config()->set('services.openai.api_key', 'secret-openai-key');
+    config()->set('services.chef_automation.worker_path', __FILE__);
+    config()->set('automation.connection_enabled', false);
+    config()->set('automation.queue', 'automation');
+
+    $this->artisan('chef:automation:status')
+        ->expectsOutputToContain('Connection flag: disabled')
+        ->expectsOutputToContain('Automation queue: automation')
+        ->assertSuccessful();
+
+    config()->set('services.browserbase.project_id', null);
+    config()->set('automation.connection_enabled', true);
+
+    $this->artisan('chef:automation:status')
+        ->expectsOutputToContain('Connection mode is enabled without complete Browserbase configuration.')
+        ->assertFailed();
 });

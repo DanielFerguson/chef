@@ -1075,12 +1075,18 @@ function OrderRecorder({
     listId,
     retailers,
     orders,
+    cartSnapshot,
 }: {
     listId: number;
     retailers: { id: number; name: string }[];
     orders: NonNullable<ShoppingWorkspace['shopping_list']>['orders'];
+    cartSnapshot: AutomationRun['snapshot'] | null;
 }) {
-    const form = useForm({ actual_total: '', retailer_id: '' });
+    const form = useForm({
+        actual_total: '',
+        retailer_id: '',
+        cart_snapshot_id: cartSnapshot?.id ?? null,
+    });
 
     return (
         <section className="mt-8 border-t pt-6">
@@ -1140,6 +1146,14 @@ function OrderRecorder({
                     Record order
                 </Button>
             </form>
+            {cartSnapshot && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                    Product lines will come from the verified Woolworths cart
+                    captured{' '}
+                    {new Date(cartSnapshot.captured_at).toLocaleString('en-AU')}
+                    .
+                </p>
+            )}
             {orders.length > 0 && (
                 <ul className="mt-4 divide-y text-xs">
                     {orders.map((order) => (
@@ -1505,14 +1519,324 @@ function CartAutomationRunPanel({
     );
 }
 
+function ExactProductMatchEditor({
+    shoppingList,
+    retailers,
+}: {
+    shoppingList: PreparedShoppingList;
+    retailers: ShoppingWorkspace['retailers'];
+}) {
+    const woolworths = retailers.find(
+        (retailer) => retailer.slug === 'woolworths',
+    );
+    const unmatchedItems = shoppingList.items.filter(
+        (item) =>
+            item.included &&
+            !item.in_pantry &&
+            (!item.product_match?.retail_product.external_id ||
+                !item.product_match.retail_product.product_url),
+    );
+    const [itemId, setItemId] = useState(
+        () => unmatchedItems[0]?.id.toString() ?? '',
+    );
+    const selectedItemId = unmatchedItems.some(
+        (item) => item.id.toString() === itemId,
+    )
+        ? itemId
+        : (unmatchedItems[0]?.id.toString() ?? '');
+    const form = useForm({
+        name: '',
+        product_url: '',
+        brand: '',
+        pack_quantity: '',
+        pack_unit: '',
+        price: '',
+        pack_count: '1',
+        maximum_price: '',
+    });
+
+    if (!woolworths || unmatchedItems.length === 0) {
+        return null;
+    }
+
+    return (
+        <details className="mt-3 rounded-lg border bg-background p-3">
+            <summary className="cursor-pointer text-xs font-medium">
+                Add an exact Woolworths product
+            </summary>
+            <form
+                className="mt-3 grid gap-2 sm:grid-cols-2"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    const selectedItem = unmatchedItems.find(
+                        (item) => item.id.toString() === selectedItemId,
+                    );
+
+                    if (!selectedItem) {
+                        return;
+                    }
+
+                    form.transform((data) => ({
+                        retailer_id: woolworths.id,
+                        name: data.name,
+                        external_id: null,
+                        product_url: data.product_url,
+                        brand: data.brand.trim() || null,
+                        pack_quantity: data.pack_quantity
+                            ? Number(data.pack_quantity)
+                            : null,
+                        pack_unit: data.pack_unit.trim() || null,
+                        price: Number(data.price),
+                        pack_count: Number(data.pack_count),
+                        preferred: true,
+                        accept_substitutes: false,
+                        maximum_price: data.maximum_price
+                            ? Number(data.maximum_price)
+                            : null,
+                        note: 'Exact product approved for the current household safety context.',
+                        expected_revision: shoppingList.revision,
+                    }));
+                    form.put(
+                        `/shopping-list-items/${selectedItem.id}/product-match`,
+                        { preserveScroll: true },
+                    );
+                }}
+            >
+                <label className="grid gap-1 text-xs">
+                    Shopping item
+                    <select
+                        className="h-9 rounded-md border bg-background px-2"
+                        value={selectedItemId}
+                        onChange={(event) => setItemId(event.target.value)}
+                    >
+                        {unmatchedItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                                {item.name}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Exact product name
+                    <Input
+                        required
+                        value={form.data.name}
+                        onChange={(event) =>
+                            form.setData('name', event.target.value)
+                        }
+                    />
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Woolworths product URL
+                    <Input
+                        required
+                        type="url"
+                        placeholder="https://www.woolworths.com.au/shop/productdetails/…"
+                        value={form.data.product_url}
+                        onChange={(event) =>
+                            form.setData('product_url', event.target.value)
+                        }
+                    />
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Brand
+                    <Input
+                        value={form.data.brand}
+                        onChange={(event) =>
+                            form.setData('brand', event.target.value)
+                        }
+                    />
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Price
+                    <Input
+                        required
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.data.price}
+                        onChange={(event) =>
+                            form.setData('price', event.target.value)
+                        }
+                    />
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Pack size
+                    <div className="grid grid-cols-2 gap-2">
+                        <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="Quantity"
+                            value={form.data.pack_quantity}
+                            onChange={(event) =>
+                                form.setData(
+                                    'pack_quantity',
+                                    event.target.value,
+                                )
+                            }
+                        />
+                        <Input
+                            placeholder="Unit"
+                            value={form.data.pack_unit}
+                            onChange={(event) =>
+                                form.setData('pack_unit', event.target.value)
+                            }
+                        />
+                    </div>
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Packs to add
+                    <Input
+                        required
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={form.data.pack_count}
+                        onChange={(event) =>
+                            form.setData('pack_count', event.target.value)
+                        }
+                    />
+                </label>
+                <label className="grid gap-1 text-xs">
+                    Maximum accepted price
+                    <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.data.maximum_price}
+                        onChange={(event) =>
+                            form.setData('maximum_price', event.target.value)
+                        }
+                    />
+                </label>
+                <div className="flex items-end">
+                    <Button size="sm" disabled={form.processing}>
+                        Save exact match
+                    </Button>
+                </div>
+            </form>
+        </details>
+    );
+}
+
+function CartProductPreflight({
+    automaticSearchApproved,
+    onAutomaticSearchApprovedChange,
+    onSafetyAcknowledgedChange,
+    preflight,
+    retailers,
+    safetyAcknowledged,
+    shoppingList,
+}: {
+    automaticSearchApproved: boolean;
+    onAutomaticSearchApprovedChange: (checked: boolean) => void;
+    onSafetyAcknowledgedChange: (checked: boolean) => void;
+    preflight: CartAutomation['preflight'];
+    retailers: ShoppingWorkspace['retailers'];
+    safetyAcknowledged: boolean;
+    shoppingList: PreparedShoppingList;
+}) {
+    return (
+        <div className="mb-5 rounded-xl border bg-muted/30 p-4">
+            <p className="text-sm font-medium">Review the product plan</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {preflight.matched_items} exact product
+                {preflight.matched_items === 1 ? ' match' : ' matches'} ·{' '}
+                {preflight.automatic_search_items} requiring Woolworths search
+            </p>
+            {preflight.constraints.length > 0 && (
+                <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                    <p className="font-medium">Household safety constraints</p>
+                    <ul className="mt-1 space-y-1">
+                        {preflight.constraints.map((constraint) => (
+                            <li key={constraint.id}>
+                                {constraint.person
+                                    ? `${constraint.person}: `
+                                    : ''}
+                                {constraint.kind} — {constraint.subject}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+            {preflight.requires_exact_matches &&
+                preflight.automatic_search_items > 0 && (
+                    <div className="mt-3">
+                        <p className="text-xs text-destructive" role="alert">
+                            Automatic product selection is blocked while safety
+                            constraints apply. Every included item needs an
+                            exact approved product match.
+                        </p>
+                        <ExactProductMatchEditor
+                            shoppingList={shoppingList}
+                            retailers={retailers}
+                        />
+                    </div>
+                )}
+            {preflight.automatic_search_items > 0 &&
+                !preflight.requires_exact_matches && (
+                    <label className="mt-3 flex items-start gap-2 text-xs leading-5">
+                        <Checkbox
+                            aria-label="Allow automatic Woolworths product search"
+                            checked={automaticSearchApproved}
+                            onCheckedChange={(checked) =>
+                                onAutomaticSearchApprovedChange(
+                                    Boolean(checked),
+                                )
+                            }
+                        />
+                        <span>
+                            Allow Chef to search Woolworths for{' '}
+                            {preflight.automatic_search_items} unmatched items
+                            and stop whenever the product choice is ambiguous.
+                        </span>
+                    </label>
+                )}
+            <label className="mt-3 flex items-start gap-2 text-xs leading-5">
+                <Checkbox
+                    aria-label="Confirm cart product plan safety review"
+                    checked={safetyAcknowledged}
+                    onCheckedChange={(checked) =>
+                        onSafetyAcknowledgedChange(Boolean(checked))
+                    }
+                />
+                <span>
+                    I reviewed the household safety context and this product
+                    plan.
+                </span>
+            </label>
+            {preflight.automatic_search_item_names.length > 0 && (
+                <details className="mt-3 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">
+                        Items requiring search
+                    </summary>
+                    <p className="mt-1 leading-5">
+                        {preflight.automatic_search_item_names.join(', ')}
+                        {preflight.automatic_search_items >
+                        preflight.automatic_search_item_names.length
+                            ? '…'
+                            : ''}
+                    </p>
+                </details>
+            )}
+        </div>
+    );
+}
+
 function CartAutomationSection({
     automation,
     shoppingList,
+    retailers,
 }: {
     automation: CartAutomation;
     shoppingList: PreparedShoppingList;
+    retailers: ShoppingWorkspace['retailers'];
 }) {
     const [processing, setProcessing] = useState(false);
+    const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
+    const [automaticSearchApproved, setAutomaticSearchApproved] =
+        useState(false);
     const connection = automation.connection;
     const run = automation.run;
     const intervention = run?.intervention;
@@ -1564,6 +1888,8 @@ function CartAutomationSection({
             shopping_list_revision_id: automation.shopping_list_revision_id,
             retailer_connection_id: connection.id,
             idempotency_key: crypto.randomUUID(),
+            safety_acknowledged: safetyAcknowledged,
+            allow_automatic_product_search: automaticSearchApproved,
         });
     };
     const cancel = () => {
@@ -1681,6 +2007,19 @@ function CartAutomationSection({
                 </div>
             ) : (
                 <div className="mt-5">
+                    {(!run || runTerminal) && (
+                        <CartProductPreflight
+                            automaticSearchApproved={automaticSearchApproved}
+                            onAutomaticSearchApprovedChange={
+                                setAutomaticSearchApproved
+                            }
+                            onSafetyAcknowledgedChange={setSafetyAcknowledged}
+                            preflight={automation.preflight}
+                            retailers={retailers}
+                            safetyAcknowledged={safetyAcknowledged}
+                            shoppingList={shoppingList}
+                        />
+                    )}
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <p className="text-sm font-medium">
@@ -1698,7 +2037,12 @@ function CartAutomationSection({
                                 disabled={
                                     processing ||
                                     !automation.ready ||
-                                    !automation.cart_mutation_enabled
+                                    !automation.cart_mutation_enabled ||
+                                    !automation.preflight.can_prepare ||
+                                    !safetyAcknowledged ||
+                                    (automation.preflight
+                                        .automatic_search_items > 0 &&
+                                        !automaticSearchApproved)
                                 }
                                 onClick={prepare}
                             >
@@ -2035,6 +2379,7 @@ function ReadyShoppingList({
             <CartAutomationSection
                 automation={cartAutomation}
                 shoppingList={shoppingList}
+                retailers={retailers}
             />
             {shoppingList.items.length > 0 && (
                 <details className="mt-8 border-t py-4">
@@ -2053,6 +2398,11 @@ function ReadyShoppingList({
                     listId={shoppingList.id}
                     retailers={retailers}
                     orders={shoppingList.orders}
+                    cartSnapshot={
+                        cartAutomation.run?.status === 'ready_for_review'
+                            ? cartAutomation.run.snapshot
+                            : null
+                    }
                 />
             )}
         </>

@@ -56,6 +56,12 @@ class CartSnapshot extends Model
         return $this->hasMany(CartSnapshotLine::class);
     }
 
+    /** @return HasMany<Order, $this> */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
     protected function casts(): array
     {
         return [

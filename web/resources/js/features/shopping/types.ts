@@ -58,6 +58,8 @@ export type ShoppingListItem = {
         preferred: boolean;
         retail_product: {
             id: number;
+            external_id: string | null;
+            product_url: string | null;
             name: string;
             brand: string | null;
             pack_quantity: number | null;
@@ -97,6 +99,7 @@ export type ShoppingList = {
     }[];
     orders: {
         id: number;
+        cart_snapshot_id: number | null;
         actual_total: number;
         estimated_total: number | null;
         currency: string;
@@ -256,6 +259,21 @@ export type CartAutomation = {
     ready: boolean;
     readiness_reasons: string[];
     shopping_list_revision_id: number | null;
+    preflight: {
+        total_items: number;
+        matched_items: number;
+        automatic_search_items: number;
+        automatic_search_item_names: string[];
+        requires_exact_matches: boolean;
+        can_prepare: boolean;
+        constraints: {
+            id: number;
+            kind: string;
+            subject: string;
+            severity: string | null;
+            person: string | null;
+        }[];
+    };
     connection: {
         id: number;
         status:

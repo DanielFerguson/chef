@@ -20,7 +20,7 @@ class MatchRetailProduct
         private readonly EnsureShoppingListIsEditable $ensureEditable,
     ) {}
 
-    /** @param array{name: string, brand?: string|null, pack_quantity?: float|null, pack_unit?: string|null, price: float, pack_count?: int, preferred?: bool, accept_substitutes?: bool, maximum_price?: float|null, note?: string|null} $data */
+    /** @param array{name: string, external_id?: string|null, product_url?: string|null, brand?: string|null, pack_quantity?: float|null, pack_unit?: string|null, price: float, pack_count?: int, preferred?: bool, accept_substitutes?: bool, maximum_price?: float|null, note?: string|null} $data */
     public function handle(ShoppingListItem $item, Retailer $retailer, User $user, array $data, int $expectedRevision): ShoppingListItem
     {
         if (! $user->can('update', $item)) {
@@ -37,18 +37,37 @@ class MatchRetailProduct
 
         return DB::transaction(function () use ($item, $retailer, $user, $data, $expectedRevision): ShoppingListItem {
             $shoppingList = $this->ensureEditable->handle($item->shoppingList);
+            $externalId = filled($data['external_id'] ?? null)
+                ? Str::squish((string) $data['external_id'])
+                : $this->externalIdFromUrl($data['product_url'] ?? null);
+
+            if (filled($data['product_url'] ?? null)) {
+                $retailerHost = parse_url((string) $retailer->website_url, PHP_URL_HOST);
+                $productHost = parse_url((string) $data['product_url'], PHP_URL_HOST);
+
+                if ($externalId === null || ! is_string($retailerHost) || ! is_string($productHost) || ! hash_equals($retailerHost, $productHost)) {
+                    throw ValidationException::withMessages(['product_url' => 'Use a valid product-detail URL from the selected retailer.']);
+                }
+            }
             $identity = [
                 'retailer_id' => $retailer->id,
-                'name' => Str::squish($data['name']),
-                'brand' => filled($data['brand'] ?? null) ? Str::squish($data['brand']) : null,
-                'pack_quantity' => $data['pack_quantity'] ?? null,
-                'pack_unit' => filled($data['pack_unit'] ?? null) ? Str::lower(Str::squish($data['pack_unit'])) : null,
+                ...($externalId !== null ? ['external_id' => $externalId] : [
+                    'name' => Str::squish($data['name']),
+                    'brand' => filled($data['brand'] ?? null) ? Str::squish($data['brand']) : null,
+                    'pack_quantity' => $data['pack_quantity'] ?? null,
+                    'pack_unit' => filled($data['pack_unit'] ?? null) ? Str::lower(Str::squish($data['pack_unit'])) : null,
+                ]),
             ];
             $product = RetailProduct::query()->firstOrNew($identity);
             $product->fill([
                 ...$identity,
+                'name' => Str::squish($data['name']),
+                'brand' => filled($data['brand'] ?? null) ? Str::squish($data['brand']) : null,
+                'pack_quantity' => $data['pack_quantity'] ?? null,
+                'pack_unit' => filled($data['pack_unit'] ?? null) ? Str::lower(Str::squish($data['pack_unit'])) : null,
                 'current_price' => round($data['price'], 2),
                 'currency' => 'AUD',
+                'product_url' => filled($data['product_url'] ?? null) ? (string) $data['product_url'] : null,
                 'last_seen_at' => now(),
             ])->save();
             $preference = null;
@@ -104,5 +123,16 @@ class MatchRetailProduct
 
             return $item->refresh()->load('productMatch.retailProduct.retailer');
         });
+    }
+
+    private function externalIdFromUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        return preg_match('~/productdetails/(\d+)~i', $url, $matches) === 1
+            ? $matches[1]
+            : null;
     }
 }

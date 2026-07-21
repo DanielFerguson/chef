@@ -603,6 +603,48 @@ it('stores household and plan budgets retailer preferences matches and immutable
         ->and($order->lines()->where('shopping_list_item_id', $chicken->id)->sole()->total_price)->toBe(25.0);
 });
 
+it('records exact retailer identity from a validated product URL', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+    $woolworths = Retailer::query()->where('slug', 'woolworths')->sole();
+    $chicken = $list->items()->where('normalized_name', 'chicken breast')->sole();
+    $milk = $list->items()->where('normalized_name', 'coconut milk')->sole();
+    $this->actingAs($workspace['user']);
+
+    $this->put(route('shopping-list-items.product-match.update', $chicken), [
+        'retailer_id' => $woolworths->id,
+        'name' => 'Woolworths Chicken Breast Fillets',
+        'product_url' => 'https://www.woolworths.com.au/shop/productdetails/123456/chicken-breast-fillets',
+        'price' => 13.50,
+        'pack_count' => 2,
+        'preferred' => true,
+        'accept_substitutes' => false,
+        'expected_revision' => 1,
+    ])->assertSessionHasNoErrors();
+
+    $product = $chicken->refresh()->productMatch->retailProduct;
+    $snapshotMatch = collect($list->refresh()->revisions()->latest('revision')->firstOrFail()->snapshot['items'])
+        ->firstWhere('id', $chicken->id)['product_match'];
+
+    expect($product->external_id)->toBe('123456')
+        ->and($product->product_url)->toBe('https://www.woolworths.com.au/shop/productdetails/123456/chicken-breast-fillets')
+        ->and($snapshotMatch['external_id'])->toBe('123456')
+        ->and($snapshotMatch['product_url'])->toBe($product->product_url);
+
+    $this->put(route('shopping-list-items.product-match.update', $milk), [
+        'retailer_id' => $woolworths->id,
+        'name' => 'Wrong retailer product',
+        'product_url' => 'https://www.coles.com.au/productdetails/987654',
+        'price' => 3,
+        'pack_count' => 1,
+        'preferred' => true,
+        'accept_substitutes' => false,
+        'expected_revision' => 2,
+    ])->assertSessionHasErrors('product_url');
+
+    expect($milk->refresh()->productMatch)->toBeNull();
+});
+
 it('keeps shopping lists actions and route bindings inside the family boundary', function () {
     $workspace = shoppingListWorkspace();
     $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);

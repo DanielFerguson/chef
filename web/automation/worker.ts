@@ -330,7 +330,14 @@ async function prepareItem(
         typeof requirement.product_match?.product_name === 'string'
             ? requirement.product_match.product_name
             : requirement.name;
-    const existing = findMatchingLine(existingLines, desiredProductName);
+    const desiredExternalId =
+        typeof requirement.product_match?.external_id === 'string'
+            ? requirement.product_match.external_id
+            : null;
+    const existing = findMatchingLine(
+        existingLines,
+        desiredExternalId ?? desiredProductName,
+    );
     const packCount = positiveInteger(requirement.product_match?.pack_count, 1);
     const targetCartQuantity = requirement.pre_existing_quantity + packCount;
 
@@ -355,7 +362,11 @@ async function prepareItem(
     const ranked = candidates
         .map((candidate) => ({
             ...candidate,
-            score: productScore(candidate.product_name, desiredProductName),
+            score:
+                desiredExternalId !== null &&
+                candidate.external_product_id === desiredExternalId
+                    ? 1
+                    : productScore(candidate.product_name, desiredProductName),
         }))
         .sort((left, right) => right.score - left.score);
     const best = ranked[0];
