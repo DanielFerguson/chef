@@ -2,6 +2,7 @@
 
 use App\Actions\Retailer\AdvanceRetailerOrderRun;
 use App\Actions\Retailer\ConfirmRetailerOrder;
+use App\Actions\Retailer\RecordPlacedRetailerOrder;
 use App\Actions\Retailer\VerifyRetailerPlacement;
 use App\Actions\Teams\AddUserToTeam;
 use App\Actions\Teams\CreateTeamForUser;
@@ -303,4 +304,18 @@ it('rejects confirm outside awaiting order confirmation', function () {
 
     expect(fn () => app(ConfirmRetailerOrder::class)->handle($fixture['run'], $fixture['member']))
         ->toThrow(ValidationException::class);
+});
+
+it('refuses to record placement outside submit or verification statuses', function () {
+    $fixture = confirmOrderFixture([
+        'status' => RetailerOrderRunStatus::AwaitingOrderConfirmation,
+    ]);
+
+    expect(fn () => app(RecordPlacedRetailerOrder::class)->handle(
+        $fixture['run'],
+        $fixture['member'],
+        retailerOrderReference: 'WW-TOO-EARLY',
+    ))->toThrow(ValidationException::class);
+
+    expect(Order::query()->where('shopping_list_id', $fixture['run']->shopping_list_id)->exists())->toBeFalse();
 });
