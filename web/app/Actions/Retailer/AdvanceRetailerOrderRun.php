@@ -28,7 +28,7 @@ class AdvanceRetailerOrderRun
 
     public function handle(RetailerOrderRun $run): RetailerOrderAdvanceResult
     {
-        $run = $run->fresh(['items', 'retailerConnection']);
+        $run = $run->fresh(['items', 'retailerConnection', 'shoppingList']);
 
         if ($run === null) {
             return new RetailerOrderAdvanceResult(false, 'missing');
@@ -38,10 +38,16 @@ class AdvanceRetailerOrderRun
             return new RetailerOrderAdvanceResult(false, $run->status->value);
         }
 
-        if ($run->status !== RetailerOrderRunStatus::PreparingCart) {
-            return new RetailerOrderAdvanceResult(false, $run->status->value);
-        }
+        return match ($run->status) {
+            RetailerOrderRunStatus::PreparingCart => $this->advanceCartPreparation($run),
+            RetailerOrderRunStatus::CartReady,
+            RetailerOrderRunStatus::FetchingFulfilmentOptions => $this->advanceFulfilmentOptions($run),
+            default => new RetailerOrderAdvanceResult(false, $run->status->value),
+        };
+    }
 
+    private function advanceCartPreparation(RetailerOrderRun $run): RetailerOrderAdvanceResult
+    {
         if ($run->expires_at?->isPast()) {
             $run->update([
                 'status' => RetailerOrderRunStatus::Failed,
@@ -227,6 +233,55 @@ class AdvanceRetailerOrderRun
         ]);
 
         return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::CartReady->value);
+    }
+
+    private function advanceFulfilmentOptions(RetailerOrderRun $run): RetailerOrderAdvanceResult
+    {
+        if ($run->expires_at?->isPast()) {
+            $run->update([
+                'status' => RetailerOrderRunStatus::Failed,
+                'failure_message' => 'The order run window expired before fulfilment options could be fetched.',
+            ]);
+
+            return new RetailerOrderAdvanceResult(false, 'expired');
+        }
+
+        $fulfilmentType = $run->fulfilment_type;
+        $shoppingMethod = $run->shoppingList?->fulfilment_method;
+
+        if ($fulfilmentType === null && in_array($shoppingMethod, ['delivery', 'pickup'], true)) {
+            $fulfilmentType = $shoppingMethod;
+        }
+
+        if ($fulfilmentType === null) {
+            return new RetailerOrderAdvanceResult(false, 'fulfilment_type_required');
+        }
+
+        $run->update([
+            'status' => RetailerOrderRunStatus::FetchingFulfilmentOptions,
+            'fulfilment_type' => $fulfilmentType,
+            'selected_slot' => null,
+            'failure_message' => null,
+        ]);
+        $run = $run->refresh();
+
+        $session = $this->ensureBrowserSession($run);
+        $options = $this->browser->extractFulfilmentOptions($session, $fulfilmentType);
+        $type = $options->type !== '' ? $options->type : $fulfilmentType;
+        $expiresAt = $options->expiresAt ?? now()->addMinutes(30);
+
+        $run->update([
+            'status' => RetailerOrderRunStatus::AwaitingFulfilmentSelection,
+            'fulfilment_type' => $type,
+            'fulfilment_options' => [
+                'type' => $type,
+                'slots' => $options->slots,
+            ],
+            'fulfilment_options_expires_at' => $expiresAt,
+            'failure_message' => null,
+        ]);
+
+        return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingFulfilmentSelection->value);
     }
 
     private function ensureBrowserSession(RetailerOrderRun $run): BrowserSession
