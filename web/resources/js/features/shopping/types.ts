@@ -258,6 +258,85 @@ export type AutomationRun = {
     normal_app_sync_proven: boolean;
 };
 
+export type RetailerOrderRunItem = {
+    id: number;
+    position: number;
+    name: string;
+    quantity: number | null;
+    unit: string | null;
+    status:
+        | 'pending'
+        | 'searching'
+        | 'matched'
+        | 'substituted'
+        | 'unavailable'
+        | 'skipped'
+        | 'awaiting_decision'
+        | 'failed';
+    product: Record<string, unknown> | null;
+    failure_message: string | null;
+};
+
+export type RetailerOrderRun = {
+    id: number;
+    status:
+        | 'draft'
+        | 'preparing_cart'
+        | 'awaiting_cart_decision'
+        | 'awaiting_item_decision'
+        | 'awaiting_reauthentication'
+        | 'cart_ready'
+        | 'fetching_fulfilment_options'
+        | 'awaiting_fulfilment_selection'
+        | 'awaiting_order_confirmation'
+        | 'submitting_order'
+        | 'placed'
+        | 'awaiting_placement_verification'
+        | 'failed'
+        | 'cancelled';
+    shopping_list_revision_id: number;
+    current_shopping_list_revision: number;
+    existing_cart_decision: 'merge' | 'replace' | 'cancel' | null;
+    fulfilment_type: 'delivery' | 'pickup' | null;
+    fulfilment_options: {
+        type?: 'delivery' | 'pickup';
+        slots?: {
+            id: string;
+            label?: string;
+            starts_at?: string | null;
+            ends_at?: string | null;
+            fee?: number | null;
+        }[];
+    } | null;
+    fulfilment_options_expires_at: string | null;
+    selected_slot: {
+        id: string;
+        label?: string;
+        starts_at?: string | null;
+        ends_at?: string | null;
+        fee?: number | null;
+    } | null;
+    confirmation: {
+        fulfilment_type: string | null;
+        selected_slot: Record<string, unknown> | null;
+        fingerprint: string;
+        consequence: string;
+    } | null;
+    cart_checksum: string | null;
+    retailer_order_reference: string | null;
+    failure_message: string | null;
+    expires_at: string | null;
+    cart_decision_needed: boolean;
+    placement_verification_needed: boolean;
+    progress: {
+        resolved: number;
+        total: number;
+    };
+    items: RetailerOrderRunItem[];
+    can_open_woolworths_cart: boolean;
+    open_woolworths_cart_url: string | null;
+};
+
 export type CartAutomation = {
     approved: boolean;
     connection_enabled: boolean;
@@ -346,6 +425,7 @@ export type ShoppingWorkspace = {
         currency: string;
     };
     cart_automation: CartAutomation;
+    retailer_order_run: RetailerOrderRun | null;
 };
 import type {
     ConversationFeedback,

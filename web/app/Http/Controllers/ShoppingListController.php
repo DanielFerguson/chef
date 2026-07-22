@@ -8,12 +8,14 @@ use App\Automation\AutomationRunView;
 use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
+use App\Enums\RetailerOrderRunStatus;
 use App\Enums\ShoppingListItemCategory;
 use App\Models\Budget;
 use App\Models\CartProductPlan;
 use App\Models\MealPlan;
 use App\Models\PlannedMeal;
 use App\Models\Retailer;
+use App\Retailer\RetailerOrderRunView;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -45,6 +47,7 @@ class ShoppingListController extends Controller
         Request $request,
         MealPlan $mealPlan,
         AutomationRunView $automationRunView,
+        RetailerOrderRunView $retailerOrderRunView,
         BuildCartPreparationPreflight $buildCartPreparationPreflight,
         AssessMealPlanReadiness $assessReadiness,
     ): Response {
@@ -111,6 +114,16 @@ class ShoppingListController extends Controller
             : $shoppingList->automationRuns()
                 ->where('retailer_connection_id', $retailerConnection->id)
                 ->latest()
+                ->first();
+        $retailerOrderRun = $shoppingList === null
+            ? null
+            : $shoppingList->retailerOrderRuns()
+                ->whereNotIn('status', [
+                    RetailerOrderRunStatus::Placed->value,
+                    RetailerOrderRunStatus::Failed->value,
+                    RetailerOrderRunStatus::Cancelled->value,
+                ])
+                ->latest('id')
                 ->first();
         $cartItemCount = $shoppingList?->items
             ->filter(fn ($item) => $item->included && ! $item->in_pantry)
@@ -226,6 +239,9 @@ class ShoppingListController extends Controller
                     ],
                     'run' => $automationRun === null ? null : $automationRunView->make($automationRun),
                 ],
+                'retailer_order_run' => $retailerOrderRun === null
+                    ? null
+                    : $retailerOrderRunView->make($retailerOrderRun),
             ],
         ]);
     }

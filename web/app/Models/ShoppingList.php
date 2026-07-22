@@ -81,6 +81,12 @@ class ShoppingList extends Model
         return $this->hasMany(AutomationRun::class)->latest();
     }
 
+    /** @return HasMany<RetailerOrderRun, $this> */
+    public function retailerOrderRuns(): HasMany
+    {
+        return $this->hasMany(RetailerOrderRun::class)->latest('id');
+    }
+
     /** @return HasMany<CartProductPlan, $this> */
     public function cartProductPlans(): HasMany
     {
