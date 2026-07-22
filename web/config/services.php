@@ -60,6 +60,7 @@ return [
     'chef_automation' => [
         'node_binary' => env('AUTOMATION_NODE_BINARY', 'node'),
         'worker_path' => env('AUTOMATION_WORKER_PATH', base_path('automation/dist/worker.js')),
+        'stagehand_worker_path' => env('AUTOMATION_STAGEHAND_WORKER_PATH', base_path('automation/dist/src/main.js')),
         'actor_launcher_path' => env('AUTOMATION_ACTOR_LAUNCHER_PATH', base_path('automation/dist/launch-actor.js')),
         'actor_path' => env('AUTOMATION_ACTOR_PATH', base_path('automation/dist/actor.js')),
         'worker_timeout' => (int) env('AUTOMATION_WORKER_TIMEOUT', 45),

@@ -1,0 +1,84 @@
+{
+    "version": "chef.retailer.stagehand.v1",
+    "cases": [
+        {
+            "name": "fixture auth placeholder without cdp",
+            "command": "probe_auth",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "probe_auth",
+                "payload": {}
+            },
+            "response": {
+                "authenticated": false,
+                "reason": "Stagehand auth probe placeholder; CDP was not available.",
+                "bot_detected": false,
+                "sensitive_screen": false,
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "live cdp auth stub",
+            "command": "probe_auth",
+            "mode": "live_stub",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "probe_auth",
+                "payload": {}
+            },
+            "response": {
+                "authenticated": false,
+                "reason": "Stagehand auth probe stub; live CDP supplied but probe not implemented.",
+                "bot_detected": false,
+                "sensitive_screen": false,
+                "fixture_mode": false,
+                "cdp_present": true,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "fixture empty cart placeholder",
+            "command": "inspect_cart",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "inspect_cart",
+                "payload": {}
+            },
+            "response": {
+                "lines": [],
+                "total": 0,
+                "currency": "AUD",
+                "bot_detected": false,
+                "sensitive_screen": false,
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "live cdp cart stub",
+            "command": "inspect_cart",
+            "mode": "live_stub",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "inspect_cart",
+                "payload": {}
+            },
+            "response": {
+                "lines": [],
+                "total": 0,
+                "currency": "AUD",
+                "bot_detected": false,
+                "sensitive_screen": false,
+                "reason": "Stagehand cart inspection stub; live CDP supplied but inspect not implemented.",
+                "fixture_mode": false,
+                "cdp_present": true,
+                "stagehand_available": true
+            }
+        }
+    ]
+}

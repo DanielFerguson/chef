@@ -19,4 +19,18 @@ final readonly class CartInspection
     {
         return $this->lines === [];
     }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public static function fromPayload(array $payload): self
+    {
+        return new self(
+            lines: is_array($payload['lines'] ?? null) ? array_values($payload['lines']) : [],
+            total: is_numeric($payload['total'] ?? null) ? (float) $payload['total'] : null,
+            currency: is_string($payload['currency'] ?? null) ? $payload['currency'] : 'AUD',
+            botDetected: (bool) ($payload['bot_detected'] ?? false),
+            sensitiveScreen: (bool) ($payload['sensitive_screen'] ?? false),
+        );
+    }
 }

@@ -26,6 +26,7 @@ use App\Automation\Testing\FakeBrowserSessionProvider;
 use App\Automation\Testing\FakeComputerExecutor;
 use App\Automation\Testing\FakeComputerUseClient;
 use App\Automation\Testing\FakeRetailerProductDiscovery;
+use App\Retailer\Browserbase\StagehandRetailerBrowser;
 use App\Retailer\Contracts\RetailerBrowser;
 use App\Retailer\Testing\FakeRetailerBrowser;
 use Carbon\CarbonImmutable;
@@ -82,9 +83,12 @@ class AppServiceProvider extends ServiceProvider
         );
         $this->app->bind(ComputerUseEngine::class, LaravelComputerUseEngine::class);
 
-        if ($this->app->environment('testing')) {
-            $this->app->singleton(RetailerBrowser::class, FakeRetailerBrowser::class);
-        }
+        $this->app->singleton(
+            RetailerBrowser::class,
+            $this->app->environment('testing')
+                ? FakeRetailerBrowser::class
+                : StagehandRetailerBrowser::class,
+        );
     }
 
     /**
