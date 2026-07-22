@@ -26,6 +26,8 @@ use App\Automation\Testing\FakeBrowserSessionProvider;
 use App\Automation\Testing\FakeComputerExecutor;
 use App\Automation\Testing\FakeComputerUseClient;
 use App\Automation\Testing\FakeRetailerProductDiscovery;
+use App\Retailer\Contracts\RetailerBrowser;
+use App\Retailer\Testing\FakeRetailerBrowser;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Support\Facades\Date;
@@ -79,6 +81,10 @@ class AppServiceProvider extends ServiceProvider
                 : WoolworthsCatalogueDiscovery::class,
         );
         $this->app->bind(ComputerUseEngine::class, LaravelComputerUseEngine::class);
+
+        if ($this->app->environment('testing')) {
+            $this->app->singleton(RetailerBrowser::class, FakeRetailerBrowser::class);
+        }
     }
 
     /**
