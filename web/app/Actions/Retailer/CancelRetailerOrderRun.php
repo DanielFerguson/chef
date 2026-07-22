@@ -43,6 +43,12 @@ class CancelRetailerOrderRun
             return $run;
         }
 
+        if ($run->status->blocksResubmit()) {
+            throw ValidationException::withMessages([
+                'retailer_order_run' => 'This Woolworths order can no longer be cancelled in Chef. Check placement verification or Woolworths if needed.',
+            ]);
+        }
+
         $sessions = $run->retailerConnection
             ->browserSessions()
             ->whereNotIn('status', [
@@ -60,6 +66,12 @@ class CancelRetailerOrderRun
 
             if ($locked->status->isTerminal()) {
                 return $locked;
+            }
+
+            if ($locked->status->blocksResubmit()) {
+                throw ValidationException::withMessages([
+                    'retailer_order_run' => 'This Woolworths order can no longer be cancelled in Chef. Check placement verification or Woolworths if needed.',
+                ]);
             }
 
             $locked->update([

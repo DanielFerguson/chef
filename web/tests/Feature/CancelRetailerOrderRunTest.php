@@ -14,6 +14,7 @@ use App\Models\ShoppingList;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
 
@@ -96,4 +97,18 @@ it('rejects cancellation from outsiders and is idempotent when already terminal'
     $run = app(CancelRetailerOrderRun::class)->handle($fixture['run']->refresh(), $fixture['member']);
 
     expect($run->status)->toBe(RetailerOrderRunStatus::Cancelled);
+});
+
+it('refuses cancel while submitting or awaiting placement verification', function () {
+    foreach ([
+        RetailerOrderRunStatus::SubmittingOrder,
+        RetailerOrderRunStatus::AwaitingPlacementVerification,
+    ] as $status) {
+        $fixture = cancelOrderRunFixture(['status' => $status]);
+
+        expect(fn () => app(CancelRetailerOrderRun::class)->handle($fixture['run'], $fixture['member']))
+            ->toThrow(ValidationException::class);
+
+        expect($fixture['run']->refresh()->status)->toBe($status);
+    }
 });

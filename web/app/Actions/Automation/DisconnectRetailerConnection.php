@@ -26,9 +26,12 @@ class DisconnectRetailerConnection
             throw new AuthorizationException('Only the connection owner can disconnect Woolworths.');
         }
 
-        $activeStatuses = collect(RetailerOrderRunStatus::cases())->reject->isTerminal()->map->value->all();
+        $cancellableStatuses = collect(RetailerOrderRunStatus::cases())
+            ->reject(fn (RetailerOrderRunStatus $status): bool => $status->isTerminal() || $status->blocksResubmit())
+            ->map->value
+            ->all();
 
-        foreach ($connection->orderRuns()->whereIn('status', $activeStatuses)->get() as $run) {
+        foreach ($connection->orderRuns()->whereIn('status', $cancellableStatuses)->get() as $run) {
             $this->cancelOrderRun->handle($run, $user);
         }
 

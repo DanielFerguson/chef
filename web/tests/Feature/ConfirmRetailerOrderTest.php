@@ -17,6 +17,7 @@ use App\Models\RetailerOrderRunItem;
 use App\Models\ShoppingList;
 use App\Models\User;
 use App\Retailer\Contracts\RetailerBrowser;
+use App\Retailer\Data\CartInspection;
 use App\Retailer\Data\SubmitResult;
 use App\Retailer\Testing\FakeRetailerBrowser;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -69,7 +70,15 @@ function confirmOrderFixture(array $runOverrides = []): array
         'ends_at' => '2026-07-23T20:00:00+10:00',
         'fee' => 0.0,
     ];
-    $cartChecksum = hash('sha256', 'cart-for-confirm');
+    $cartLines = [[
+        'external_id' => '123456',
+        'product_name' => 'Full Cream Milk 2L',
+        'quantity' => 1,
+    ]];
+    $cartChecksum = hash('sha256', json_encode(
+        $cartLines,
+        JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
+    ));
 
     $run = RetailerOrderRun::factory()->create([
         'team_id' => $team->id,
@@ -152,17 +161,42 @@ it('confirms into SubmittingOrder and dispatches advance', function () {
     });
 });
 
+/**
+ * @return array{fingerprint: string, confirmation: array<string, mixed>}
+ */
+function submittingConfirmation(RetailerOrderRun $run, array $extra = []): array
+{
+    $fingerprint = ConfirmRetailerOrder::fingerprint($run);
+
+    return [
+        'fingerprint' => $fingerprint,
+        'confirmation' => [
+            'user_id' => $run->started_by_user_id,
+            'confirmed_at' => now()->toIso8601String(),
+            'fingerprint' => $fingerprint,
+            ...$extra,
+        ],
+    ];
+}
+
 it('places the order when submit succeeds with a parsed reference', function () {
     $fixture = confirmOrderFixture([
         'status' => RetailerOrderRunStatus::SubmittingOrder,
-        'confirmation' => [
-            'user_id' => 1,
-            'confirmed_at' => now()->toIso8601String(),
-            'fingerprint' => 'fp',
-        ],
-        'confirmation_fingerprint' => 'fp',
+    ]);
+    $confirmed = submittingConfirmation($fixture['run']);
+    $fixture['run']->update([
+        'confirmation' => $confirmed['confirmation'],
+        'confirmation_fingerprint' => $confirmed['fingerprint'],
     ]);
 
+    $fixture['browser']->queue('inspectCart', new CartInspection(
+        lines: [[
+            'external_id' => '123456',
+            'product_name' => 'Full Cream Milk 2L',
+            'quantity' => 1,
+        ]],
+        total: 4.5,
+    ));
     $fixture['browser']->queue('submitOrderWithDefaultPayment', new SubmitResult(
         ok: true,
         retailerOrderReference: null,
@@ -174,34 +208,167 @@ it('places the order when submit succeeds with a parsed reference', function () 
         confirmationText: 'Order WW-123456 confirmed',
     ));
 
-    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']);
+    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
     $run = $fixture['run']->refresh();
     $order = Order::query()->where('shopping_list_id', $run->shopping_list_id)->sole();
 
     expect($result->shouldContinue)->toBeFalse()
         ->and($run->status)->toBe(RetailerOrderRunStatus::Placed)
         ->and($run->retailer_order_reference)->toBe('WW-123456')
+        ->and($run->confirmation['submit_started_at'] ?? null)->not->toBeNull()
         ->and($order->status)->toBe('placed')
         ->and($order->retailer_id)->toBe($run->retailerConnection->retailer_id)
         ->and($order->lines)->toHaveCount(1)
         ->and($order->lines->first()->product_name)->toBe('Full Cream Milk 2L')
         ->and($order->lines->first()->retailer_product_identifier)->toBe('123456')
-        ->and($fixture['browser']->calls)->toHaveCount(2)
-        ->and($fixture['browser']->calls[0]['method'])->toBe('submitOrderWithDefaultPayment')
-        ->and($fixture['browser']->calls[1]['method'])->toBe('extractOrderConfirmation');
+        ->and(collect($fixture['browser']->calls)->pluck('method')->all())->toBe([
+            'inspectCart',
+            'submitOrderWithDefaultPayment',
+            'extractOrderConfirmation',
+        ]);
 });
 
-it('pauses for placement verification when the reference is unparsed and never resubmits', function () {
+it('reconciles a crash after submit without a second submit when remote confirmation has a reference', function () {
+    $fixture = confirmOrderFixture([
+        'status' => RetailerOrderRunStatus::SubmittingOrder,
+    ]);
+    $confirmed = submittingConfirmation($fixture['run'], [
+        'submit_started_at' => now()->subMinute()->toIso8601String(),
+    ]);
+    $fixture['run']->update([
+        'confirmation' => $confirmed['confirmation'],
+        'confirmation_fingerprint' => $confirmed['fingerprint'],
+    ]);
+
+    $fixture['browser']->queue('inspectCart', new CartInspection(
+        lines: [[
+            'external_id' => '123456',
+            'product_name' => 'Full Cream Milk 2L',
+            'quantity' => 1,
+        ]],
+        total: 4.5,
+    ));
+    $fixture['browser']->queue('extractOrderConfirmation', new SubmitResult(
+        ok: true,
+        retailerOrderReference: 'WW-CRASH-1',
+        confirmationText: 'Order WW-CRASH-1 confirmed',
+    ));
+
+    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
+    $run = $fixture['run']->refresh();
+
+    expect($result->shouldContinue)->toBeFalse()
+        ->and($run->status)->toBe(RetailerOrderRunStatus::Placed)
+        ->and($run->retailer_order_reference)->toBe('WW-CRASH-1')
+        ->and(collect($fixture['browser']->calls)->pluck('method')->all())->toBe([
+            'inspectCart',
+            'extractOrderConfirmation',
+        ])
+        ->and(collect($fixture['browser']->calls)->where('method', 'submitOrderWithDefaultPayment')->count())->toBe(0);
+});
+
+it('awaits placement verification without resubmitting when submit was started but confirmation is empty', function () {
+    $fixture = confirmOrderFixture([
+        'status' => RetailerOrderRunStatus::SubmittingOrder,
+    ]);
+    $confirmed = submittingConfirmation($fixture['run'], [
+        'submit_started_at' => now()->subMinute()->toIso8601String(),
+    ]);
+    $fixture['run']->update([
+        'confirmation' => $confirmed['confirmation'],
+        'confirmation_fingerprint' => $confirmed['fingerprint'],
+    ]);
+
+    $fixture['browser']->queue('inspectCart', new CartInspection(
+        lines: [[
+            'external_id' => '123456',
+            'product_name' => 'Full Cream Milk 2L',
+            'quantity' => 1,
+        ]],
+        total: 4.5,
+    ));
+    $fixture['browser']->queue('extractOrderConfirmation', new SubmitResult(
+        ok: true,
+        retailerOrderReference: null,
+        confirmationText: null,
+    ));
+
+    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
+
+    expect($result->shouldContinue)->toBeFalse()
+        ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::AwaitingPlacementVerification)
+        ->and(collect($fixture['browser']->calls)->where('method', 'submitOrderWithDefaultPayment')->count())->toBe(0)
+        ->and(collect($fixture['browser']->calls)->pluck('method')->all())->toBe([
+            'inspectCart',
+            'extractOrderConfirmation',
+        ]);
+});
+
+it('blocks submit when the confirmation fingerprint no longer matches', function () {
     $fixture = confirmOrderFixture([
         'status' => RetailerOrderRunStatus::SubmittingOrder,
         'confirmation' => [
             'user_id' => 1,
             'confirmed_at' => now()->toIso8601String(),
-            'fingerprint' => 'fp',
+            'fingerprint' => 'stale-fingerprint',
         ],
-        'confirmation_fingerprint' => 'fp',
+        'confirmation_fingerprint' => 'stale-fingerprint',
     ]);
 
+    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']);
+
+    expect($result->shouldContinue)->toBeFalse()
+        ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::AwaitingOrderConfirmation)
+        ->and($fixture['run']->failure_message)->toContain('changed')
+        ->and($fixture['browser']->calls)->toBe([]);
+});
+
+it('blocks submit when the live cart checksum no longer matches', function () {
+    $fixture = confirmOrderFixture([
+        'status' => RetailerOrderRunStatus::SubmittingOrder,
+    ]);
+    $confirmed = submittingConfirmation($fixture['run']);
+    $fixture['run']->update([
+        'confirmation' => $confirmed['confirmation'],
+        'confirmation_fingerprint' => $confirmed['fingerprint'],
+    ]);
+
+    $fixture['browser']->queue('inspectCart', new CartInspection(
+        lines: [[
+            'external_id' => '999999',
+            'product_name' => 'Unexpected bread',
+            'quantity' => 2,
+        ]],
+        total: 3.5,
+    ));
+
+    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
+
+    expect($result->shouldContinue)->toBeFalse()
+        ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::AwaitingOrderConfirmation)
+        ->and($fixture['run']->failure_message)->toContain('cart changed')
+        ->and(collect($fixture['browser']->calls)->pluck('method')->all())->toBe(['inspectCart'])
+        ->and(collect($fixture['browser']->calls)->where('method', 'submitOrderWithDefaultPayment')->count())->toBe(0);
+});
+
+it('pauses for placement verification when the reference is unparsed and never resubmits', function () {
+    $fixture = confirmOrderFixture([
+        'status' => RetailerOrderRunStatus::SubmittingOrder,
+    ]);
+    $confirmed = submittingConfirmation($fixture['run']);
+    $fixture['run']->update([
+        'confirmation' => $confirmed['confirmation'],
+        'confirmation_fingerprint' => $confirmed['fingerprint'],
+    ]);
+
+    $fixture['browser']->queue('inspectCart', new CartInspection(
+        lines: [[
+            'external_id' => '123456',
+            'product_name' => 'Full Cream Milk 2L',
+            'quantity' => 1,
+        ]],
+        total: 4.5,
+    ));
     $fixture['browser']->queue('submitOrderWithDefaultPayment', new SubmitResult(ok: true));
     $fixture['browser']->queue('extractOrderConfirmation', new SubmitResult(
         ok: true,
@@ -209,7 +376,7 @@ it('pauses for placement verification when the reference is unparsed and never r
         confirmationText: 'Thanks — your order is being prepared',
     ));
 
-    app(AdvanceRetailerOrderRun::class)->handle($fixture['run']);
+    app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
 
     expect($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::AwaitingPlacementVerification)
         ->and($fixture['run']->retailer_order_reference)->toBeNull()

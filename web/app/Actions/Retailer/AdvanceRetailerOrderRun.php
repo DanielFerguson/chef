@@ -19,6 +19,7 @@ use App\Retailer\Contracts\RetailerBrowser;
 use App\Retailer\Data\AuthCheck;
 use App\Retailer\Data\CartInspection;
 use App\Retailer\Data\RetailerOrderAdvanceResult;
+use App\Retailer\Data\SubmitResult;
 
 class AdvanceRetailerOrderRun
 {
@@ -315,8 +316,64 @@ class AdvanceRetailerOrderRun
             return new RetailerOrderAdvanceResult(false, 'expired');
         }
 
+        $expectedFingerprint = ConfirmRetailerOrder::fingerprint($run);
+        $storedFingerprint = $run->confirmation_fingerprint
+            ?? (is_array($run->confirmation) ? ($run->confirmation['fingerprint'] ?? null) : null);
+
+        if (! is_string($storedFingerprint) || $storedFingerprint === '' || ! hash_equals($storedFingerprint, $expectedFingerprint)) {
+            $run->update([
+                'status' => RetailerOrderRunStatus::AwaitingOrderConfirmation,
+                'failure_message' => 'The cart or fulfilment selection changed after confirm. Confirm again before Chef places the Woolworths order.',
+                'confirmation' => null,
+                'confirmation_fingerprint' => null,
+            ]);
+
+            return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingOrderConfirmation->value);
+        }
+
         $session = $this->ensureBrowserSession($run);
+        $inspection = $this->browser->inspectCart($session);
+
+        if ($inspection->botDetected || $inspection->sensitiveScreen) {
+            return $this->failForSafety($run, null, $inspection);
+        }
+
+        $liveChecksum = hash('sha256', json_encode(
+            $inspection->lines,
+            JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION,
+        ));
+
+        if ($run->cart_checksum === null || ! hash_equals((string) $run->cart_checksum, $liveChecksum)) {
+            $run->update([
+                'status' => RetailerOrderRunStatus::AwaitingOrderConfirmation,
+                'failure_message' => 'The Woolworths cart changed after confirm. Confirm again before Chef places the order.',
+                'confirmation' => null,
+                'confirmation_fingerprint' => null,
+                'cart_checksum' => $liveChecksum,
+            ]);
+
+            return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingOrderConfirmation->value);
+        }
+
+        $confirmation = is_array($run->confirmation) ? $run->confirmation : [];
+        $submitStarted = filled($confirmation['submit_started_at'] ?? null)
+            || (bool) ($confirmation['submit_attempted'] ?? false);
+
+        if ($submitStarted) {
+            return $this->reconcilePriorSubmit($run, $session);
+        }
+
         StagehandRetailerBrowser::assertOrderSubmitAllowed($run->status);
+
+        $run->update([
+            'confirmation' => [
+                ...$confirmation,
+                'submit_started_at' => now()->toIso8601String(),
+                'submit_attempted' => true,
+            ],
+        ]);
+        $run = $run->refresh();
+
         $submitted = $this->browser->submitOrderWithDefaultPayment($session);
 
         if (! $submitted->ok) {
@@ -329,7 +386,53 @@ class AdvanceRetailerOrderRun
             return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::Failed->value);
         }
 
-        $confirmation = $this->browser->extractOrderConfirmation($session);
+        $remote = $this->browser->extractOrderConfirmation($session);
+
+        return $this->finalizeSubmitOutcome($run, $submitted, $remote);
+    }
+
+    private function reconcilePriorSubmit(
+        RetailerOrderRun $run,
+        BrowserSession $session,
+    ): RetailerOrderAdvanceResult {
+        $remote = $this->browser->extractOrderConfirmation($session);
+        $reference = filled($remote->retailerOrderReference)
+            ? trim((string) $remote->retailerOrderReference)
+            : null;
+
+        if ($reference !== null) {
+            $this->recordPlacedRetailerOrder->handle(
+                $run,
+                $this->confirmingUser($run),
+                retailerOrderReference: $reference,
+                confirmationText: $remote->confirmationText,
+            );
+
+            return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::Placed->value);
+        }
+
+        // Ambiguous remote state after a prior submit attempt: never press submit again.
+        $run->update([
+            'status' => RetailerOrderRunStatus::AwaitingPlacementVerification,
+            'failure_message' => null,
+            'confirmation' => [
+                ...(is_array($run->confirmation) ? $run->confirmation : []),
+                'submit' => [
+                    'likely_placed' => true,
+                    'confirmation_text' => $remote->confirmationText,
+                    'reconciled_at' => now()->toIso8601String(),
+                ],
+            ],
+        ]);
+
+        return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingPlacementVerification->value);
+    }
+
+    private function finalizeSubmitOutcome(
+        RetailerOrderRun $run,
+        SubmitResult $submitted,
+        SubmitResult $confirmation,
+    ): RetailerOrderAdvanceResult {
         $reference = filled($confirmation->retailerOrderReference)
             ? trim((string) $confirmation->retailerOrderReference)
             : (filled($submitted->retailerOrderReference)
@@ -355,11 +458,9 @@ class AdvanceRetailerOrderRun
             return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingPlacementVerification->value);
         }
 
-        $user = $this->confirmingUser($run);
-
         $this->recordPlacedRetailerOrder->handle(
             $run,
-            $user,
+            $this->confirmingUser($run),
             retailerOrderReference: $reference,
             confirmationText: $confirmationText,
         );

@@ -5,7 +5,30 @@ import { WorkerFailure } from '../protocol.js';
 
 export const allowedHosts = new Set(['woolworths.com.au', 'www.woolworths.com.au']);
 export const cartPath = '/shop/checkout/cart';
-export const cartSurfacePaths = new Set([cartPath, '/checkout']);
+export const cartSurfacePaths = new Set([
+    cartPath,
+    '/checkout',
+    '/shop/checkout',
+]);
+
+/** Checkout / fulfilment / confirmation surfaces the Stagehand tools may open. */
+export const fulfilmentCheckoutAllowPathPrefixes = [
+    cartPath,
+    '/checkout',
+    '/shop/checkout',
+    '/shop/delivery',
+    '/shop/pickup',
+] as const;
+
+/**
+ * Human-only Woolworths surfaces. Payment-method and address-change flows stay
+ * blocked even when nested under checkout.
+ */
+export const sensitiveHumanOnlyPathPattern =
+    /\b(securelogin|myaccount|account|payment|address|wallet|billing|credit-?card|change-?password)\b/i;
+
+export const orderConfirmationPathPattern =
+    /order[-_]?confirmation|\/confirmation(\/|$)/i;
 
 export const cartItemSelector = [
     '[data-testid*="cart-item"]',
@@ -66,6 +89,29 @@ export function isAllowedCartSurfaceUrl(rawUrl: string): boolean {
     }
 }
 
+export function isFulfilmentOrCheckoutPath(path: string): boolean {
+    const normalized = path.toLowerCase();
+
+    if (orderConfirmationPathPattern.test(normalized)) {
+        return true;
+    }
+
+    return fulfilmentCheckoutAllowPathPrefixes.some(
+        (prefix) =>
+            normalized === prefix || normalized.startsWith(`${prefix}/`),
+    );
+}
+
+export function isSensitiveHumanOnlyPath(path: string): boolean {
+    const normalized = path.toLowerCase();
+
+    if (orderConfirmationPathPattern.test(normalized)) {
+        return false;
+    }
+
+    return sensitiveHumanOnlyPathPattern.test(normalized);
+}
+
 export function assertAllowedUrl(rawUrl: string, allowHumanLogin = false): URL {
     let url: URL;
 
@@ -90,13 +136,24 @@ export function assertAllowedUrl(rawUrl: string, allowHumanLogin = false): URL {
 
     const path = url.pathname.replace(/\/$/, '') || '/';
     const humanLogin = allowHumanLogin && path.includes('securelogin');
-    const sensitive =
-        path !== cartPath &&
+
+    if (isSensitiveHumanOnlyPath(path) && !humanLogin) {
+        throw new WorkerFailure(
+            'sensitive_navigation',
+            'Navigation to a human-only Woolworths page is blocked.',
+        );
+    }
+
+    // Product browse stays open; fulfilment/checkout/confirmation are explicit
+    // allowlisted Stagehand surfaces. Anything else matching legacy sensitive
+    // tokens (without being on an allowlisted prefix) remains blocked.
+    const legacySensitive =
+        !isFulfilmentOrCheckoutPath(path) &&
         /\b(checkout|securelogin|account|payment|address|delivery|pickup|orders?)\b/i.test(
             path,
         );
 
-    if (sensitive && !humanLogin) {
+    if (legacySensitive && !humanLogin) {
         throw new WorkerFailure(
             'sensitive_navigation',
             'Navigation to a human-only Woolworths page is blocked.',
@@ -149,11 +206,7 @@ export async function observeSafety(
         /\b(captcha|verify you are human|unusual traffic|access denied|are you a robot)\b/i.test(
             body,
         ) || captchaFrames > 0;
-    const sensitivePath =
-        !isCartSurfacePath(path) &&
-        /\b(checkout|securelogin|account|payment|address|delivery|pickup|orders?)\b/i.test(
-            path,
-        );
+    const sensitivePath = isSensitiveHumanOnlyPath(path);
 
     return {
         bot_detected: botDetected,
