@@ -2,12 +2,11 @@ import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
 import {
-    type CommandRequest,
-    type CommandResponse,
     WorkerFailure,
     parseCommandRequest,
     protocolVersion,
 } from './protocol.js';
+import type { CommandRequest, CommandResponse } from './protocol.js';
 import { executeTool, isFixtureMode, resolveCdpUrl } from './tools.js';
 
 async function readCommand(): Promise<CommandRequest> {

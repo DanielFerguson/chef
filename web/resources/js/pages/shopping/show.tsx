@@ -19,7 +19,6 @@ import {
     ShieldCheck,
     Table2,
     Trash2,
-    Unplug,
     Wallet,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';

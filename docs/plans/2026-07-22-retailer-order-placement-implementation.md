@@ -582,14 +582,17 @@ EOF
 
 ### Task 18: Full verification gate
 
-**Status: in progress / follow-up after Task 17.**
+**Status: done for automated gate** — live Browserbase/Woolworths pilot evidence still open.
 
 **Step 1: Run**
 
 ```bash
 cd web && npm run automation:check && npm run types:check && npm run lint:check
-cd web && ./vendor/bin/pest --parallel
-# or composer test if that is the repo full gate
+cd web && ./vendor/bin/pest --filter=Retailer
+cd web && ./vendor/bin/pest tests/Feature/ShoppingListTest.php tests/Feature/DashboardTest.php \
+  tests/Feature/StartRetailerOrderRunTest.php tests/Feature/ConfirmRetailerOrderTest.php \
+  tests/Feature/AdvanceRetailerOrderRunCartTest.php tests/Feature/SelectFulfilmentSlotTest.php \
+  tests/Feature/RetailerOrderRunHttpTest.php
 ```
 
 **Step 2: Manually note live-pilot gaps still open** (Browserbase + real Woolworths submit) — do not mark M6.2 complete without live evidence.
@@ -604,7 +607,7 @@ cd web && ./vendor/bin/pest --parallel
 |---|---|
 | 1–16 | Done — domain, orchestration, UI, Stagehand worker, AutomationRun/CUA cleanup |
 | 17 | Done — docs aligned with shipped `RetailerOrderRun` behaviour |
-| 18 | Verification gate; live Browserbase/Woolworths pilot evidence still open |
+| 18 | Automated gate green (`automation:check`, `types:check`, `lint:check`, Retailer Pest filter, listed Feature subset). Not run: full `composer test` / full Pest suite, Browser Dusk suite as a whole. Live pilot still open. |
 
 Live-pilot gaps that still block marking M6.2 complete: authenticated cart prep through fulfilment scrape, confirmed default-card submit, ordinary-app order visibility, retailer/privacy review, and operating-cost evidence.
 
