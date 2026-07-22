@@ -1,10 +1,18 @@
 import { Stagehand } from '@browserbasehq/stagehand';
 
 import type { StagehandCommand } from './protocol.js';
+import {
+    fixtureAddProduct,
+    fixtureClearCart,
+    fixtureInspectCart,
+    liveAddProduct,
+    liveClearCart,
+    liveInspectCart,
+} from './woolworths/cart.js';
 
 /**
  * Build a Stagehand instance attached to a transient Browserbase CDP URL.
- * Live tool bodies are implemented in later tasks; this keeps the dependency wired.
+ * Live cart tools prefer Playwright locators; Stagehand recovery remains stubbed.
  */
 export function createStagehandForCdp(cdpUrl: string): Stagehand {
     return new Stagehand({
@@ -76,42 +84,55 @@ export function probeAuth(context: ToolContext): Record<string, unknown> {
     };
 }
 
-/**
- * Skeleton cart inspection: structured placeholders when CDP is missing or fixture mode is on.
- */
-export function inspectCart(context: ToolContext): Record<string, unknown> {
-    if (context.fixtureMode || context.cdpUrl === null) {
-        return {
-            lines: [],
-            total: 0,
-            currency: 'AUD',
-            bot_detected: false,
-            sensitive_screen: false,
-            ...modeDiagnostics(context),
-        };
-    }
-
-    return {
-        lines: [],
-        total: 0,
-        currency: 'AUD',
-        bot_detected: false,
-        sensitive_screen: false,
-        reason: 'Stagehand cart inspection stub; live CDP supplied but inspect not implemented.',
-        ...modeDiagnostics(context),
-    };
-}
-
-export function executeTool(
+export async function executeTool(
     command: StagehandCommand,
     context: Omit<ToolContext, 'command'>,
-): Record<string, unknown> {
+    payload: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
     const fullContext: ToolContext = { command, ...context };
+    const cartContext = {
+        cdpUrl: fullContext.cdpUrl,
+        fixtureMode: fullContext.fixtureMode,
+    };
 
     switch (command) {
         case 'probe_auth':
             return probeAuth(fullContext);
         case 'inspect_cart':
-            return inspectCart(fullContext);
+            if (fullContext.fixtureMode || fullContext.cdpUrl === null) {
+                return {
+                    ...fixtureInspectCart(cartContext),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveInspectCart(cartContext)),
+                ...modeDiagnostics(fullContext),
+            };
+        case 'clear_cart':
+            if (fullContext.fixtureMode) {
+                return {
+                    ...fixtureClearCart(cartContext),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveClearCart(cartContext)),
+                ...modeDiagnostics(fullContext),
+            };
+        case 'add_product':
+            if (fullContext.fixtureMode) {
+                return {
+                    ...fixtureAddProduct(cartContext, payload),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveAddProduct(cartContext, payload)),
+                ...modeDiagnostics(fullContext),
+            };
     }
 }

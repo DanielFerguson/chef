@@ -41,12 +41,31 @@ class StagehandRetailerBrowser implements RetailerBrowser
 
     public function clearCart(BrowserSession $session): CartInspection
     {
-        throw new RuntimeException('not implemented');
+        $result = $this->invoke($session, 'clear_cart');
+        $payload = is_array($result['payload'] ?? null) ? $result['payload'] : [];
+
+        return CartInspection::fromPayload($payload);
     }
 
     public function addProduct(BrowserSession $session, array $product): ToolResult
     {
-        throw new RuntimeException('not implemented');
+        $result = $this->invoke($session, 'add_product', [
+            'product' => $product,
+        ], requireOk: false);
+
+        $payload = is_array($result['payload'] ?? null) ? $result['payload'] : [];
+
+        if (! ($result['ok'] ?? false)) {
+            return new ToolResult(
+                ok: false,
+                payload: $payload,
+                errorMessage: is_string($result['error_message'] ?? null)
+                    ? $result['error_message']
+                    : 'Chef could not add this product to the cart.',
+            );
+        }
+
+        return new ToolResult(ok: true, payload: $payload);
     }
 
     public function extractFulfilmentOptions(BrowserSession $session, string $fulfilmentType): FulfilmentOptions
@@ -73,8 +92,12 @@ class StagehandRetailerBrowser implements RetailerBrowser
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function invoke(BrowserSession $session, string $command, array $payload = []): array
-    {
+    private function invoke(
+        BrowserSession $session,
+        string $command,
+        array $payload = [],
+        bool $requireOk = true,
+    ): array {
         $workerPath = (string) config(
             'services.chef_automation.stagehand_worker_path',
             base_path('automation/dist/src/main.js'),
@@ -114,6 +137,27 @@ class StagehandRetailerBrowser implements RetailerBrowser
 
         if (! $process->isSuccessful()) {
             $stderr = trim($process->getErrorOutput());
+            $stdout = trim($process->getOutput());
+
+            if ($stdout !== '') {
+                try {
+                    $decodedFailure = json_decode($stdout, true, 512, JSON_THROW_ON_ERROR);
+
+                    if (is_array($decodedFailure) && ($decodedFailure['version'] ?? null) === self::PROTOCOL) {
+                        if (! $requireOk) {
+                            return $decodedFailure;
+                        }
+
+                        throw new RuntimeException(
+                            is_string($decodedFailure['error_message'] ?? null)
+                                ? $decodedFailure['error_message']
+                                : 'The Stagehand retailer worker rejected the command.',
+                        );
+                    }
+                } catch (JsonException) {
+                    // Fall through to the generic process failure below.
+                }
+            }
 
             throw new RuntimeException(
                 $stderr !== ''
@@ -136,6 +180,10 @@ class StagehandRetailerBrowser implements RetailerBrowser
         }
 
         if (! ($decoded['ok'] ?? false)) {
+            if (! $requireOk) {
+                return $decoded;
+            }
+
             throw new RuntimeException(
                 is_string($decoded['error_message'] ?? null)
                     ? $decoded['error_message']

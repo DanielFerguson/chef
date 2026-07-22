@@ -60,7 +60,7 @@
             }
         },
         {
-            "name": "live cdp cart stub",
+            "name": "live cdp cart stub without connection",
             "command": "inspect_cart",
             "mode": "live_stub",
             "request": {
@@ -74,9 +74,80 @@
                 "currency": "AUD",
                 "bot_detected": false,
                 "sensitive_screen": false,
-                "reason": "Stagehand cart inspection stub; live CDP supplied but inspect not implemented.",
+                "reason": "Stagehand cart inspection stub; CDP was not available.",
                 "fixture_mode": false,
-                "cdp_present": true,
+                "cdp_present": false
+            }
+        },
+        {
+            "name": "fixture clear cart",
+            "command": "clear_cart",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "clear_cart",
+                "payload": {}
+            },
+            "response": {
+                "lines": [],
+                "total": 0,
+                "currency": "AUD",
+                "bot_detected": false,
+                "sensitive_screen": false,
+                "cleared": true,
+                "reason": "Fixture cart clear succeeded without CDP.",
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "fixture add product with verify folded in",
+            "command": "add_product",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "add_product",
+                "payload": {
+                    "product": {
+                        "external_id": "123456",
+                        "name": "Full Cream Milk 2L",
+                        "quantity": 1
+                    }
+                }
+            },
+            "response": {
+                "status": "matched",
+                "verified": true,
+                "product": {
+                    "external_id": "123456",
+                    "external_product_id": "123456",
+                    "product_name": "Full Cream Milk 2L",
+                    "quantity": 1,
+                    "unit": null,
+                    "unit_price": null,
+                    "total_price": null
+                },
+                "cart": {
+                    "lines": [
+                        {
+                            "external_id": "123456",
+                            "external_product_id": "123456",
+                            "product_name": "Full Cream Milk 2L",
+                            "quantity": 1,
+                            "unit": null,
+                            "unit_price": null,
+                            "total_price": null
+                        }
+                    ],
+                    "total": 0,
+                    "currency": "AUD",
+                    "bot_detected": false,
+                    "sensitive_screen": false
+                },
+                "reason": "Fixture add_product succeeded without CDP.",
+                "fixture_mode": true,
+                "cdp_present": false,
                 "stagehand_available": true
             }
         }

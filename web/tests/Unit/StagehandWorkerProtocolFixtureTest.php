@@ -12,7 +12,7 @@ it('keeps recorded Stagehand worker observations compatible with the retailer br
     );
 
     expect($fixture['version'])->toBe('chef.retailer.stagehand.v1')
-        ->and($fixture['cases'])->toHaveCount(4);
+        ->and($fixture['cases'])->toHaveCount(6);
 
     foreach ($fixture['cases'] as $case) {
         expect($case['request']['version'])->toBe('chef.retailer.stagehand.v1')
@@ -23,10 +23,18 @@ it('keeps recorded Stagehand worker observations compatible with the retailer br
                 ->toBeInstanceOf(AuthCheck::class)
                 ->authenticated->toBeFalse()
                 ->reason->not->toBe(''),
-            'inspect_cart' => expect(CartInspection::fromPayload($case['response']))
+            'inspect_cart', 'clear_cart' => expect(CartInspection::fromPayload($case['response']))
                 ->toBeInstanceOf(CartInspection::class)
                 ->lines->toBe([])
                 ->currency->toBe('AUD'),
+            'add_product' => expect($case['response'])
+                ->toHaveKey('verified')
+                ->and($case['response']['verified'])->toBeTrue()
+                ->and($case['response']['status'])->toBe('matched')
+                ->and($case['response']['product']['external_id'])->toBe('123456')
+                ->and(CartInspection::fromPayload($case['response']['cart']))
+                ->toBeInstanceOf(CartInspection::class)
+                ->lines->toHaveCount(1),
             default => throw new LogicException('Unexpected Stagehand fixture command.'),
         };
     }

@@ -77,10 +77,14 @@ async function main(): Promise<void> {
 
     try {
         const command = await readCommand();
-        const payload = executeTool(command.command, {
-            cdpUrl: resolveCdpUrl(),
-            fixtureMode: isFixtureMode(),
-        });
+        const payload = await executeTool(
+            command.command,
+            {
+                cdpUrl: resolveCdpUrl(),
+                fixtureMode: isFixtureMode(),
+            },
+            command.payload ?? {},
+        );
 
         await respond({
             version: protocolVersion,

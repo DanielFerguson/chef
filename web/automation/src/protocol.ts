@@ -1,6 +1,11 @@
 export const protocolVersion = 'chef.retailer.stagehand.v1' as const;
 
-export const supportedCommands = ['probe_auth', 'inspect_cart'] as const;
+export const supportedCommands = [
+    'probe_auth',
+    'inspect_cart',
+    'clear_cart',
+    'add_product',
+] as const;
 
 export type StagehandCommand = (typeof supportedCommands)[number];
 
