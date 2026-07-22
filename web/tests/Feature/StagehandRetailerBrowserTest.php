@@ -1,9 +1,11 @@
 <?php
 
 use App\Automation\Contracts\BrowserSessionProvider;
+use App\Enums\RetailerOrderRunStatus;
 use App\Models\BrowserSession;
 use App\Retailer\Browserbase\StagehandRetailerBrowser;
 use App\Retailer\Contracts\RetailerBrowser;
+use App\Retailer\Data\SlotSelection;
 use App\Retailer\Testing\FakeRetailerBrowser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Symfony\Component\Process\Process;
@@ -97,10 +99,52 @@ it('invokes the Stagehand worker for add_product and returns a verified ToolResu
         ->and($result->payload['cart']['lines'])->toHaveCount(1);
 });
 
-it('throws not implemented for fulfilment and submit tools that are not wired yet', function () {
-    $browser = new StagehandRetailerBrowser(app(BrowserSessionProvider::class));
-    $session = BrowserSession::factory()->create();
+it('invokes fulfilment and submit Stagehand tools with fixture payloads', function () {
+    ensureStagehandWorkerBuilt();
 
-    expect(fn () => $browser->extractFulfilmentOptions($session, 'delivery'))
-        ->toThrow(RuntimeException::class, 'not implemented');
+    $session = BrowserSession::factory()->create();
+    $browser = new StagehandRetailerBrowser(app(BrowserSessionProvider::class));
+
+    $options = $browser->extractFulfilmentOptions($session, 'delivery');
+    $applied = $browser->applyFulfilmentSlot($session, new SlotSelection(
+        id: 'fixture-slot-1',
+        label: 'Tomorrow 8am–10am (delivery)',
+        fulfilmentType: 'delivery',
+    ));
+    $submitted = $browser->submitOrderWithDefaultPayment(
+        $session,
+        RetailerOrderRunStatus::SubmittingOrder,
+    );
+    $confirmation = $browser->extractOrderConfirmation($session);
+
+    expect($options->type)->toBe('delivery')
+        ->and($options->slots)->toHaveCount(1)
+        ->and($options->slots[0]['id'])->toBe('fixture-slot-1')
+        ->and($applied->ok)->toBeTrue()
+        ->and($applied->payload['slot_id'])->toBe('fixture-slot-1')
+        ->and($submitted->ok)->toBeTrue()
+        ->and($submitted->confirmationText)->toContain('default card')
+        ->and($confirmation->ok)->toBeTrue()
+        ->and($confirmation->retailerOrderReference)->toBe('FIXTURE-ORDER-1001');
+});
+
+it('refuses Stagehand default-card submit unless the run is SubmittingOrder', function () {
+    ensureStagehandWorkerBuilt();
+
+    $session = BrowserSession::factory()->create();
+    $browser = new StagehandRetailerBrowser(app(BrowserSessionProvider::class));
+
+    expect(fn () => StagehandRetailerBrowser::assertOrderSubmitAllowed(RetailerOrderRunStatus::AwaitingOrderConfirmation))
+        ->toThrow(RuntimeException::class, 'submitting_order')
+        ->and(fn () => $browser->submitOrderWithDefaultPayment(
+            $session,
+            RetailerOrderRunStatus::CartReady,
+        ))->toThrow(RuntimeException::class, 'submitting_order');
+
+    StagehandRetailerBrowser::assertOrderSubmitAllowed(RetailerOrderRunStatus::SubmittingOrder);
+
+    expect($browser->submitOrderWithDefaultPayment(
+        $session,
+        RetailerOrderRunStatus::SubmittingOrder,
+    )->ok)->toBeTrue();
 });

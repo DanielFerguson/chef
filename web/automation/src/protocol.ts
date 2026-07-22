@@ -5,6 +5,10 @@ export const supportedCommands = [
     'inspect_cart',
     'clear_cart',
     'add_product',
+    'extract_fulfilment_options',
+    'apply_fulfilment_slot',
+    'submit_order_with_default_payment',
+    'extract_order_confirmation',
 ] as const;
 
 export type StagehandCommand = (typeof supportedCommands)[number];

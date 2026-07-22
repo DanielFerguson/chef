@@ -150,6 +150,99 @@
                 "cdp_present": false,
                 "stagehand_available": true
             }
+        },
+        {
+            "name": "fixture extract fulfilment options",
+            "command": "extract_fulfilment_options",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "extract_fulfilment_options",
+                "payload": {
+                    "fulfilment_type": "delivery"
+                }
+            },
+            "response": {
+                "type": "delivery",
+                "slots": [
+                    {
+                        "id": "fixture-slot-1",
+                        "label": "Tomorrow 8am–10am (delivery)",
+                        "starts_at": null,
+                        "ends_at": null,
+                        "fee": 0
+                    }
+                ],
+                "expires_at": "2099-01-01T00:00:00.000Z",
+                "reason": "Fixture fulfilment options returned without CDP.",
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "fixture apply fulfilment slot",
+            "command": "apply_fulfilment_slot",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "apply_fulfilment_slot",
+                "payload": {
+                    "slot": {
+                        "id": "fixture-slot-1",
+                        "label": "Tomorrow 8am–10am (delivery)",
+                        "fulfilment_type": "delivery"
+                    }
+                }
+            },
+            "response": {
+                "applied": true,
+                "slot_id": "fixture-slot-1",
+                "fulfilment_type": "delivery",
+                "reason": "Fixture fulfilment slot applied without CDP.",
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "fixture submit with default payment",
+            "command": "submit_order_with_default_payment",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "submit_order_with_default_payment",
+                "payload": {}
+            },
+            "response": {
+                "ok": true,
+                "retailer_order_reference": null,
+                "confirmation_text": "Fixture submit accepted with the default card on file.",
+                "used_default_payment": true,
+                "reason": "Fixture submit_order_with_default_payment succeeded without CDP.",
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
+        },
+        {
+            "name": "fixture extract order confirmation",
+            "command": "extract_order_confirmation",
+            "mode": "fixture",
+            "request": {
+                "version": "chef.retailer.stagehand.v1",
+                "command": "extract_order_confirmation",
+                "payload": {}
+            },
+            "response": {
+                "ok": true,
+                "retailer_order_reference": "FIXTURE-ORDER-1001",
+                "confirmation_text": "Order FIXTURE-ORDER-1001 confirmed (fixture).",
+                "reason": "Fixture extract_order_confirmation succeeded without CDP.",
+                "fixture_mode": true,
+                "cdp_present": false,
+                "stagehand_available": true
+            }
         }
     ]
 }

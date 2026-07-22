@@ -2,6 +2,8 @@
 
 use App\Retailer\Data\AuthCheck;
 use App\Retailer\Data\CartInspection;
+use App\Retailer\Data\FulfilmentOptions;
+use App\Retailer\Data\SubmitResult;
 
 it('keeps recorded Stagehand worker observations compatible with the retailer browser protocol', function () {
     $fixture = json_decode(
@@ -12,7 +14,7 @@ it('keeps recorded Stagehand worker observations compatible with the retailer br
     );
 
     expect($fixture['version'])->toBe('chef.retailer.stagehand.v1')
-        ->and($fixture['cases'])->toHaveCount(6);
+        ->and($fixture['cases'])->toHaveCount(10);
 
     foreach ($fixture['cases'] as $case) {
         expect($case['request']['version'])->toBe('chef.retailer.stagehand.v1')
@@ -35,6 +37,15 @@ it('keeps recorded Stagehand worker observations compatible with the retailer br
                 ->and(CartInspection::fromPayload($case['response']['cart']))
                 ->toBeInstanceOf(CartInspection::class)
                 ->lines->toHaveCount(1),
+            'extract_fulfilment_options' => expect(FulfilmentOptions::fromPayload($case['response']))
+                ->toBeInstanceOf(FulfilmentOptions::class)
+                ->type->toBe('delivery')
+                ->slots->toHaveCount(1),
+            'apply_fulfilment_slot' => expect($case['response']['applied'])->toBeTrue()
+                ->and($case['response']['slot_id'])->toBe('fixture-slot-1'),
+            'submit_order_with_default_payment', 'extract_order_confirmation' => expect(SubmitResult::fromPayload($case['response']))
+                ->toBeInstanceOf(SubmitResult::class)
+                ->ok->toBeTrue(),
             default => throw new LogicException('Unexpected Stagehand fixture command.'),
         };
     }

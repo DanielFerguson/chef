@@ -3,6 +3,7 @@
 namespace App\Retailer\Browserbase;
 
 use App\Automation\Contracts\BrowserSessionProvider;
+use App\Enums\RetailerOrderRunStatus;
 use App\Models\BrowserSession;
 use App\Retailer\Contracts\RetailerBrowser;
 use App\Retailer\Data\AuthCheck;
@@ -22,6 +23,19 @@ class StagehandRetailerBrowser implements RetailerBrowser
     public function __construct(
         private readonly BrowserSessionProvider $sessions,
     ) {}
+
+    /**
+     * Default-card submit is only valid after in-Chef confirmation has moved
+     * the run into SubmittingOrder. Call this before invoking the worker.
+     */
+    public static function assertOrderSubmitAllowed(RetailerOrderRunStatus $status): void
+    {
+        if ($status !== RetailerOrderRunStatus::SubmittingOrder) {
+            throw new RuntimeException(
+                'Woolworths default-card submit is only allowed while the retailer order run is submitting_order.',
+            );
+        }
+    }
 
     public function probeAuth(BrowserSession $session): AuthCheck
     {
@@ -70,22 +84,89 @@ class StagehandRetailerBrowser implements RetailerBrowser
 
     public function extractFulfilmentOptions(BrowserSession $session, string $fulfilmentType): FulfilmentOptions
     {
-        throw new RuntimeException('not implemented');
+        $result = $this->invoke($session, 'extract_fulfilment_options', [
+            'fulfilment_type' => $fulfilmentType,
+        ]);
+        $payload = is_array($result['payload'] ?? null) ? $result['payload'] : [];
+
+        return FulfilmentOptions::fromPayload($payload);
     }
 
     public function applyFulfilmentSlot(BrowserSession $session, SlotSelection $slot): ToolResult
     {
-        throw new RuntimeException('not implemented');
+        $result = $this->invoke($session, 'apply_fulfilment_slot', [
+            'slot' => [
+                'id' => $slot->id,
+                'label' => $slot->label,
+                'starts_at' => $slot->startsAt,
+                'ends_at' => $slot->endsAt,
+                'fee' => $slot->fee,
+                'fulfilment_type' => $slot->fulfilmentType,
+            ],
+        ], requireOk: false);
+
+        $payload = is_array($result['payload'] ?? null) ? $result['payload'] : [];
+
+        if (! ($result['ok'] ?? false)) {
+            return new ToolResult(
+                ok: false,
+                payload: $payload,
+                errorMessage: is_string($result['error_message'] ?? null)
+                    ? $result['error_message']
+                    : 'Chef could not apply that fulfilment slot at Woolworths.',
+            );
+        }
+
+        return new ToolResult(ok: true, payload: $payload);
     }
 
-    public function submitOrderWithDefaultPayment(BrowserSession $session): SubmitResult
-    {
-        throw new RuntimeException('not implemented');
+    public function submitOrderWithDefaultPayment(
+        BrowserSession $session,
+        ?RetailerOrderRunStatus $runStatus = null,
+    ): SubmitResult {
+        if ($runStatus !== null) {
+            self::assertOrderSubmitAllowed($runStatus);
+        }
+
+        $result = $this->invoke($session, 'submit_order_with_default_payment', requireOk: false);
+        $payload = is_array($result['payload'] ?? null) ? $result['payload'] : [];
+
+        if (! ($result['ok'] ?? false)) {
+            return new SubmitResult(
+                ok: false,
+                errorMessage: is_string($result['error_message'] ?? null)
+                    ? $result['error_message']
+                    : 'Chef could not submit the Woolworths order with the default card on file.',
+            );
+        }
+
+        $submit = SubmitResult::fromPayload($payload);
+
+        return new SubmitResult(
+            ok: true,
+            retailerOrderReference: $submit->retailerOrderReference,
+            confirmationText: $submit->confirmationText,
+        );
     }
 
     public function extractOrderConfirmation(BrowserSession $session): SubmitResult
     {
-        throw new RuntimeException('not implemented');
+        $result = $this->invoke($session, 'extract_order_confirmation', requireOk: false);
+        $payload = is_array($result['payload'] ?? null) ? $result['payload'] : [];
+
+        if (! ($result['ok'] ?? false)) {
+            return new SubmitResult(
+                ok: false,
+                errorMessage: is_string($result['error_message'] ?? null)
+                    ? $result['error_message']
+                    : 'Chef could not extract a Woolworths order confirmation.',
+            );
+        }
+
+        return SubmitResult::fromPayload([
+            ...$payload,
+            'ok' => true,
+        ]);
     }
 
     /**

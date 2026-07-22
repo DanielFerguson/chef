@@ -9,6 +9,18 @@ import {
     liveClearCart,
     liveInspectCart,
 } from './woolworths/cart.js';
+import {
+    fixtureApplyFulfilmentSlot,
+    fixtureExtractFulfilmentOptions,
+    liveApplyFulfilmentSlot,
+    liveExtractFulfilmentOptions,
+} from './woolworths/fulfilment.js';
+import {
+    fixtureExtractOrderConfirmation,
+    fixtureSubmitOrder,
+    liveExtractOrderConfirmation,
+    liveSubmitOrder,
+} from './woolworths/submit.js';
 
 /**
  * Build a Stagehand instance attached to a transient Browserbase CDP URL.
@@ -90,7 +102,7 @@ export async function executeTool(
     payload: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> {
     const fullContext: ToolContext = { command, ...context };
-    const cartContext = {
+    const toolContext = {
         cdpUrl: fullContext.cdpUrl,
         fixtureMode: fullContext.fixtureMode,
     };
@@ -101,37 +113,85 @@ export async function executeTool(
         case 'inspect_cart':
             if (fullContext.fixtureMode || fullContext.cdpUrl === null) {
                 return {
-                    ...fixtureInspectCart(cartContext),
+                    ...fixtureInspectCart(toolContext),
                     stagehand_available: stagehandRuntimeAvailable(),
                 };
             }
 
             return {
-                ...(await liveInspectCart(cartContext)),
+                ...(await liveInspectCart(toolContext)),
                 ...modeDiagnostics(fullContext),
             };
         case 'clear_cart':
             if (fullContext.fixtureMode) {
                 return {
-                    ...fixtureClearCart(cartContext),
+                    ...fixtureClearCart(toolContext),
                     stagehand_available: stagehandRuntimeAvailable(),
                 };
             }
 
             return {
-                ...(await liveClearCart(cartContext)),
+                ...(await liveClearCart(toolContext)),
                 ...modeDiagnostics(fullContext),
             };
         case 'add_product':
             if (fullContext.fixtureMode) {
                 return {
-                    ...fixtureAddProduct(cartContext, payload),
+                    ...fixtureAddProduct(toolContext, payload),
                     stagehand_available: stagehandRuntimeAvailable(),
                 };
             }
 
             return {
-                ...(await liveAddProduct(cartContext, payload)),
+                ...(await liveAddProduct(toolContext, payload)),
+                ...modeDiagnostics(fullContext),
+            };
+        case 'extract_fulfilment_options':
+            if (fullContext.fixtureMode) {
+                return {
+                    ...fixtureExtractFulfilmentOptions(toolContext, payload),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveExtractFulfilmentOptions(toolContext, payload)),
+                ...modeDiagnostics(fullContext),
+            };
+        case 'apply_fulfilment_slot':
+            if (fullContext.fixtureMode) {
+                return {
+                    ...fixtureApplyFulfilmentSlot(toolContext, payload),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveApplyFulfilmentSlot(toolContext, payload)),
+                ...modeDiagnostics(fullContext),
+            };
+        case 'submit_order_with_default_payment':
+            if (fullContext.fixtureMode) {
+                return {
+                    ...fixtureSubmitOrder(toolContext),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveSubmitOrder(toolContext)),
+                ...modeDiagnostics(fullContext),
+            };
+        case 'extract_order_confirmation':
+            if (fullContext.fixtureMode) {
+                return {
+                    ...fixtureExtractOrderConfirmation(toolContext),
+                    stagehand_available: stagehandRuntimeAvailable(),
+                };
+            }
+
+            return {
+                ...(await liveExtractOrderConfirmation(toolContext)),
                 ...modeDiagnostics(fullContext),
             };
     }

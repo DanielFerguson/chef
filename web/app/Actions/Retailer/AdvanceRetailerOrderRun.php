@@ -14,6 +14,7 @@ use App\Models\BrowserSession;
 use App\Models\RetailerOrderRun;
 use App\Models\RetailerOrderRunItem;
 use App\Models\User;
+use App\Retailer\Browserbase\StagehandRetailerBrowser;
 use App\Retailer\Contracts\RetailerBrowser;
 use App\Retailer\Data\AuthCheck;
 use App\Retailer\Data\CartInspection;
@@ -315,6 +316,7 @@ class AdvanceRetailerOrderRun
         }
 
         $session = $this->ensureBrowserSession($run);
+        StagehandRetailerBrowser::assertOrderSubmitAllowed($run->status);
         $submitted = $this->browser->submitOrderWithDefaultPayment($session);
 
         if (! $submitted->ok) {
