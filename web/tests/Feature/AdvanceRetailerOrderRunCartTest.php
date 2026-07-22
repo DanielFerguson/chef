@@ -2,6 +2,7 @@
 
 use App\Actions\Retailer\AdvanceRetailerOrderRun;
 use App\Enums\BrowserSessionPurpose;
+use App\Enums\BrowserSessionStatus;
 use App\Enums\ExistingCartDecision;
 use App\Enums\RetailerConnectionStatus;
 use App\Enums\RetailerOrderRunItemStatus;
@@ -327,4 +328,102 @@ it('accepts an existing merge decision and continues cart preparation', function
     expect($result->shouldContinue)->toBeFalse()
         ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::CartReady)
         ->and($fixture['run']->items()->sole()->status)->toBe(RetailerOrderRunItemStatus::Matched);
+});
+
+it('stops after addProduct failures exhaust max_item_attempts', function () {
+    $fixture = cartAdvanceFixture();
+    $product = $fixture['run']->items->sole()->requirement_snapshot['product_match'];
+    $fixture['run']->update([
+        'limits' => [
+            'max_actions' => 40,
+            'max_runtime_seconds' => 180,
+            'max_item_attempts' => 2,
+        ],
+    ]);
+
+    $fixture['browser']->queue('probeAuth', new AuthCheck(authenticated: true));
+    $fixture['browser']->queue('inspectCart', new CartInspection(lines: [], total: 0.0));
+    $fixture['browser']->queue('addProduct', new ToolResult(
+        ok: false,
+        errorMessage: 'Product add timed out.',
+    ));
+
+    $first = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
+
+    expect($first->shouldContinue)->toBeTrue()
+        ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::PreparingCart)
+        ->and($fixture['run']->items()->sole()->status)->toBe(RetailerOrderRunItemStatus::Pending)
+        ->and($fixture['run']->items()->sole()->attempts)->toBe(1)
+        ->and($fixture['run']->items()->sole()->failure_message)->toBe('Product add timed out.');
+
+    $fixture['browser']->queue('probeAuth', new AuthCheck(authenticated: true));
+    $fixture['browser']->queue('inspectCart', new CartInspection(lines: [], total: 0.0));
+    $fixture['browser']->queue('addProduct', new ToolResult(
+        ok: false,
+        errorMessage: 'Product add timed out again.',
+    ));
+
+    $second = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']->refresh());
+    $item = $fixture['run']->items()->sole()->refresh();
+
+    expect($second->shouldContinue)->toBeFalse()
+        ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::Failed)
+        ->and($fixture['run']->failure_message)->toContain($product['product_name'])
+        ->and($item->status)->toBe(RetailerOrderRunItemStatus::Failed)
+        ->and($item->attempts)->toBe(2)
+        ->and($item->failure_message)->toBe('Product add timed out again.')
+        ->and($item->resolved_at)->not->toBeNull();
+});
+
+it('finishes Closing sessions and creates a fresh CartPreparation session', function () {
+    $fixture = cartAdvanceFixture();
+    $product = $fixture['run']->items->sole()->requirement_snapshot['product_match'];
+
+    $closing = BrowserSession::factory()->create([
+        'team_id' => $fixture['connection']->team_id,
+        'retailer_connection_id' => $fixture['connection']->id,
+        'purpose' => BrowserSessionPurpose::CartPreparation,
+        'status' => BrowserSessionStatus::Closing,
+        'started_at' => now()->subMinutes(5),
+        'expires_at' => now()->addMinutes(10),
+        'ended_at' => null,
+    ]);
+    $fixture['connection']->update([
+        'lease_owner' => 'session:'.$closing->id,
+        'lease_expires_at' => now()->addMinutes(10),
+    ]);
+
+    $fixture['browser']->queue('probeAuth', new AuthCheck(authenticated: true));
+    $fixture['browser']->queue('inspectCart', new CartInspection(lines: [], total: 0.0));
+    $fixture['browser']->queue('addProduct', new ToolResult(ok: true, payload: [
+        'external_id' => $product['external_id'],
+        'name' => $product['product_name'],
+        'quantity' => 1,
+    ]));
+    $fixture['browser']->queue('inspectCart', new CartInspection(lines: [[
+        'external_id' => $product['external_id'],
+        'product_name' => $product['product_name'],
+        'quantity' => 1,
+    ]], total: 4.5));
+
+    $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']);
+
+    $fresh = BrowserSession::query()
+        ->where('retailer_connection_id', $fixture['connection']->id)
+        ->where('status', BrowserSessionStatus::AgentControl->value)
+        ->whereNull('ended_at')
+        ->sole();
+
+    expect($result->shouldContinue)->toBeFalse()
+        ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::CartReady)
+        ->and($closing->refresh()->status)->toBe(BrowserSessionStatus::Closed)
+        ->and($closing->ended_at)->not->toBeNull()
+        ->and($fresh->id)->not->toBe($closing->id)
+        ->and($fresh->purpose)->toBe(BrowserSessionPurpose::CartPreparation)
+        ->and($fixture['browser']->calls[0])->toMatchArray([
+            'method' => 'probeAuth',
+            'session_id' => $fresh->id,
+        ])
+        ->and(collect($fixture['browser']->calls)->pluck('session_id')->unique()->all())
+        ->toBe([$fresh->id]);
 });

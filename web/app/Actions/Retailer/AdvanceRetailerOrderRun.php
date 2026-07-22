@@ -2,6 +2,7 @@
 
 namespace App\Actions\Retailer;
 
+use App\Actions\Automation\CloseBrowserSession;
 use App\Actions\Automation\CreateBrowserSession;
 use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
@@ -22,6 +23,7 @@ class AdvanceRetailerOrderRun
     public function __construct(
         private readonly RetailerBrowser $browser,
         private readonly CreateBrowserSession $createBrowserSession,
+        private readonly CloseBrowserSession $closeBrowserSession,
     ) {}
 
     public function handle(RetailerOrderRun $run): RetailerOrderAdvanceResult
@@ -146,11 +148,23 @@ class AdvanceRetailerOrderRun
 
             $added = $this->browser->addProduct($session, $product);
             $workPerformed++;
+            $maxAttempts = $this->maxItemAttempts($run);
 
             if (! $added->ok) {
+                $message = $added->errorMessage ?? 'Chef could not add this product to the cart.';
+
+                if ($item->refresh()->attempts >= $maxAttempts) {
+                    return $this->failItemAndRun(
+                        $run,
+                        $item,
+                        $message,
+                        'Chef could not add '.$product['name'].' to the cart.',
+                    );
+                }
+
                 $item->update([
                     'status' => RetailerOrderRunItemStatus::Pending,
-                    'failure_message' => $added->errorMessage ?? 'Chef could not add this product to the cart.',
+                    'failure_message' => $message,
                 ]);
 
                 return new RetailerOrderAdvanceResult(true, 'add_product_retry');
@@ -163,20 +177,20 @@ class AdvanceRetailerOrderRun
             }
 
             if ($this->findMatchingLine($currentCart->lines, $product) === null) {
-                $maxAttempts = (int) ($run->limits['max_item_attempts'] ?? config('automation.max_item_attempts', 4));
+                $message = 'Added product was not visible in the cart yet.';
 
                 if ($item->refresh()->attempts >= $maxAttempts) {
-                    $run->update([
-                        'status' => RetailerOrderRunStatus::Failed,
-                        'failure_message' => 'Chef could not verify a cart line for '.$product['name'].'.',
-                    ]);
-
-                    return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::Failed->value);
+                    return $this->failItemAndRun(
+                        $run,
+                        $item,
+                        $message,
+                        'Chef could not verify a cart line for '.$product['name'].'.',
+                    );
                 }
 
                 $item->update([
                     'status' => RetailerOrderRunItemStatus::Pending,
-                    'failure_message' => 'Added product was not visible in the cart yet.',
+                    'failure_message' => $message,
                 ]);
 
                 return new RetailerOrderAdvanceResult(true, 'verify_cart_line_retry');
@@ -236,6 +250,12 @@ class AdvanceRetailerOrderRun
             $session = null;
         }
 
+        if ($session?->status === BrowserSessionStatus::Closing) {
+            $this->closeBrowserSession->handle($session);
+
+            $session = null;
+        }
+
         if ($session !== null) {
             return $session;
         }
@@ -244,6 +264,30 @@ class AdvanceRetailerOrderRun
             $run->retailerConnection,
             BrowserSessionPurpose::CartPreparation,
         );
+    }
+
+    private function maxItemAttempts(RetailerOrderRun $run): int
+    {
+        return max(1, (int) ($run->limits['max_item_attempts'] ?? config('automation.max_item_attempts', 4)));
+    }
+
+    private function failItemAndRun(
+        RetailerOrderRun $run,
+        RetailerOrderRunItem $item,
+        string $itemMessage,
+        string $runMessage,
+    ): RetailerOrderAdvanceResult {
+        $item->update([
+            'status' => RetailerOrderRunItemStatus::Failed,
+            'failure_message' => $itemMessage,
+            'resolved_at' => now(),
+        ]);
+        $run->update([
+            'status' => RetailerOrderRunStatus::Failed,
+            'failure_message' => $runMessage,
+        ]);
+
+        return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::Failed->value);
     }
 
     /**
