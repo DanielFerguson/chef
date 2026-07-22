@@ -557,6 +557,8 @@ EOF
 
 ### Task 17: Documentation alignment pass
 
+**Status: done** (this pass).
+
 **Files:**
 - `docs/IMPLEMENTATION.md` — replace computer-use boundary section with retailer-order execution boundary matching the new code
 - `docs/MILESTONES.md` — mark M6.2 checklist progress as work lands
@@ -580,6 +582,8 @@ EOF
 
 ### Task 18: Full verification gate
 
+**Status: in progress / follow-up after Task 17.**
+
 **Step 1: Run**
 
 ```bash
@@ -593,6 +597,16 @@ cd web && ./vendor/bin/pest --parallel
 **Step 3: Final commit if fixes needed; stop for human review.**
 
 ---
+
+## Execution progress (22 July 2026)
+
+| Tasks | Status |
+|---|---|
+| 1–16 | Done — domain, orchestration, UI, Stagehand worker, AutomationRun/CUA cleanup |
+| 17 | Done — docs aligned with shipped `RetailerOrderRun` behaviour |
+| 18 | Verification gate; live Browserbase/Woolworths pilot evidence still open |
+
+Live-pilot gaps that still block marking M6.2 complete: authenticated cart prep through fulfilment scrape, confirmed default-card submit, ordinary-app order visibility, retailer/privacy review, and operating-cost evidence.
 
 ## Suggested execution order summary
 
@@ -612,16 +626,3 @@ cd web && ./vendor/bin/pest --parallel
 - Address or store changes
 - Autonomous submit without Chef confirm
 - Live cost/latency evidence (separate pilot runbook update)
-
----
-
-## Execution handoff
-
-Plan complete and saved to `docs/plans/2026-07-22-retailer-order-placement-implementation.md`.
-
-**Two execution options:**
-
-1. **Subagent-Driven (this session)** — dispatch a fresh subagent per task, review between tasks  
-2. **Parallel Session (separate)** — open a new session with executing-plans and run task batches with checkpoints  
-
-Which approach?

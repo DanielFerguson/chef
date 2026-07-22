@@ -23,12 +23,13 @@ retry state keeps manual ingredient entry out of the normal path. M5 adds a
 Today surface, focused step-by-step cooking with durable progress and timers,
 meal outcomes, person-specific feedback, and inspectable preference candidates
 that can never become safety rules. The first M6 Woolworths cart-preparation slice is implemented behind disabled
-release flags. Product direction has since moved the finish line from a human
-checkout handoff to in-Chef fulfilment selection and confirmed order placement
-with the retailer's default card on file; see
+release flags. Product direction moved the finish line from a human checkout
+handoff to in-Chef fulfilment selection and confirmed order placement with the
+retailer's default card on file; see
 [`docs/plans/2026-07-22-retailer-order-placement-design.md`](docs/plans/2026-07-22-retailer-order-placement-design.md).
-Authenticated live trial evidence for cart prep remains open, so M6 is not
-complete, and the order-placement rewrite is not yet implemented.
+That M6.2 rewrite has landed for domain, shopping UI, and the Stagehand
+retailer worker behind the same flags. Authenticated live trial evidence for
+cart prep and confirmed submit remains open, so M6 and M6.2 are not complete.
 
 The intended stack is:
 
@@ -43,8 +44,8 @@ The intended stack is:
 - OpenAI Realtime API for native voice conversation
 - Browserbase Contexts and recording-disabled sessions for Woolworths execution
 - A thin TypeScript Stagehand/Playwright worker for deterministic retailer tools
-  (order-placement rewrite; current computer-use actor remains until replaced)
-- A future permissioned Chef Chrome extension behind the same executor contract
+- A remaining TypeScript session actor for owner Live View login, reauthentication, and takeover
+- A future permissioned Chef Chrome extension behind the same browser-session contracts
 - An MCP server exposing Chef's household, planning, recipe, shopping, and feedback capabilities
 
 ## Product thesis
@@ -613,7 +614,7 @@ Chef is a monorepo so each client can share one product model without forcing th
 
 ```text
 web/                 Laravel, Inertia, and React application
-web/automation/      TypeScript Browserbase session actor and command harness
+web/automation/      TypeScript Stagehand retailer worker and Live View session actor
 docs/                Product, architecture, milestones, and style
 extensions/chrome/   Future permissioned retailer-tab executor
 ios/                 Future native iOS client

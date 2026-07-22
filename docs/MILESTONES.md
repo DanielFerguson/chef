@@ -543,7 +543,7 @@ Exit evidence:
 
 ## M6.2 — Confirmed retailer order placement
 
-Status: `[ ]`
+Status: `[~]`
 
 Design: [`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md).
 
@@ -551,23 +551,36 @@ Rewrites the retailer finish line from cart handoff to confirmed order
 placement. Simplifies execution toward Laravel-owned runs and Stagehand /
 deterministic retailer tools.
 
-- [ ] Replace the cart-handoff end state with fulfilment options in Chef.
-- [ ] Persist scraped delivery/pickup slots and let the household select type, day, and time.
-- [ ] Require an explicit confirmation that names default card-on-file submit.
-- [ ] Apply the selected slot and submit the Woolworths order after confirmation.
-- [ ] Record retailer confirmation into durable `Order` evidence.
-- [ ] Remove happy-path reliance on OpenAI vision computer-use.
-- [ ] Update commercial and MCP wording that still assumes human-only checkout.
-- [ ] Prove the journey at desktop and 390 x 844 without live secrets in normal tests.
+- [x] Replace the cart-handoff end state with fulfilment options in Chef.
+- [x] Persist scraped delivery/pickup slots and let the household select type, day, and time.
+- [x] Require an explicit confirmation that names default card-on-file submit.
+- [x] Apply the selected slot and submit the Woolworths order after confirmation.
+- [x] Record retailer confirmation into durable `Order` evidence.
+- [x] Remove happy-path reliance on OpenAI vision computer-use.
+- [x] Update commercial and MCP wording that still assumes human-only checkout.
+- [x] Prove the journey at desktop and 390 x 844 without live secrets in normal tests.
 
-Exit evidence:
+Exit evidence (live pilot still open — do not treat M6.2 as complete):
 
-- From an approved frozen list, Chef can prepare a cart, show real fulfilment
+- [ ] From an approved frozen list, Chef can prepare a cart, show real fulfilment
   options, accept a slot and confirmation in Chef, place the Woolworths order
   with the default on-file payment method, and store confirmation evidence.
-- Password/MFA remain owner-only Live View steps with the model absent.
-- No card numbers are stored or transmitted by Chef.
-- Ambiguity, auth loss, bot detection, and submit failure pause safely.
+- [ ] Password/MFA remain owner-only Live View steps with the model absent
+  against a live Woolworths session.
+- [ ] No card numbers are stored or transmitted by Chef (reconfirm on live submit).
+- [ ] Ambiguity, auth loss, bot detection, and submit failure pause safely on
+  a live Woolworths account.
+
+Implementation evidence recorded 22 July 2026:
+
+- Domain actions, policies, HTTP routes, shopping payloads, fulfilment and
+  confirm UI, Stagehand Woolworths tools, and deletion of the AutomationRun /
+  OpenAI computer-use stack have landed behind disabled release flags.
+- Normal Pest and browser coverage exercise the confirm → submit state machine
+  with `FakeRetailerBrowser`; they do not call live Browserbase or Woolworths.
+- Remaining live-pilot gaps: authenticated Browserbase cart prep through
+  fulfilment scrape, confirmed default-card submit, ordinary-app order
+  visibility, retailer/privacy review, and operating-cost evidence.
 
 ## M7 — Native voice experience
 

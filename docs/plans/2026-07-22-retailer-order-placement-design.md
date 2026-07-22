@@ -1,6 +1,7 @@
 # Retailer order placement rewrite
 
-Status: approved design — implementation plan at
+Status: implementation landed (domain, shopping UI, Stagehand worker) —
+live Woolworths pilot still open. Implementation plan:
 [`2026-07-22-retailer-order-placement-implementation.md`](2026-07-22-retailer-order-placement-implementation.md).
 
 This document records the decision to move Chef's retailer finish line from

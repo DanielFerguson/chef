@@ -14,9 +14,10 @@ of truth, [MILESTONES.md](MILESTONES.md) owns delivery status,
 in-Chef fulfilment selection and confirmed order placement with the retailer's
 default card on file (see
 [`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md)
-and M6.2). Older “checkout stays yours” / “never an order-confirmation screen”
-claims in this file are superseded for future copy; a full commercial rewrite
-pass remains on the M6.2 checklist.
+and M6.2). Public copy must say the household chooses the slot and confirms in
+Chef; Chef then places the order with the default card on file. Do not reuse
+older “checkout stays yours” / “never an order-confirmation screen” / human-only
+checkout claims as version 1 promises.
 
 Where this document describes a future version 1 capability, public copy must
 not present it as available until its milestone exit evidence is complete.
@@ -89,8 +90,7 @@ to search for a new category before Chef has earned the right to define one.
 ### Short pitch
 
 > Tell Chef how the week looks. See a meal plan take shape, adjust it together,
-> turn it into a shopping list, and prepare a Woolworths or Coles trolley for
-> review.
+> turn it into a shopping list, and confirm the Woolworths order in Chef.
 
 ### The promise
 
@@ -145,7 +145,7 @@ Marketing work needs a shared vocabulary for claim maturity.
 | Structured, traceable shopping list | M4 in progress | `Private testing now covers a plan-derived, editable shopping list.` | `Know why every generated item is on the list.` |
 | Retail products, budgets, and order snapshots | Version 1 required through M4 | `In development.` | `Review products and the estimated total before shopping.` |
 | Cooking mode and household learning | Version 1 required through M5 | `Planned for version 1.` | `Cook from tonight's plan and make the next week easier.` |
-| Woolworths and Coles order placement | Version 1 required through M6.2 | `Planned: prepare the trolley, choose a slot in Chef, confirm, and Chef places the order with your default card on file.` | `Chef can prepare the shop and place the order after you confirm the slot.` |
+| Woolworths and Coles order placement | Version 1 required through M6.2 | `Private testing: prepare the trolley, choose a slot in Chef, confirm, and Chef places the order with your default card on file. Live Woolworths evidence still open.` | `Chef can prepare the shop and place the order after you confirm the slot.` |
 | Native voice | Version 1 required through M7 | `Voice is planned; typing is available in testing.` | `Talk or type into the same plan.` |
 | External access through MCP | Version 1 required through M8 | Developer or integration documentation only. | Do not make this a household homepage headline. |
 | Public privacy, operations, and support readiness | Version 1 required through M9 | `Private beta` or `request access`; do not imply public availability. | Public signup only after the M9 gate. |
@@ -205,8 +205,8 @@ Chef's wedge is the **context behind the plan**:
 4. It turns loose intent into structured, directly editable state.
 5. It preserves the connection from the chosen recipe version to the shopping
    requirement and retailer product.
-6. It keeps external shopping actions reviewable and leaves checkout to the
-   person.
+6. It keeps external shopping actions reviewable and requires fulfilment
+   selection plus an explicit in-Chef confirmation before placing an order.
 7. It can learn from what the household actually cooked and liked without
    turning guesses into facts.
 
@@ -306,10 +306,11 @@ Every acquisition surface should follow this order:
 2. **Mechanism:** talk through the week while a real plan takes shape.
 3. **Continuity:** the agreed plan becomes the shop and the cooking context.
 4. **Differentiation:** Chef remembers people and explicit household truth.
-5. **Control:** the plan is editable, memory is inspectable, and checkout stays
-   with the person.
-6. **Technology:** AI, voice, and computer use explain how Chef helps; they are
-   not the main reason to care.
+5. **Control:** the plan is editable, memory is inspectable, and order
+   placement happens only after the household chooses a slot and confirms in
+   Chef.
+6. **Technology:** AI, voice, and retailer automation explain how Chef helps;
+   they are not the main reason to care.
 
 ### Core messaging pillars
 
@@ -347,8 +348,9 @@ Customer language:
 #### 4. Keep people in control
 
 Chef explains suggestions, shows what it remembers, supports direct edits, and
-pauses at consequential shopping decisions. Checkout and payment remain human
-actions.
+pauses at consequential shopping decisions. Fulfilment selection and order
+placement require an explicit confirmation in Chef before Chef may submit with
+the retailer's default card on file.
 
 Customer language:
 
@@ -375,8 +377,8 @@ Headline:
 Subheading:
 
 > Tell Chef who's eating, what matters, and how the week looks. Chef helps your
-> household shape the plan, build a trustworthy shopping list, and prepare a
-> Woolworths or Coles trolley for you to review.
+> household shape the plan, build a trustworthy shopping list, and place the
+> Woolworths order after you confirm the slot.
 
 Primary CTA:
 
@@ -388,7 +390,7 @@ Secondary CTA:
 
 Control line:
 
-> One shared plan · Allergies stay explicit · Checkout stays yours
+> One shared plan · Allergies stay explicit · You confirm before Chef places the order
 
 Differentiation line:
 
@@ -418,7 +420,7 @@ at a time against a stable subheading and visual.
 - visible and editable;
 - from plan to shop;
 - for review;
-- checkout stays yours;
+- you confirm before Chef places the order;
 - next week gets easier.
 
 ### Language to avoid
@@ -466,7 +468,7 @@ milestone number.
 | 3 | **Keep one shared source of truth** | Family tenancy, invitations, durable plans, revisions, milestones, calendar/list views, structured UI beside conversation. | A second household member changes a meal and both see the same plan. | Implemented. |
 | 4 | **Turn the plan into a trustworthy list** | Recipe versions, ingredient aggregation, serving scaling, source traceability, pantry/include state, manual staples, revisions, stale-list handling. | Expand an item to show the two meals and quantities behind it. | M4 in progress. |
 | 5 | **Know what the shop is becoming** | Retail products, pack matches, substitutions, budget, estimated and actual order snapshots. | Shopping inspector with list estimate, product choice, and budget difference. | M4 version 1 requirement. |
-| 6 | **Prepare the trolley without surrendering control** | Frozen list revision, Woolworths and Coles computer-use handoff, approvals, pause/cancel/takeover, reconciliation, account continuity, and human checkout. | Calm activity log ending at a reviewed trolley in the household's own retailer account, never an order-confirmation screen. | M6 version 1 requirement. |
+| 6 | **Prepare the trolley and place the order after confirmation** | Frozen list revision, Woolworths (then Coles) Browserbase preparation, approvals, pause/cancel/takeover, reconciliation, account continuity, in-Chef fulfilment selection, and confirmed default-card submit. | Calm activity log ending at a confirmed Woolworths order for the chosen slot, never card entry in Chef. | M6.2 version 1 requirement; live evidence still open. |
 | 7 | **Know what to cook tonight** | Today view, preparation notices, ingredients, equipment, sequential steps, timers, substitutions. | Narrow-screen cooking view at arm's length. | M5 version 1 requirement. |
 | 8 | **Make next week easier** | Meal outcomes, person-specific feedback, preference candidates, explainable later recommendations. | A prior meal response visibly affecting a later suggestion. | M5 version 1 requirement. |
 | 9 | **Talk when talking is faster** | Realtime voice over the same durable conversation and actions, interruption, transcript, typed fallback. | Voice waveform beside the same live plan—not a separate voice product. | M7 version 1 requirement. |
@@ -480,8 +482,9 @@ milestone number.
   differentiation.
 - Show list traceability before retailer automation; trust in the intent is the
   foundation for trusting the trolley.
-- Show trolley preparation ending at review, not checkout.
-- Keep MCP, model providers, queues, and computer-use protocol details in
+- Show trolley preparation ending at fulfilment selection and in-Chef
+  confirmation, then placed-order evidence.
+- Keep MCP, model providers, queues, and retailer-browser protocol details in
   technical or trust content unless they answer a customer concern.
 
 ## 7. Offer, packaging, and pricing
@@ -532,7 +535,7 @@ The trial should be designed around activation, not a countdown:
 1. create the household;
 2. confirm the first plan;
 3. generate and review the shopping list;
-4. prepare or simulate the retailer handoff when available;
+4. prepare or simulate confirmed retailer order placement when available;
 5. return for the next plan.
 
 Test card-required and card-free trials later only after the baseline funnel is
@@ -734,8 +737,8 @@ that differ only by swapping one keyword.
 | `/family-meal-planner` | family meal planner, weekly family dinner plan | Plan around the people and shape of the real week. | Different participants, preferences, and effort across several days. |
 | `/meal-planner-with-shopping-list` | meal planner and grocery list | The confirmed plan becomes a traceable, editable shop. | Ingredient item expanded to its source meals. |
 | `/shared-meal-planner` | shared meal planning app, meal planner for couples | Keep the decision and plan in one household workspace. | Invite, attributed change, and same visible plan. |
-| `/coles-meal-planner` | Coles meal plan, add meal plan to Coles trolley | Prepare the groundwork and review the trolley before checkout. | Frozen list, calm activity log, unresolved choices, handoff. |
-| `/woolworths-meal-planner` | Woolworths meal plan, add meal plan to Woolworths trolley | Prepare the groundwork and review the trolley before checkout. | Frozen list, calm activity log, unresolved choices, handoff. |
+| `/coles-meal-planner` | Coles meal plan, add meal plan to Coles trolley | Prepare the trolley, choose a slot in Chef, and confirm before Chef places the order. | Frozen list, fulfilment picker, confirmation that names default-card submit. |
+| `/woolworths-meal-planner` | Woolworths meal plan, add meal plan to Woolworths trolley | Prepare the trolley, choose a slot in Chef, and confirm before Chef places the order. | Frozen list, fulfilment picker, confirmation that names default-card submit. |
 | `/weeknight-meal-planner` | quick family weeknight meals, weekly dinner planning | Fit meals to time, participation, and leftovers rather than browse endlessly. | One natural prompt becoming a realistic workweek. |
 
 The Coles page must state that Chef is not affiliated with or endorsed by Coles
@@ -769,19 +772,19 @@ Description:
 > Scale quantities, keep source meals visible, add staples, and review what the
 > week really needs.
 
-#### Coles handoff — only after M6 evidence
+#### Coles order placement — only after M6.2 live evidence
 
 Headline:
 
-> Plan the week. Review the Coles trolley.
+> Plan the week. Confirm the Coles order in Chef.
 
 Description:
 
-> Chef prepares the trolley from your approved list, pauses when choices need
-> you, and hands control back before checkout.
+> Chef prepares the trolley from your approved list, lets you choose the slot,
+> and places the order only after you confirm.
 
-Use the equivalent retailer-specific variant for Woolworths only after its M6
-evidence is complete.
+Use the equivalent retailer-specific variant for Woolworths only after its M6.2
+live evidence is complete.
 
 ### Experiment discipline
 
@@ -861,7 +864,7 @@ Publish fewer, stronger pieces tied to real product states:
    separate`
 4. `The Sunday dinner conversation is already a planning system`
 5. `What should happen when the meal plan changes after the list is made?`
-6. `Why Chef prepares the trolley but leaves checkout to you`
+6. `Why Chef asks you to confirm before placing the Woolworths order`
 
 Each piece should answer the question completely, use original diagrams or
 product examples, and link to the relevant product page. Do not pad the site
@@ -934,7 +937,7 @@ Secondary or footer navigation:
 
 - Household memory
 - Security and privacy
-- Human checkout
+- Confirmed order placement
 - Accessibility
 - About
 - Billing and cancellation
@@ -956,10 +959,10 @@ better match the product's calm, progressive style.
 | `/` | Express the category, differentiated loop, proof, and offer. | Essential | Join beta or plan first week |
 | `/how-it-works` | Show the Plan → Review → List → Trolley → Cook and learn sequence. | Essential | Plan first week |
 | `/meal-planning` | Explain conversation plus visible, editable household planning. | Essential | Start a plan |
-| `/shopping` | Explain list traceability, pantry decisions, product matching, budget, and trolley handoff. | Essential when M4 is complete | Build the first plan |
+| `/shopping` | Explain list traceability, pantry decisions, product matching, budget, fulfilment selection, and confirmed order placement. | Essential when M4 is complete | Build the first plan |
 | `/household-memory` | Explain people, participation, explicit preferences, constraints, evidence, and correction. | High | Start a plan |
 | `/cooking` | Explain Today, preparation, steps, substitutions, outcomes, and feedback. | Publish after M5 | Start a plan |
-| `/retailer-handoff` | Explain Woolworths and Coles scope, account continuity, approval, takeover, reconciliation, and human checkout. | Publish after M6 | Try with a plan |
+| `/retailer-order` | Explain Woolworths and Coles scope, account continuity, approval, takeover, reconciliation, fulfilment selection, and confirmed default-card submit. | Publish after M6.2 live evidence | Try with a plan |
 | `/pricing` | Set one household offer, trial, inclusions, and billing FAQ. | Essential before paid beta | Start trial |
 | `/private-beta` | Qualify design partners and set expectations honestly. | Essential now | Apply for access |
 | `/security-and-privacy` | Explain household data, AI boundaries, permissions, screenshot retention, retailer control, export, and deletion. | Essential before public launch | Read policy or start trial |
@@ -1018,7 +1021,7 @@ Expectation line:
 > Best for households that plan four or more dinners a week and are happy to
 > share practical feedback.
 
-The page should visibly label future voice, cooking, and retailer-handoff states.
+The page should visibly label future voice, cooking, and retailer-order states.
 Do not show them as active navigation or use ambiguous `Get started` copy.
 
 ### Mode B: public version 1
@@ -1131,11 +1134,12 @@ Steps:
 3. **Build the list from what you agreed**  
    Chef builds a traceable list, keeps pantry and staple decisions visible, and
    helps review products and budget.
-4. **Let Chef prepare the trolley**  
-   Use the Chrome extension to add the planned ingredients and ordinary
-   household groceries in the household's own Woolworths or Coles account.
-   Saved products, points, rewards, and delivery options remain attached to
-   that account. Chef pauses for review before checkout.
+4. **Confirm the order in Chef**  
+   Chef prepares the Woolworths trolley in the household's own retailer
+   account, shows delivery or pickup options in Chef, and places the order only
+   after the household confirms. Saved products, points, rewards, and the
+   default card on file remain with the retailer account. Chef never stores or
+   enters card details.
 5. **Cook, respond, and make the next week easier**  
    Open tonight's meal, keep the useful adjustments, and let real feedback
    improve later suggestions.
@@ -1178,21 +1182,22 @@ Body:
 Version 1 continuation:
 
 > Review the product matches and estimated total, then let Chef prepare the
-> Woolworths or Coles trolley in the account you already use. It pauses when a
-> decision needs you and hands control back before checkout.
+> Woolworths trolley in the account you already use. Choose the delivery or
+> pickup slot in Chef and confirm; Chef places the order with the default card
+> on file.
 
-#### Retailer-trolley section
+#### Retailer-order section
 
 Heading:
 
-> **Your trolley, prepared in the account you already use.**
+> **Choose the slot in Chef. Confirm. Chef places the order.**
 
 Body:
 
-> Chef's Chrome extension adds the planned ingredients and the rest of your
-> groceries to Woolworths or Coles. Because it works in your account, saved
-> products, points, rewards, and delivery options stay with you. Chef prepares
-> and reconciles the trolley; you review it and click checkout.
+> Chef prepares the trolley in your Woolworths account, scrapes available
+> fulfilment windows into Chef, and submits only after you confirm. Saved
+> products, points, rewards, and the default card on file stay with the
+> retailer. Chef never stores or enters card details.
 
 Target outcome, publish only after measured validation:
 
@@ -1208,8 +1213,9 @@ Heading:
 Body:
 
 > Chef can suggest, organise, match, and prepare. You can inspect the plan,
-> change the list, pause the retailer work, take over at any time, and review the
-> final trolley. Chef never checks out or pays for you.
+> change the list, pause the retailer work, take over at any time, choose the
+> fulfilment slot, and confirm before Chef places the order. Chef never stores
+> or enters card details.
 
 #### Final CTA
 
@@ -1341,35 +1347,37 @@ Subheading:
 This page is a product feature page and a trust asset. Avoid anthropomorphic
 claims that imply Chef knows more than the structured records it can show.
 
-### Woolworths and Coles handoff
+### Woolworths and Coles order placement
 
-Publish only after M6 exit evidence.
+Publish only after M6.2 live exit evidence.
 
 #### Hero
 
 Headline:
 
-> **Let Chef prepare the trolley. Keep checkout in your hands.**
+> **Choose the slot in Chef. Confirm. Chef places the order.**
 
 Subheading:
 
-> Start from an approved shopping list, watch the progress, resolve substitutions
-> or budget changes, and review the Woolworths or Coles trolley before taking
-> over.
+> Start from an approved shopping list, watch the trolley prepare, pick delivery
+> or pickup in Chef, and confirm. Chef then submits with the default card already
+> on file in your retailer account.
 
 #### Sequence
 
 1. Freeze the list being used.
-2. Choose the approved Woolworths or Coles tab.
+2. Connect the household Woolworths or Coles account (owner Live View for login).
 3. Match and add ordinary products.
 4. Pause for material substitutions, budget issues, or sensitive steps.
 5. Reconcile the trolley against the list.
-6. Hand control back before authentication, checkout, and payment.
+6. Choose fulfilment type, day, and time in Chef.
+7. Confirm; Chef places the order with the default card on file.
 
 Trust callout:
 
 > Retailer pages and on-screen instructions cannot expand Chef's permission.
-> Pause, cancel, and manual takeover remain available throughout the run.
+> Pause, cancel, and manual takeover remain available throughout the run. Chef
+> never stores or enters card details.
 
 Add clear statements that Chef is not affiliated with or endorsed by
 Woolworths or Coles unless that changes.
