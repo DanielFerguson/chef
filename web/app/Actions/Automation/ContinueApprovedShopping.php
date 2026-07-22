@@ -3,6 +3,7 @@
 namespace App\Actions\Automation;
 
 use App\Actions\MealPlans\MealPlanShoppingApprovalContext;
+use App\Actions\Retailer\StartRetailerOrderRun;
 use App\Enums\CartProductPlanStatus;
 use App\Enums\RetailerConnectionStatus;
 use App\Enums\ShoppingListGenerationStatus;
@@ -15,7 +16,7 @@ class ContinueApprovedShopping
 {
     public function __construct(
         private readonly BuildCartProductPlan $buildProductPlan,
-        private readonly StartCartPreparation $startCartPreparation,
+        private readonly StartRetailerOrderRun $startRetailerOrderRun,
         private readonly MealPlanShoppingApprovalContext $approvalContext,
     ) {}
 
@@ -54,7 +55,7 @@ class ContinueApprovedShopping
 
         if ($productPlan->status === CartProductPlanStatus::Ready
             && (bool) config('automation.cart_mutation_enabled')) {
-            $this->startCartPreparation->handle(
+            $this->startRetailerOrderRun->handle(
                 $shoppingList,
                 $revision,
                 $connection,
