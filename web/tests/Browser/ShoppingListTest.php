@@ -20,8 +20,14 @@ use App\Automation\Testing\FakeRetailerProductDiscovery;
 use App\Enums\MealSlotKind;
 use App\Enums\MessageResponseStatus;
 use App\Enums\PlannedMealType;
+use App\Enums\RetailerOrderRunItemStatus;
+use App\Enums\RetailerOrderRunStatus;
 use App\Enums\ShoppingListGenerationStatus;
 use App\Enums\ShoppingListItemSourceKind;
+use App\Models\Retailer;
+use App\Models\RetailerConnection;
+use App\Models\RetailerOrderRun;
+use App\Models\RetailerOrderRunItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -629,4 +635,166 @@ it('surfaces bot detection as a calm intervention before cancellation', function
         ->assertNoJavaScriptErrors();
 
     expect($run->refresh()->status->value)->toBe('cancelled');
+});
+
+/**
+ * @return array{
+ *     user: User,
+ *     plan: \App\Models\MealPlan,
+ *     list: \App\Models\ShoppingList,
+ *     run: RetailerOrderRun,
+ *     slot: array<string, mixed>,
+ * }
+ */
+function browserRetailerOrderRun(array $runOverrides = []): array
+{
+    $workspace = browserShoppingWorkspace();
+    $list = app(GenerateShoppingList::class)->handle(
+        $workspace['plan']->refresh(),
+        $workspace['user'],
+    );
+    $woolworths = Retailer::query()->firstOrCreate(
+        ['slug' => 'woolworths'],
+        ['name' => 'Woolworths'],
+    );
+    $connection = RetailerConnection::factory()->create([
+        'team_id' => $workspace['user']->currentTeam->id,
+        'retailer_id' => $woolworths->id,
+        'owner_user_id' => $workspace['user']->id,
+    ]);
+    $slot = [
+        'id' => 'slot-browser-1',
+        'label' => 'Tomorrow 6–8pm',
+        'starts_at' => '2026-07-23T18:00:00+10:00',
+        'ends_at' => '2026-07-23T20:00:00+10:00',
+        'fee' => 0.0,
+    ];
+    $cartChecksum = hash('sha256', 'browser-order-cart');
+
+    $run = RetailerOrderRun::factory()->create([
+        'team_id' => $workspace['user']->currentTeam->id,
+        'shopping_list_id' => $list->id,
+        'shopping_list_revision_id' => $list->revisions()
+            ->where('revision', $list->revision)
+            ->firstOrFail()
+            ->id,
+        'retailer_connection_id' => $connection->id,
+        'started_by_user_id' => $workspace['user']->id,
+        'status' => RetailerOrderRunStatus::AwaitingFulfilmentSelection,
+        'fulfilment_type' => 'delivery',
+        'fulfilment_options' => [
+            'type' => 'delivery',
+            'slots' => [$slot],
+        ],
+        'fulfilment_options_expires_at' => now()->addMinutes(20),
+        'cart_checksum' => $cartChecksum,
+        'expires_at' => now()->addHour(),
+        ...$runOverrides,
+    ]);
+
+    RetailerOrderRunItem::factory()->create([
+        'team_id' => $workspace['user']->currentTeam->id,
+        'retailer_order_run_id' => $run->id,
+        'shopping_list_item_id' => null,
+        'position' => 1,
+        'status' => RetailerOrderRunItemStatus::Matched,
+        'requirement_snapshot' => [
+            'name' => 'Chicken breast',
+            'quantity' => 500,
+            'unit' => 'g',
+        ],
+        'matched_product' => [
+            'external_id' => 'browser-chicken',
+            'product_name' => 'Chicken breast',
+            'quantity' => 1,
+        ],
+        'resolved_at' => now(),
+    ]);
+
+    return [
+        'user' => $workspace['user'],
+        'plan' => $workspace['plan'],
+        'list' => $list,
+        'run' => $run->refresh(),
+        'slot' => $slot,
+    ];
+}
+
+it('lists fulfilment slots when a retailer order run awaits selection', function () {
+    $fixture = browserRetailerOrderRun();
+    $this->actingAs($fixture['user']);
+
+    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+        ->assertSee('Choose a delivery time')
+        ->assertSee('Tomorrow 6–8pm')
+        ->assertSee('Use this delivery time')
+        ->assertNoJavaScriptErrors();
+});
+
+it('names delivery, slot, and default card before order confirmation', function () {
+    $fixture = browserRetailerOrderRun([
+        'status' => RetailerOrderRunStatus::AwaitingOrderConfirmation,
+        'selected_slot' => [
+            'id' => 'slot-browser-1',
+            'label' => 'Tomorrow 6–8pm',
+            'starts_at' => '2026-07-23T18:00:00+10:00',
+            'ends_at' => '2026-07-23T20:00:00+10:00',
+            'fee' => 0.0,
+        ],
+        'fulfilment_options' => null,
+        'fulfilment_options_expires_at' => null,
+    ]);
+    $this->actingAs($fixture['user']);
+
+    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+        ->assertSee('Confirm Woolworths order')
+        ->assertSee('Delivery')
+        ->assertSee('Tomorrow 6–8pm')
+        ->assertSee('default card on file')
+        ->assertSee('Confirm and place order')
+        ->assertNoJavaScriptErrors();
+});
+
+it('shows placement verification when Chef needs an order number or ack', function () {
+    $fixture = browserRetailerOrderRun([
+        'status' => RetailerOrderRunStatus::AwaitingPlacementVerification,
+        'selected_slot' => [
+            'id' => 'slot-browser-1',
+            'label' => 'Tomorrow 6–8pm',
+        ],
+        'confirmation' => [
+            'user_id' => 1,
+            'confirmed_at' => now()->toIso8601String(),
+            'fingerprint' => 'browser-fp',
+        ],
+        'confirmation_fingerprint' => 'browser-fp',
+        'fulfilment_options' => null,
+        'fulfilment_options_expires_at' => null,
+    ]);
+    $this->actingAs($fixture['user']);
+
+    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+        ->assertSee('Verify Woolworths placement')
+        ->assertPresent('input#retailer-order-reference-'.$fixture['run']->id)
+        ->assertSee('I confirm the Woolworths order was placed')
+        ->assertSee('Save verification')
+        ->assertNoJavaScriptErrors();
+});
+
+it('offers merge, replace, and cancel for a retailer cart decision', function () {
+    $fixture = browserRetailerOrderRun([
+        'status' => RetailerOrderRunStatus::AwaitingCartDecision,
+        'fulfilment_options' => null,
+        'fulfilment_options_expires_at' => null,
+        'fulfilment_type' => null,
+        'cart_checksum' => null,
+    ]);
+    $this->actingAs($fixture['user']);
+
+    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+        ->assertSee('Woolworths already has a cart')
+        ->assertSee('Merge carts')
+        ->assertSee('Replace existing cart')
+        ->assertSee('Cancel order run')
+        ->assertNoJavaScriptErrors();
 });

@@ -1,3 +1,8 @@
+import type {
+    ConversationFeedback,
+    Message,
+} from '@/features/meal-plans/types';
+
 export type ShoppingPlan = {
     id: number;
     title: string;
@@ -427,7 +432,3 @@ export type ShoppingWorkspace = {
     cart_automation: CartAutomation;
     retailer_order_run: RetailerOrderRun | null;
 };
-import type {
-    ConversationFeedback,
-    Message,
-} from '@/features/meal-plans/types';

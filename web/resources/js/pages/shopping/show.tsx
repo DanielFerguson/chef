@@ -58,10 +58,15 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { AssistantMessage } from '@/features/meal-plans/assistant-message';
 import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
+import { CartDecisionPanel } from '@/features/shopping/cart-decision-panel';
+import { ConfirmOrderPanel } from '@/features/shopping/confirm-order-panel';
+import { FulfilmentSlotPicker } from '@/features/shopping/fulfilment-slot-picker';
+import { PlacementVerificationPanel } from '@/features/shopping/placement-verification-panel';
 import type {
     AutomationRun,
     CartAutomation,
     CartSnapshotLine,
+    RetailerOrderRun,
     ShoppingListItem,
     ShoppingListItemCategory,
     ShoppingWorkspace,
@@ -1246,8 +1251,63 @@ const terminalAutomationStatuses = new Set([
     'expired',
 ]);
 
+const activeRetailerOrderStatuses = new Set([
+    'preparing_cart',
+    'fetching_fulfilment_options',
+    'submitting_order',
+]);
+
 function automationStatusLabel(status: string) {
     return status.replaceAll('_', ' ');
+}
+
+function RetailerOrderRunSection({ run }: { run: RetailerOrderRun }) {
+    if (run.status === 'awaiting_cart_decision' || run.cart_decision_needed) {
+        return <CartDecisionPanel run={run} />;
+    }
+
+    if (run.status === 'awaiting_fulfilment_selection') {
+        return <FulfilmentSlotPicker run={run} />;
+    }
+
+    if (run.status === 'awaiting_order_confirmation') {
+        return <ConfirmOrderPanel run={run} />;
+    }
+
+    if (
+        run.status === 'awaiting_placement_verification' ||
+        run.placement_verification_needed
+    ) {
+        return <PlacementVerificationPanel run={run} />;
+    }
+
+    if (
+        activeRetailerOrderStatuses.has(run.status) ||
+        run.status === 'awaiting_item_decision' ||
+        run.status === 'awaiting_reauthentication' ||
+        run.status === 'cart_ready'
+    ) {
+        return (
+            <section
+                className="mt-5 rounded-xl border bg-background p-4"
+                aria-labelledby="retailer-order-run-heading"
+            >
+                <h2
+                    id="retailer-order-run-heading"
+                    className="text-sm font-medium capitalize"
+                >
+                    {automationStatusLabel(run.status)}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                    {run.progress.resolved} of {run.progress.total} items
+                    resolved
+                    {run.failure_message ? `. ${run.failure_message}` : '.'}
+                </p>
+            </section>
+        );
+    }
+
+    return null;
 }
 
 function snapshotLineLabel(line: CartSnapshotLine) {
@@ -2584,6 +2644,7 @@ function ReadyShoppingList({
     planId,
     recipePreparation,
     retailers,
+    retailerOrderRun,
     shoppingCategories,
     shoppingList,
 }: {
@@ -2596,6 +2657,7 @@ function ReadyShoppingList({
     planId: number;
     recipePreparation: ShoppingWorkspace['recipe_preparation'];
     retailers: ShoppingWorkspace['retailers'];
+    retailerOrderRun: ShoppingWorkspace['retailer_order_run'];
     shoppingCategories: ShoppingWorkspace['shopping_categories'];
     shoppingList: PreparedShoppingList;
 }) {
@@ -2673,6 +2735,9 @@ function ReadyShoppingList({
                 shoppingList={shoppingList}
                 retailers={retailers}
             />
+            {retailerOrderRun && (
+                <RetailerOrderRunSection run={retailerOrderRun} />
+            )}
             <ShoppingItemsSection
                 included={included}
                 shoppingCategories={shoppingCategories}
@@ -2721,6 +2786,7 @@ export default function ShoppingShow({
         retailers,
         budget,
         cart_automation: cartAutomation,
+        retailer_order_run: retailerOrderRun,
     } = workspace;
     const remaining =
         shoppingList?.items.filter(
@@ -2761,11 +2827,18 @@ export default function ShoppingShow({
         cartAutomation.run &&
         activeAutomationStatuses.has(cartAutomation.run.status),
     );
+    const retailerOrderPolling = Boolean(
+        retailerOrderRun &&
+        activeRetailerOrderStatuses.has(retailerOrderRun.status),
+    );
     const generationQueued =
         shoppingList?.generation_status === 'pending' &&
         shoppingList.generation_failure_code === null;
     const shouldPoll =
-        preparationActive || generationQueued || automationPolling;
+        preparationActive ||
+        generationQueued ||
+        automationPolling ||
+        retailerOrderPolling;
 
     useEffect(() => {
         if (!shouldPoll) {
@@ -2886,6 +2959,7 @@ export default function ShoppingShow({
                             planId={plan.id}
                             recipePreparation={recipePreparation}
                             retailers={retailers}
+                            retailerOrderRun={retailerOrderRun}
                             shoppingCategories={shoppingCategories}
                             shoppingList={shoppingList}
                         />
