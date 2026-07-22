@@ -13,6 +13,7 @@ use App\Enums\RetailerOrderRunStatus;
 use App\Models\BrowserSession;
 use App\Models\RetailerOrderRun;
 use App\Models\RetailerOrderRunItem;
+use App\Models\User;
 use App\Retailer\Contracts\RetailerBrowser;
 use App\Retailer\Data\AuthCheck;
 use App\Retailer\Data\CartInspection;
@@ -24,6 +25,7 @@ class AdvanceRetailerOrderRun
         private readonly RetailerBrowser $browser,
         private readonly CreateBrowserSession $createBrowserSession,
         private readonly CloseBrowserSession $closeBrowserSession,
+        private readonly RecordPlacedRetailerOrder $recordPlacedRetailerOrder,
     ) {}
 
     public function handle(RetailerOrderRun $run): RetailerOrderAdvanceResult
@@ -42,6 +44,7 @@ class AdvanceRetailerOrderRun
             RetailerOrderRunStatus::PreparingCart => $this->advanceCartPreparation($run),
             RetailerOrderRunStatus::CartReady,
             RetailerOrderRunStatus::FetchingFulfilmentOptions => $this->advanceFulfilmentOptions($run),
+            RetailerOrderRunStatus::SubmittingOrder => $this->advanceSubmittingOrder($run),
             default => new RetailerOrderAdvanceResult(false, $run->status->value),
         };
     }
@@ -282,6 +285,98 @@ class AdvanceRetailerOrderRun
         ]);
 
         return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingFulfilmentSelection->value);
+    }
+
+    private function advanceSubmittingOrder(RetailerOrderRun $run): RetailerOrderAdvanceResult
+    {
+        $run = $run->fresh(['retailerConnection', 'items', 'shoppingList']);
+
+        if ($run === null) {
+            return new RetailerOrderAdvanceResult(false, 'missing');
+        }
+
+        // Never submit when placement is already claimed or awaiting household verification.
+        if ($run->status->blocksResubmit() && $run->status !== RetailerOrderRunStatus::SubmittingOrder) {
+            return new RetailerOrderAdvanceResult(false, $run->status->value);
+        }
+
+        if ($run->status !== RetailerOrderRunStatus::SubmittingOrder) {
+            return new RetailerOrderAdvanceResult(false, $run->status->value);
+        }
+
+        if ($run->expires_at?->isPast()) {
+            $run->update([
+                'status' => RetailerOrderRunStatus::Failed,
+                'failure_message' => 'The order run window expired before Chef could submit the Woolworths order.',
+            ]);
+
+            return new RetailerOrderAdvanceResult(false, 'expired');
+        }
+
+        $session = $this->ensureBrowserSession($run);
+        $submitted = $this->browser->submitOrderWithDefaultPayment($session);
+
+        if (! $submitted->ok) {
+            $run->update([
+                'status' => RetailerOrderRunStatus::Failed,
+                'failure_message' => $submitted->errorMessage
+                    ?? 'Chef could not submit the Woolworths order with the default card on file.',
+            ]);
+
+            return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::Failed->value);
+        }
+
+        $confirmation = $this->browser->extractOrderConfirmation($session);
+        $reference = filled($confirmation->retailerOrderReference)
+            ? trim((string) $confirmation->retailerOrderReference)
+            : (filled($submitted->retailerOrderReference)
+                ? trim((string) $submitted->retailerOrderReference)
+                : null);
+        $confirmationText = $confirmation->confirmationText
+            ?? $submitted->confirmationText;
+
+        if ($reference === null) {
+            $run->update([
+                'status' => RetailerOrderRunStatus::AwaitingPlacementVerification,
+                'failure_message' => null,
+                'confirmation' => [
+                    ...(is_array($run->confirmation) ? $run->confirmation : []),
+                    'submit' => [
+                        'likely_placed' => true,
+                        'confirmation_text' => $confirmationText,
+                        'submitted_at' => now()->toIso8601String(),
+                    ],
+                ],
+            ]);
+
+            return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingPlacementVerification->value);
+        }
+
+        $user = $this->confirmingUser($run);
+
+        $this->recordPlacedRetailerOrder->handle(
+            $run,
+            $user,
+            retailerOrderReference: $reference,
+            confirmationText: $confirmationText,
+        );
+
+        return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::Placed->value);
+    }
+
+    private function confirmingUser(RetailerOrderRun $run): User
+    {
+        $userId = is_array($run->confirmation) ? ($run->confirmation['user_id'] ?? null) : null;
+
+        if (is_numeric($userId)) {
+            $user = User::query()->find((int) $userId);
+
+            if ($user !== null) {
+                return $user;
+            }
+        }
+
+        return User::query()->findOrFail($run->started_by_user_id);
     }
 
     private function ensureBrowserSession(RetailerOrderRun $run): BrowserSession
