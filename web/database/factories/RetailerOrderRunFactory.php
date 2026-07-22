@@ -38,6 +38,7 @@ class RetailerOrderRunFactory extends Factory
                 'safety_fingerprint' => hash('sha256', 'factory-safety'),
             ])->id,
             'status' => RetailerOrderRunStatus::Draft,
+            'existing_cart_decision' => null,
             'fulfilment_type' => null,
             'fulfilment_options' => null,
             'fulfilment_options_expires_at' => null,

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ExistingCartDecision;
 use App\Enums\RetailerOrderRunStatus;
 use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Carbon\Carbon;
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $started_by_user_id
  * @property int $cart_product_plan_id
  * @property RetailerOrderRunStatus $status
+ * @property ExistingCartDecision|null $existing_cart_decision
  * @property string|null $fulfilment_type
  * @property array<string, mixed>|null $fulfilment_options
  * @property Carbon|null $fulfilment_options_expires_at
@@ -41,6 +43,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'started_by_user_id',
     'cart_product_plan_id',
     'status',
+    'existing_cart_decision',
     'fulfilment_type',
     'fulfilment_options',
     'fulfilment_options_expires_at',
@@ -112,6 +115,7 @@ class RetailerOrderRun extends Model
     {
         return [
             'status' => RetailerOrderRunStatus::class,
+            'existing_cart_decision' => ExistingCartDecision::class,
             'fulfilment_options' => 'array',
             'fulfilment_options_expires_at' => 'datetime',
             'selected_slot' => 'array',

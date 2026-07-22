@@ -11,6 +11,8 @@ final readonly class CartInspection
         public array $lines = [],
         public ?float $total = null,
         public string $currency = 'AUD',
+        public bool $botDetected = false,
+        public bool $sensitiveScreen = false,
     ) {}
 
     public function isEmpty(): bool
