@@ -1,6 +1,7 @@
 # Chef commercial and marketing strategy
 
-Status: **Working strategy for validation — 16 July 2026**
+Status: **Working strategy for validation — 16 July 2026; product finish-line
+update 22 July 2026**
 
 This document defines how Chef should be positioned, packaged, sold, and
 explained on its future Astro marketing site. It is a commercial and content
@@ -8,6 +9,14 @@ brief, not a release claim. The [README](../README.md) remains the product sourc
 of truth, [MILESTONES.md](MILESTONES.md) owns delivery status,
 [IMPLEMENTATION.md](IMPLEMENTATION.md) owns technical boundaries, and
 [STYLE.md](STYLE.md) plus [BRAND.md](BRAND.md) own product and brand execution.
+
+**Product update (22 July 2026):** version 1 retailer shopping now ends at
+in-Chef fulfilment selection and confirmed order placement with the retailer's
+default card on file (see
+[`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md)
+and M6.2). Older “checkout stays yours” / “never an order-confirmation screen”
+claims in this file are superseded for future copy; a full commercial rewrite
+pass remains on the M6.2 checklist.
 
 Where this document describes a future version 1 capability, public copy must
 not present it as available until its milestone exit evidence is complete.
@@ -136,7 +145,7 @@ Marketing work needs a shared vocabulary for claim maturity.
 | Structured, traceable shopping list | M4 in progress | `Private testing now covers a plan-derived, editable shopping list.` | `Know why every generated item is on the list.` |
 | Retail products, budgets, and order snapshots | Version 1 required through M4 | `In development.` | `Review products and the estimated total before shopping.` |
 | Cooking mode and household learning | Version 1 required through M5 | `Planned for version 1.` | `Cook from tonight's plan and make the next week easier.` |
-| Woolworths and Coles trolley preparation | Version 1 required through M6 | `Planned, with checkout remaining yours.` | `Chef can prepare a Woolworths or Coles trolley for you to review.` |
+| Woolworths and Coles order placement | Version 1 required through M6.2 | `Planned: prepare the trolley, choose a slot in Chef, confirm, and Chef places the order with your default card on file.` | `Chef can prepare the shop and place the order after you confirm the slot.` |
 | Native voice | Version 1 required through M7 | `Voice is planned; typing is available in testing.` | `Talk or type into the same plan.` |
 | External access through MCP | Version 1 required through M8 | Developer or integration documentation only. | Do not make this a household homepage headline. |
 | Public privacy, operations, and support readiness | Version 1 required through M9 | `Private beta` or `request access`; do not imply public availability. | Public signup only after the M9 gate. |
@@ -153,8 +162,8 @@ data:
 - `Allergy-safe meal plans.`
 - `The cheapest possible shop.`
 - `Perfect recommendations for everyone.`
-- `One-click checkout.`
-- `Fully autonomous grocery shopping.`
+- `Fully autonomous grocery shopping without confirmation.`
+- `One-click checkout` that skips fulfilment choice or confirmation.
 
 Testimonials, star ratings, household counts, time savings, budget savings, and
 completion rates must all be attributable to real customers. Do not use

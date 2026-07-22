@@ -1,11 +1,52 @@
 <?php
 
 use App\Actions\MealPlans\StartMealPlan;
+use App\Actions\Planning\CreateMealSlot;
+use App\Actions\Planning\ProposeMeal;
 use App\Actions\Teams\CreateTeamForUser;
+use App\Enums\MealSlotKind;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
+
+it('shows one whole-plan approval instead of serial meal decisions on desktop and narrow screens', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDay(), 'Weeknight plan');
+
+    foreach (['Chicken tacos', 'Vegetable pasta'] as $offset => $title) {
+        $slot = app(CreateMealSlot::class)->handle(
+            $plan,
+            $user,
+            today()->addDays($offset),
+            MealSlotKind::Dinner,
+            $team->people,
+        );
+        app(ProposeMeal::class)->handle(
+            $plan,
+            $user,
+            $title,
+            $slot,
+            'A practical family dinner.',
+            30,
+            12.5,
+        );
+    }
+
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $plan))->on()->desktop()
+        ->assertPresent('[data-plan-approval]')
+        ->assertSee('Your plan is ready to approve')
+        ->assertSee('Chicken tacos')
+        ->assertSee('Vegetable pasta')
+        ->assertSee('Approve plan & prepare cart')
+        ->resize(390, 844)
+        ->assertPresent('[data-plan-approval]')
+        ->assertSee('Approve plan & prepare cart')
+        ->assertNoJavaScriptErrors();
+});
 
 it('visually distinguishes the selected plan when titles are identical', function () {
     $user = User::factory()->create();

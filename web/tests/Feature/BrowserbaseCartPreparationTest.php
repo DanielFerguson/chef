@@ -11,8 +11,6 @@ use App\Actions\Automation\StartAutomationTakeover;
 use App\Actions\Automation\StartCartPreparation;
 use App\Actions\Automation\StartRetailerConnection;
 use App\Actions\Automation\VerifyRetailerConnection;
-use App\Actions\Shopping\CompleteShoppingList;
-use App\Actions\Shopping\RecordOrderSnapshot;
 use App\Actions\Teams\AddUserToTeam;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Automation\Contracts\BrowserSessionProvider;
@@ -35,6 +33,7 @@ use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
 use App\Enums\CartProductPlanStatus;
 use App\Enums\RetailerConnectionStatus;
+use App\Enums\ShoppingListStatus;
 use App\Jobs\AdvanceAutomationRunJob;
 use App\Models\AutomationIntervention;
 use App\Models\Constraint;
@@ -1332,21 +1331,18 @@ it('records the final order from the reconciled cart instead of reconstructed li
         true,
         true,
     )->refresh()->load('latestSnapshot.lines');
-    $workspace['item']->update(['checked' => true]);
-    $completed = app(CompleteShoppingList::class)->handle(
-        $workspace['list']->refresh(),
-        $workspace['user'],
-        1,
-    );
-    $order = app(RecordOrderSnapshot::class)->handle(
-        $completed,
-        $workspace['user'],
-        4.5,
-        null,
-        $run->latestSnapshot,
-    );
+    $completed = $workspace['list']->refresh();
+    $this->actingAs($workspace['user'])
+        ->post(route('shopping-lists.orders.store', $completed), [
+            'cart_snapshot_id' => $run->latestSnapshot->id,
+        ])
+        ->assertSessionHasNoErrors();
+    $order = $completed->orders()->with('lines')->sole();
 
-    expect($order->cart_snapshot_id)->toBe($run->latestSnapshot->id)
+    expect($completed->status)->toBe(ShoppingListStatus::Completed)
+        ->and($workspace['item']->refresh()->ordered_at)->not->toBeNull()
+        ->and($workspace['item']->ordered_via_cart_snapshot_id)->toBe($run->latestSnapshot->id)
+        ->and($order->cart_snapshot_id)->toBe($run->latestSnapshot->id)
         ->and($order->retailer_id)->toBe($connection->retailer_id)
         ->and($order->lines)->toHaveCount(1)
         ->and($order->lines->first()->product_name)->toBe('Full cream milk')

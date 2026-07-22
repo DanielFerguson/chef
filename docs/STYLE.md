@@ -157,6 +157,13 @@ Permission prompts appear only at the moment of use and explain the benefit, sco
 
 ## Planning interactions
 
+- Present one coherent week as the default planning unit. A household may
+  approve the whole draft or conversationally swap individual meals; it should
+  not need to accept seven ordinary suggestions one at a time.
+- When the household has supplied enough intent, take safe planning actions and
+  show the result. Do not ask permission to suggest the remaining meals, tidy
+  proposal state, show the completed week, or check whether background work has
+  finished.
 - Draft meal cards show name, participants, effort, key constraint fit, and estimated cost only when available.
 - Selected meals visibly occupy dated slots.
 - Drag-and-drop is supported, with an accessible move alternative.
@@ -164,7 +171,15 @@ Permission prompts appear only at the moment of use and explain the benefit, sco
 - Unresolved decisions are explicit and actionable.
 - A stale shopping list shows a compact change summary rather than a generic warning.
 - Do not show recipe-generation progress while the household is still choosing meals. Individual selections update the plan only.
-- Filling the final slot starts one whole-plan recipe batch. Show one calm plan-level preparation or retry state, then reveal safety review and confirmation when every recipe is ready.
+- Approval is one visible whole-plan action. The approval surface includes the
+  dated meals, people, effort, cost where known, current safety context,
+  retailer intent, and the consequence that Chef will prepare the cart and,
+  after fulfilment selection and confirmation, may place the order. Recipe
+  creation is background preparation after approval, not a prerequisite for
+  approving the meal ideas.
+- Approval starts one whole-plan recipe batch, shopping-list preparation, and
+  read-only retailer matching automatically. Show one calm plan-level status
+  and interrupt only for a safe retry or a material decision.
 - Describe the number of remaining recipes in migrated or partially prepared plans; do not imply already-complete recipes are being regenerated.
 - Explain that shopping follows confirmation; do not leave the household to ask what happens next.
 
@@ -178,8 +193,10 @@ Shopping uses progressive disclosure and preserves the meal plan's natural
 conversation. Before a useful list exists, show one primary preparation action
 and calm recipe/list progress. Do not lead with budget controls, an empty item
 editor, completion, or expanded manual ingredient forms. Once the generated
-list is ready, guide the household through pantry review and household extras;
-then reveal budget and product detail as optional next decisions. Manual recipe
+list is ready, make pantry review optional, keep household extras conversational,
+and reveal budget and product detail as optional next decisions. `Order
+everything` is a valid default when the household does not want a pantry pass.
+Manual recipe
 ingredient entry is a recovery path, not the default experience.
 
 - click or tap to edit;
@@ -231,14 +248,14 @@ If an already-approved cart run pauses for reauthentication, the explicit
 run after the protected cart check passes. This is a resume of the earlier
 approved work, not a new cart-preparation approval.
 
-Before that second action, complete bounded read-only retailer discovery and
-show the durable product plan: exact products, genuinely ambiguous or unresolved
-choices, and applicable explicit household safety constraints. Discovery is a
-separate visible action and never authorises cart mutation. Keep each ambiguous
-choice beside its candidates and each unresolved item beside the exact-product
-editor. Only a fully exact plan exposes the product-plan review acknowledgement;
-the separate safety acknowledgement remains required. Do not hide a blocked
-state behind a disabled button alone.
+Before cart mutation, complete bounded read-only retailer discovery
+automatically and retain the durable product plan. Summarise routine and
+remembered matches, make new confident matches inspectable, and require a
+decision only for ambiguous, constrained, unresolved, or materially expensive
+items. The whole-plan approval carries the current participant and safety
+context; do not ask for a second blanket safety or product attestation when the
+product plan remains inside that approval envelope. Do not hide a blocked state
+behind a disabled button alone.
 
 If a retailer cart is non-empty, show its observed lines and three concrete
 choices: merge, replace the existing cart, or cancel. Replace must name the
@@ -246,8 +263,11 @@ consequence. Progress stays item-oriented and quiet, while interventions name
 the product, observed consequence, and available recovery. The final review
 separates Chef-added, substituted, unavailable, changed, pre-existing, and
 unresolved lines, and distinguishes the Chef subtotal from the whole-cart
-total. The only checkout handoff is `Open Woolworths cart` in the household's
-normal retailer experience.
+total. After the cart is ready, present delivery or pickup options scraped from
+the retailer session. The household selects type, day, and time in Chef, then
+confirms a submit that plainly names the consequence: Chef will place the
+Woolworths order using the default card on file. Do not open the normal
+retailer checkout as the primary path once that confirmation exists.
 
 Active runs offer `Pause and take over` only to the connection owner. The
 manual surface must plainly say that the model is disconnected and recording
@@ -384,7 +404,9 @@ Chef is concise, warm, and practical.
 - Never soften allergy language.
 - Avoid congratulatory filler after routine actions.
 - Use the household's names when it clarifies participation or disagreement.
-- Say `I added the items to your cart for review`, never `I placed your order`.
+- Say `I added the items to your cart for review` while the cart is still open.
+- After confirmed submit, say `I placed your Woolworths order for [slot]`, never
+  imply an order was placed before the in-Chef confirmation.
 
 ## Accessibility baseline
 

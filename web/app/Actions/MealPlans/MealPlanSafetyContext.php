@@ -20,7 +20,6 @@ class MealPlanSafetyContext
             ->all();
         $meals = $mealPlan->plannedMeals()
             ->where('status', 'planned')
-            ->whereNotNull('recipe_version_id')
             ->with('mealSlot.participants.constraints')
             ->get()
             ->sortBy(fn (PlannedMeal $meal): string => implode('|', [
@@ -30,7 +29,8 @@ class MealPlanSafetyContext
             ]))
             ->map(fn (PlannedMeal $meal): array => [
                 'planned_meal_id' => $meal->id,
-                'recipe_version_id' => $meal->recipe_version_id,
+                'title' => $meal->title,
+                'type' => $meal->type->value,
                 'participants' => $meal->mealSlot->participants
                     ->sortBy('id')
                     ->map(fn ($person): array => [

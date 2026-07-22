@@ -28,6 +28,12 @@ class RecordMealPlanRevision
             $nextRevision = $locked->revision + 1;
             $updates = ['revision' => $nextRevision];
 
+            if ($locked->shopping_approved_at !== null) {
+                $updates['shopping_approved_by_user_id'] = null;
+                $updates['shopping_approved_at'] = null;
+                $updates['shopping_approval_fingerprint'] = null;
+            }
+
             if ($locked->planning_confirmed_at !== null) {
                 $updates['derived_data_stale_at'] = now();
                 $updates['derived_data_stale_reason'] = $summary;

@@ -5,6 +5,8 @@ use App\Actions\Cooking\RecordMealOutcome;
 use App\Actions\Cooking\ReviewPreferenceCandidate;
 use App\Actions\Cooking\StartCooking;
 use App\Actions\Cooking\UpdateCookingProgress;
+use App\Actions\MealPlans\ConfirmMealPlan;
+use App\Actions\MealPlans\ReviewMealPlanSafety;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\BuildRecommendationExplanation;
 use App\Actions\Planning\CreateMealSlot;
@@ -70,6 +72,8 @@ function m5CookingWorkspace(int $dayOffset = 0): array
         collect([$person, $secondPerson]),
     );
     $meal = app(SelectPlannedMeal::class)->handle($slot, $user, PlannedMealType::Recipe, $recipe->latestVersion);
+    app(ReviewMealPlanSafety::class)->handle($plan->refresh(), $user);
+    app(ConfirmMealPlan::class)->handle($plan->refresh(), $user);
 
     return compact('user', 'team', 'person', 'secondPerson', 'plan', 'recipe', 'slot', 'meal');
 }

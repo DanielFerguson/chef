@@ -16,8 +16,7 @@ class InvalidateMealPlansForConstraintChange
             ->whereNotNull('planning_confirmed_at')
             ->whereDate('ends_on', '>=', today())
             ->whereHas('plannedMeals', fn ($query) => $query
-                ->where('status', 'planned')
-                ->whereNotNull('recipe_version_id'))
+                ->where('status', 'planned'))
             ->when($person !== null, fn ($query) => $query->whereHas(
                 'slots.participants',
                 fn ($participants) => $participants->whereKey($person->id),

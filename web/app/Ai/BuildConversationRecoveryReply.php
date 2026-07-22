@@ -85,22 +85,20 @@ class BuildConversationRecoveryReply
         if ($plan !== null) {
             $readiness = $this->assessReadiness->handle($plan);
 
-            if ($readiness['recipes_failed'] > 0) {
-                $parts[] = 'The completed plan’s recipe batch needs another attempt before the plan is ready.';
-            } elseif ($readiness['recipes_preparing'] > 0) {
-                $parts[] = 'Chef is preparing every selected recipe together in one batch. You can keep chatting while that finishes.';
+            if ($readiness['ready_for_approval']) {
+                $parts[] = "The complete {$readiness['total_slots']}-meal draft is ready to review as one week. Approving it will start recipe, shopping-list, product-matching, and connected-cart preparation.";
+            } elseif ($readiness['confirmed'] && $readiness['recipes_failed'] > 0) {
+                $parts[] = 'The approved plan’s recipe batch needs another attempt before Chef can continue preparing the shop.';
+            } elseif ($readiness['confirmed'] && $readiness['recipes_preparing'] > 0) {
+                $parts[] = 'Chef is preparing every approved recipe together and will continue into shopping automatically.';
             } elseif ($readiness['uncovered_slots'] > 0) {
                 $parts[] = $readiness['uncovered_slots'].' meal '.($readiness['uncovered_slots'] === 1 ? 'slot still needs' : 'slots still need').' an option. Tell me what to suggest next.';
             } elseif ($readiness['pending_proposals'] > 0) {
                 $parts[] = $readiness['pending_proposals'].' meal '.($readiness['pending_proposals'] === 1 ? 'suggestion is' : 'suggestions are').' ready for review.';
-            } elseif ($readiness['safety_review_required']) {
-                $parts[] = 'The meals are ready. Review the household safety details in Plan details before confirming; allergies and exclusions are never inferred.';
-            } elseif ($readiness['ready_for_confirmation']) {
-                $parts[] = "All {$readiness['total_slots']} meal slots are filled. Would you like to review and confirm the plan? Once confirmed, the next step is the shopping list.";
             } elseif ($readiness['confirmed'] && $shoppingList !== null) {
-                $parts[] = 'The plan is confirmed and its shopping list is ready to review.';
+                $parts[] = 'The plan is approved and Chef has started its shopping preparation.';
             } elseif ($readiness['confirmed']) {
-                $parts[] = 'The plan is confirmed. The next step is to prepare and review the shopping list.';
+                $parts[] = 'The plan is approved. Chef will continue into shopping preparation automatically.';
             }
         }
 

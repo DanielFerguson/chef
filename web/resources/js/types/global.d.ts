@@ -6,6 +6,7 @@ export type RecentMealPlan = {
     starts_on: string;
     ends_on: string;
     revision: number;
+    phase: 'Draft' | 'Confirmed' | 'Preparing' | 'Superseded';
     can: {
         update: boolean;
         delete: boolean;

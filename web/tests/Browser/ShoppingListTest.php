@@ -66,6 +66,11 @@ it('takes a confirmed plan through an editable traceable shopping list', functio
         ->assertScript(
             '() => Array.from(document.querySelector(\'[data-sidebar="trigger"]\')?.closest(\'header\')?.querySelectorAll(\'a\') ?? []).some((link) => link.textContent?.trim() === \'Back to plan\')',
         )
+        ->assertSee('Full shopping list')
+        ->assertSee('2 items · Review pantry, quantities or add an item')
+        ->assertScript('() => document.querySelector(\'summary[aria-label="Shopping list items"]\')?.parentElement?.open === false')
+        ->assertDontSee('Complete shop')
+        ->click('summary[aria-label="Shopping list items"]')
         ->assertSee('Meat & Seafood')
         ->assertSee('Pantry')
         ->assertSee('Satay chicken')
@@ -80,14 +85,13 @@ it('takes a confirmed plan through an editable traceable shopping list', functio
         ->assertPresent('[data-slot="table"]')
         ->assertSee('Used for')
         ->assertScript('() => Array.from(document.querySelectorAll("[data-testid=shopping-item-checkbox]")).every((item) => item.getBoundingClientRect().width >= 20 && item.getBoundingClientRect().height >= 20)')
-        ->hover('[data-testid="complete-shop-tooltip-trigger"]')
-        ->assertSee('Mark the 2 remaining items as bought to complete this shop.')
         ->click('button[aria-label="List view"]')
         ->assertPresent('button[aria-label="Edit Chicken breast"]')
         ->assertPresent('button[aria-label="Edit Coconut milk"]')
         ->pressAndWaitFor('Back to plan')
         ->assertSee('Review shopping list')
         ->pressAndWaitFor('Review shopping list')
+        ->click('summary[aria-label="Shopping list items"]')
         ->assertSee('For Satay chicken')
         ->click('Budget and estimate')
         ->type('input[aria-label="Shopping budget"]', '100')
@@ -134,6 +138,7 @@ it('automatically prepares ingredients for a custom meal without manual reconstr
     visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
         ->assertDontSee('needs structured ingredients')
         ->assertNotPresent('textarea[aria-label="Ingredients for Pulled pork rolls"]')
+        ->click('summary[aria-label="Shopping list items"]')
         ->click('button[aria-label="List view"]')
         ->click('button[aria-label="Edit Pulled pork rolls ingredients"]')
         ->assertPresent('input[aria-label="Pulled pork rolls ingredients name"]')
@@ -152,6 +157,9 @@ it('keeps the shopping editor usable at a narrow viewport', function () {
         ->assertScript(
             '() => Array.from(document.querySelector(\'[data-sidebar="trigger"]\')?.closest(\'header\')?.querySelectorAll(\'a\') ?? []).some((link) => link.textContent?.trim() === \'Back to plan\')',
         )
+        ->assertSee('Full shopping list')
+        ->assertScript('() => document.querySelector(\'summary[aria-label="Shopping list items"]\')?.parentElement?.open === false')
+        ->click('summary[aria-label="Shopping list items"]')
         ->assertSee('Meat & Seafood')
         ->assertSee('Pantry')
         ->assertSee('Satay chicken')
@@ -183,6 +191,24 @@ it('shows a structured current shopping recap instead of a stale planning messag
         ->assertNoJavaScriptErrors();
 });
 
+it('shows shopping-list progress once every recipe is ready', function () {
+    $workspace = browserShoppingWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $list->update([
+        'generation_status' => ShoppingListGenerationStatus::Processing,
+        'generation_started_at' => now(),
+    ]);
+    $this->actingAs($workspace['user']);
+
+    visit(route('meal-plans.shopping.show', $workspace['plan']))
+        ->resize(390, 844)
+        ->assertSee('Building your shopping list')
+        ->assertSee('All recipes are ready. Chef is combining ingredients and quantities now.')
+        ->assertDontSee('Preparing your recipes')
+        ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->assertNoJavaScriptErrors();
+});
+
 it('renders recipe-provenanced plan-generated rows on desktop', function () {
     $workspace = browserShoppingWorkspace();
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
@@ -191,6 +217,7 @@ it('renders recipe-provenanced plan-generated rows on desktop', function () {
 
     visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
         ->assertSee('Shopping list')
+        ->click('summary[aria-label="Shopping list items"]')
         ->click('button[aria-label="List view"]')
         ->assertSee('For Satay chicken')
         ->assertPresent('button[aria-label="Edit Chicken breast"]')
@@ -211,7 +238,8 @@ it('shows a safe shopping-generation failure and retries it', function () {
         ->assertSee('Chef could not finish this shopping list')
         ->assertSee('Chef could not prepare this shopping list. Try again.')
         ->pressAndWaitFor('Retry')
-        ->assertSee('Items')
+        ->assertSee('Full shopping list')
+        ->click('summary[aria-label="Shopping list items"]')
         ->click('button[aria-label="List view"]')
         ->assertPresent('button[aria-label="Edit Chicken breast"]')
         ->assertNoJavaScriptErrors();
@@ -276,8 +304,8 @@ it('offers just-in-time Woolworths connection without overflowing a narrow scree
         ->assertSee('Connect Woolworths when the list is ready')
         ->assertSee('Chef’s model is not attached during sign-in')
         ->assertPresent('button:has-text("Connect Woolworths")')
-        ->assertScript('() => { const cart = document.querySelector("#woolworths-cart-heading"); const items = Array.from(document.querySelectorAll("h2")).find((heading) => heading.textContent?.trim() === "Items"); return Boolean(cart && items && (cart.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING)); }')
-        ->assertScript('() => { const section = document.querySelector("#woolworths-cart-heading")?.closest("section"); if (!section) return false; const style = getComputedStyle(section); return style.borderTopWidth === "0px" && style.borderBottomWidth !== "0px"; }')
+        ->assertScript('() => { const cart = document.querySelector("#woolworths-cart-heading"); const items = document.querySelector(\'summary[aria-label="Shopping list items"]\'); return Boolean(cart && items && (cart.compareDocumentPosition(items) & Node.DOCUMENT_POSITION_FOLLOWING)); }')
+        ->assertScript('() => { const section = document.querySelector("#woolworths-cart-heading")?.closest("section"); if (!section) return false; const style = getComputedStyle(section); return style.borderTopWidth === "0px" && style.borderBottomWidth === "0px"; }')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
 });
@@ -316,17 +344,31 @@ it('requires explicit product and safety review before preparing a cart', functi
         $workspace['user'],
     );
     app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
+    $discovery = app(RetailerProductDiscovery::class);
+    expect($discovery)->toBeInstanceOf(FakeRetailerProductDiscovery::class);
+    $discovery->returnAmbiguousCandidates = true;
     $this->actingAs($workspace['user']);
 
     visit(route('meal-plans.shopping.show', $workspace['plan']))
         ->resize(390, 844)
-        ->assertSee('Find matching products')
-        ->assertSee('Chef will search Woolworths for 2 items before opening the authenticated cart.')
+        ->assertSee('Next step')
+        ->assertSee('Find products for your list')
+        ->assertSee('Chef will search Woolworths for 2 items before opening your authenticated cart.')
+        ->assertSee('Connected')
+        ->assertSee('Full shopping list')
+        ->assertScript('() => document.querySelector(\'summary[aria-label="Shopping list items"]\')?.parentElement?.open === false')
+        ->assertDontSee('Complete shop')
         ->assertDontSee('I reviewed the household safety context and this product plan.')
         ->assertDontSee('Prepare Woolworths cart')
         ->click('Find Woolworths products')
-        ->assertSee('Product plan ready')
-        ->assertSee('2 exact products are ready for your final review.')
+        ->assertSee('Choose a product for Chicken breast')
+        ->assertSee('2 decisions remain')
+        ->click('button[aria-label="Choose Chicken breast for Chicken breast"]')
+        ->assertSee('Choose a product for Coconut milk')
+        ->assertSee('1 decision remains')
+        ->click('button[aria-label="Choose Coconut milk for Coconut milk"]')
+        ->assertSee('Prepare your Woolworths cart')
+        ->assertSee('All 2 products are matched')
         ->click('[data-slot="checkbox"][aria-label="Confirm exact Woolworths product plan review"]')
         ->click('[data-slot="checkbox"][aria-label="Confirm cart product plan safety review"]')
         ->assertScript('() => Array.from(document.querySelectorAll("button")).find((button) => button.textContent.includes("Prepare Woolworths cart"))?.disabled', false)
@@ -356,7 +398,7 @@ it('turns a catalogue outage into one compact retry instead of a manual item lis
     visit(route('meal-plans.shopping.show', $workspace['plan']))
         ->resize(390, 844)
         ->click('Find Woolworths products')
-        ->assertSee('Product search needs another try')
+        ->assertSee('Retry Woolworths product matching')
         ->assertSee('You do not need to match every item manually.')
         ->assertSee('Try product search again')
         ->assertDontSee('No confident Woolworths candidate was found')
@@ -405,10 +447,12 @@ it('reviews a non-empty cart decision and reconciled normal-Woolworths handoff',
         ->assertSee('Merge carts')
         ->assertSee('Replace existing cart')
         ->pressAndWaitFor('Merge carts')
-        ->assertSee('Verified cart review')
+        ->assertSee('Your cart is ready')
+        ->click('summary:has-text("Review cart products")')
         ->assertSee('Wholemeal bread')
         ->assertSee('pre existing')
-        ->assertSee('Open Woolworths cart')
+        ->pressAndWaitFor('Delivery')
+        ->assertSee('Choose a delivery time & checkout')
         ->assertSee('normal-app cart synchronisation release trial is not yet recorded as proven')
         ->assertNoJavaScriptErrors();
 
@@ -486,7 +530,7 @@ it('keeps a failed MFA probe in human control and verifies it before returning t
 
     $page->pressAndWaitFor('I’ve signed in')
         ->assertSee('Woolworths connected')
-        ->assertSee('Find matching products')
+        ->assertSee('Find products for your list')
         ->assertDontSee('Prepare Woolworths cart')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();

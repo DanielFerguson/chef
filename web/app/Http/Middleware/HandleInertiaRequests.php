@@ -47,21 +47,43 @@ class HandleInertiaRequests extends Middleware
                     ->orderBy('name')
                     ->get(['teams.id', 'teams.name']) ?? [],
             ],
-            'recentMealPlans' => fn () => $user?->currentTeam?->mealPlans()
-                ->latest('updated_at')
-                ->limit(8)
-                ->get(['id', 'team_id', 'title', 'starts_on', 'ends_on', 'revision'])
-                ->map(fn ($mealPlan) => [
-                    'id' => $mealPlan->id,
-                    'title' => $mealPlan->title,
-                    'starts_on' => $mealPlan->starts_on->toDateString(),
-                    'ends_on' => $mealPlan->ends_on->toDateString(),
-                    'revision' => $mealPlan->revision,
-                    'can' => [
-                        'update' => $user->can('update', $mealPlan),
-                        'delete' => $user->can('delete', $mealPlan),
-                    ],
-                ]) ?? [],
+            'recentMealPlans' => function () use ($user) {
+                $plans = $user?->currentTeam?->mealPlans()
+                    ->latest('updated_at')
+                    ->orderByDesc('id')
+                    ->limit(8)
+                    ->get(['id', 'team_id', 'title', 'starts_on', 'ends_on', 'revision', 'planning_confirmed_at', 'shopping_approved_at']);
+
+                if ($plans === null) {
+                    return [];
+                }
+
+                return $plans->map(function ($mealPlan) use ($plans, $user): array {
+                    $superseded = $mealPlan->planning_confirmed_at !== null
+                        && $plans->contains(fn ($candidate): bool => $candidate->planning_confirmed_at !== null
+                            && ($candidate->planning_confirmed_at->isAfter($mealPlan->planning_confirmed_at)
+                                || ($candidate->planning_confirmed_at->equalTo($mealPlan->planning_confirmed_at) && $candidate->id > $mealPlan->id))
+                            && $candidate->starts_on->lte($mealPlan->ends_on)
+                            && $candidate->ends_on->gte($mealPlan->starts_on));
+
+                    return [
+                        'id' => $mealPlan->id,
+                        'title' => $mealPlan->title,
+                        'starts_on' => $mealPlan->starts_on->toDateString(),
+                        'ends_on' => $mealPlan->ends_on->toDateString(),
+                        'revision' => $mealPlan->revision,
+                        'phase' => $superseded
+                            ? 'Superseded'
+                            : ($mealPlan->shopping_approved_at !== null
+                            ? 'Preparing'
+                            : ($mealPlan->planning_confirmed_at !== null ? 'Confirmed' : 'Draft')),
+                        'can' => [
+                            'update' => $user->can('update', $mealPlan),
+                            'delete' => $user->can('delete', $mealPlan),
+                        ],
+                    ];
+                });
+            },
             'flash' => [
                 'invitationUrl' => fn () => $request->session()->get('invitation_url'),
             ],

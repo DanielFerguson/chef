@@ -14,7 +14,7 @@ class OrderSnapshotController extends Controller
     public function __invoke(Request $request, ShoppingList $shoppingList, RecordOrderSnapshot $record): RedirectResponse
     {
         $validated = $request->validate([
-            'actual_total' => ['required', 'numeric', 'min:0', 'max:999999.99'],
+            'actual_total' => ['nullable', 'required_without:cart_snapshot_id', 'numeric', 'min:0', 'max:999999.99'],
             'retailer_id' => ['nullable', 'integer', 'exists:retailers,id'],
             'cart_snapshot_id' => ['nullable', 'integer'],
         ]);
@@ -27,7 +27,10 @@ class OrderSnapshotController extends Controller
                 ->whereHas('run', fn ($query) => $query->where('shopping_list_id', $shoppingList->id))
                 ->findOrFail((int) $validated['cart_snapshot_id'])
             : null;
-        $record->handle($shoppingList, $request->user(), $validated['actual_total'], $retailer, $cartSnapshot);
+        $actualTotal = isset($validated['actual_total'])
+            ? (float) $validated['actual_total']
+            : (float) $cartSnapshot?->cart_total;
+        $record->handle($shoppingList, $request->user(), $actualTotal, $retailer, $cartSnapshot);
 
         return back();
     }

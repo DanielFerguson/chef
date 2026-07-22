@@ -18,7 +18,7 @@ Chef version 1 is the first publicly available release that lets a real family c
 3. plan meals over an arbitrary date range;
 4. review recipes and cook from the plan;
 5. generate and edit a budget-aware shopping list;
-6. prepare a Woolworths or Coles cart through reviewed computer use;
+6. prepare a Woolworths or Coles cart and, after in-Chef fulfilment selection and confirmation, place the order with the retailer's default card on file;
 7. use typed and voice conversation;
 8. invite another account into the family team;
 9. provide feedback that improves later recommendations.
@@ -349,7 +349,12 @@ Cross-stage UX hardening recorded 21 July 2026:
 
 ## M6 — Woolworths and Coles computer-use handoff
 
-Status: `[ ]`
+Status: `[~]`
+
+Historical cart-preparation milestone. The product finish line for version 1 now
+continues in **M6.2** (confirmed order placement). Keep M6 evidence for
+authenticated Browserbase cart prep; do not treat “hand control back before
+checkout” as the final version-1 outcome.
 
 - [x] Implement `AutomationRun`, item outcomes, steps, interventions, retailer connections, browser sessions, and reconciliation models.
 - [x] Implement `ComputerUseEngine` with a fake and recorded fixtures.
@@ -363,7 +368,8 @@ Status: `[ ]`
 - [x] Add pause, cancel, expiry, takeover, and safe resume.
 - [x] Require approval at defined risk boundaries.
 - [x] Reconcile intended list items with the prepared cart.
-- [x] Keep checkout, address changes, authentication, and payment human-controlled.
+- [x] Keep checkout, address changes, authentication, and payment human-controlled
+  for the M6 cart-prep slice (superseded for submit by M6.2).
 - [ ] Validate the workflow against real Woolworths and Coles sessions without putting credentials in Chef.
 
 Exit evidence:
@@ -486,6 +492,83 @@ M6 persistent-orchestration evidence recorded 21 July 2026:
   live Browserbase durability, a real five-plus-item cart, normal Woolworths
   app/site visibility, retailer tolerance, operating cost, or privacy review.
 
+## M6.1 — Momentum-first household journey
+
+Status: `[ ]`
+
+Implementation brief: the momentum-first orchestration boundary in
+[`IMPLEMENTATION.md`](IMPLEMENTATION.md#momentum-first-orchestration-boundary).
+
+- [x] Present one coherent whole-plan draft and support conversational swaps.
+- [x] Approve the plan, current safety context, and cart-preparation scope with one action.
+- [x] Start recipes, shopping-list generation, and read-only product discovery automatically.
+- [x] Summarise routine matches and interrupt only for genuine product, safety, price, cart, or authentication exceptions.
+- [x] Reconcile prepared-cart lines into ordered shopping-list state without manual check-off duplication.
+- [x] Add delivery/pickup intent and a first-class retailer fulfilment handoff.
+- [x] Resolve overlapping-plan ambiguity on Today and in recent-plan navigation.
+- [ ] Prove the default and exception journeys at desktop and 390 x 844.
+
+Implemented evidence:
+
+- The combined approval accepts the complete proposal set, freezes the current
+  safety and retailer-preparation scope, and queues recipe and shopping work.
+  System-generated recipe detail preserves that approval; any later household
+  or plan mutation clears it.
+- A connected Woolworths account proceeds from list generation through
+  read-only catalogue discovery and routine confident matches. Ambiguous,
+  safety-constrained, unavailable, materially different, pre-existing-cart,
+  or authentication cases still stop for review.
+- Verified cart lines reconcile into ordered list items, while unavailable and
+  unresolved lines remain open. The current implementation still hands off to
+  Woolworths for time and checkout; M6.2 replaces that with in-Chef slot
+  selection and confirmed submit.
+- `composer test` passes 293 tests with 1,741 assertions. The whole-plan
+  approval browser test passes at desktop and 390 x 844, and the live local
+  browser pass confirmed canonical Today selection and width-safe plan and
+  shopping surfaces. The final checklist item remains open until the full
+  default and exception cart journeys are exercised at both viewports.
+
+Exit evidence:
+
+- A household can describe a week, review one visible plan, approve it once,
+  and reach a prepared retailer cart without operating Chef's internal recipe,
+  list, discovery, or automation states.
+- Chef interrupts only when work falls outside the frozen approval envelope.
+- The retailer path asks the person to choose delivery or pickup, select an
+  available day and time in Chef, and confirm; after confirmation Chef may
+  place the order with the retailer's default card on file. Card details are
+  never collected in Chef.
+- Today exposes one canonical meal plan and the relevant shopping or fulfilment
+  state before cooking.
+
+## M6.2 — Confirmed retailer order placement
+
+Status: `[ ]`
+
+Design: [`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md).
+
+Rewrites the retailer finish line from cart handoff to confirmed order
+placement. Simplifies execution toward Laravel-owned runs and Stagehand /
+deterministic retailer tools.
+
+- [ ] Replace the cart-handoff end state with fulfilment options in Chef.
+- [ ] Persist scraped delivery/pickup slots and let the household select type, day, and time.
+- [ ] Require an explicit confirmation that names default card-on-file submit.
+- [ ] Apply the selected slot and submit the Woolworths order after confirmation.
+- [ ] Record retailer confirmation into durable `Order` evidence.
+- [ ] Remove happy-path reliance on OpenAI vision computer-use.
+- [ ] Update commercial and MCP wording that still assumes human-only checkout.
+- [ ] Prove the journey at desktop and 390 x 844 without live secrets in normal tests.
+
+Exit evidence:
+
+- From an approved frozen list, Chef can prepare a cart, show real fulfilment
+  options, accept a slot and confirmation in Chef, place the Woolworths order
+  with the default on-file payment method, and store confirmation evidence.
+- Password/MFA remain owner-only Live View steps with the model absent.
+- No card numbers are stored or transmitted by Chef.
+- Ambiguity, auth loss, bot detection, and submit failure pause safely.
+
 ## M7 — Native voice experience
 
 Status: `[ ]`
@@ -509,7 +592,8 @@ Status: `[ ]`
 - [ ] Implement authenticated Laravel MCP transport.
 - [ ] Expose team context, plans, recipes, lists, budgets, and feedback as narrow read tools.
 - [ ] Add reviewed write tools for planning and feedback.
-- [ ] Add a scoped cart-preparation handoff tool without exposing checkout.
+- [ ] Add a scoped retailer order tool that requires the same fulfilment
+  selection and in-Chef confirmation boundary as the first-party UI.
 - [ ] Make writes idempotent where retries are plausible.
 - [ ] Document authentication, scopes, and examples for ChatGPT and other MCP hosts.
 

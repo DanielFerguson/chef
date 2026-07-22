@@ -7,6 +7,7 @@ import {
     Clock3,
     Plus,
     ShieldCheck,
+    ShoppingBasket,
     UsersRound,
     X,
 } from 'lucide-react';
@@ -64,6 +65,14 @@ type PreferenceCandidate = {
     evidence_count: number;
     confidence: number;
     status: 'pending';
+};
+
+type TodayJourney = {
+    plan_id: number;
+    shopping_url: string;
+    phase: 'plan_confirmed' | 'preparing_shop' | 'cart_ready';
+    fulfilment_method: 'delivery' | 'pickup' | null;
+    fulfilment_scheduled_for: string | null;
 };
 
 const dayFormatter = new Intl.DateTimeFormat('en-AU', {
@@ -203,7 +212,12 @@ export default function Dashboard({
     preferenceCandidates,
 }: {
     household: Household;
-    today: { date: string; showing_next: boolean; meals: TodayMeal[] };
+    today: {
+        date: string;
+        showing_next: boolean;
+        meals: TodayMeal[];
+        journey: TodayJourney | null;
+    };
     preferenceCandidates: PreferenceCandidate[];
 }) {
     const { auth } = usePage().props;
@@ -234,6 +248,36 @@ export default function Dashboard({
                                             : 'Everything you need to make today’s meals, without finding the planning conversation.'}
                                     </p>
                                 </header>
+                                {today.journey &&
+                                    today.journey.phase !==
+                                        'plan_confirmed' && (
+                                        <Link
+                                            href={today.journey.shopping_url}
+                                            className="mt-6 flex items-center justify-between gap-4 rounded-xl bg-primary/5 px-4 py-3 text-sm transition-colors hover:bg-primary/10"
+                                        >
+                                            <span className="flex min-w-0 items-center gap-3">
+                                                <ShoppingBasket className="size-4 shrink-0 text-primary" />
+                                                <span>
+                                                    <span className="block font-medium">
+                                                        {today.journey.phase ===
+                                                        'cart_ready'
+                                                            ? 'Your Woolworths cart is ready'
+                                                            : 'Chef is preparing the shop'}
+                                                    </span>
+                                                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                                                        {today.journey.phase ===
+                                                        'cart_ready'
+                                                            ? today.journey
+                                                                  .fulfilment_method
+                                                                ? `Finish choosing a ${today.journey.fulfilment_method} time and checkout in Woolworths.`
+                                                                : 'Choose delivery or pickup, then complete checkout in Woolworths.'
+                                                            : 'Recipes, the combined list, and routine product matches are moving ahead.'}
+                                                    </span>
+                                                </span>
+                                            </span>
+                                            <ArrowRight className="size-4 shrink-0" />
+                                        </Link>
+                                    )}
                                 <section
                                     className="py-7"
                                     aria-label="Meals for today"

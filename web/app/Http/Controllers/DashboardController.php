@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PreferenceCandidateStatus;
+use App\Models\MealPlan;
 use App\Models\MealSlot;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -20,8 +21,11 @@ class DashboardController extends Controller
         $this->authorize('view', $team);
 
         $today = Date::now($team->timezone)->toDateString();
+        $activePlan = $this->canonicalPlanForDate($team->id, $today);
         $slotQuery = MealSlot::query()
             ->where('team_id', $team->id)
+            ->when($activePlan !== null, fn ($query) => $query->where('meal_plan_id', $activePlan->id))
+            ->when($activePlan === null, fn ($query) => $query->whereRaw('1 = 0'))
             ->whereDate('date', $today)
             ->with([
                 'participants:id,name',
@@ -38,12 +42,16 @@ class DashboardController extends Controller
                 ->where('team_id', $team->id)
                 ->whereDate('date', '>', $today)
                 ->whereHas('plannedMeal')
+                ->whereHas('mealPlan', fn ($query) => $query->whereNotNull('planning_confirmed_at'))
                 ->min('date');
 
             if ($nextDate !== null) {
                 $nextDate = Date::parse($nextDate, $team->timezone)->toDateString();
+                $activePlan = $this->canonicalPlanForDate($team->id, $nextDate);
                 $slots = MealSlot::query()
                     ->where('team_id', $team->id)
+                    ->when($activePlan !== null, fn ($query) => $query->where('meal_plan_id', $activePlan->id))
+                    ->when($activePlan === null, fn ($query) => $query->whereRaw('1 = 0'))
                     ->whereDate('date', $nextDate)
                     ->with([
                         'participants:id,name',
@@ -85,6 +93,23 @@ class DashboardController extends Controller
             ];
         }
 
+        $journey = null;
+        if ($activePlan !== null) {
+            $shoppingList = $activePlan->shoppingList;
+            $latestRun = $shoppingList?->automationRuns()->with('latestSnapshot')->latest('id')->first();
+            $cartReady = $latestRun?->latestSnapshot !== null;
+
+            $journey = [
+                'plan_id' => $activePlan->id,
+                'shopping_url' => route('meal-plans.shopping.show', $activePlan),
+                'phase' => $cartReady
+                    ? 'cart_ready'
+                    : ($activePlan->shopping_approved_at !== null ? 'preparing_shop' : 'plan_confirmed'),
+                'fulfilment_method' => $shoppingList?->fulfilment_method,
+                'fulfilment_scheduled_for' => $shoppingList?->fulfilment_scheduled_for?->toIso8601String(),
+            ];
+        }
+
         return Inertia::render('dashboard', [
             'household' => [
                 'id' => $team->id,
@@ -96,9 +121,22 @@ class DashboardController extends Controller
                 'date' => $today,
                 'showing_next' => $showingNext,
                 'meals' => $this->serializeMeals($slots),
+                'journey' => $journey,
             ],
             'preferenceCandidates' => $preferenceCandidates,
         ]);
+    }
+
+    private function canonicalPlanForDate(int $teamId, string $date): ?MealPlan
+    {
+        return MealPlan::query()
+            ->where('team_id', $teamId)
+            ->whereDate('starts_on', '<=', $date)
+            ->whereDate('ends_on', '>=', $date)
+            ->whereNotNull('planning_confirmed_at')
+            ->orderByDesc('planning_confirmed_at')
+            ->orderByDesc('id')
+            ->first();
     }
 
     /**
@@ -137,6 +175,7 @@ class DashboardController extends Controller
 
             $meals[] = [
                 'id' => $meal->id,
+                'meal_plan_id' => $slot->meal_plan_id,
                 'title' => $meal->title,
                 'type' => $meal->type->value,
                 'date' => $slot->date->toDateString(),

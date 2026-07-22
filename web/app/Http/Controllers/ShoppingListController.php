@@ -156,6 +156,7 @@ class ShoppingListController extends Controller
                     'ends_on' => $mealPlan->ends_on->toDateString(),
                     'revision' => $mealPlan->revision,
                     'planning_confirmed_at' => $mealPlan->planning_confirmed_at?->toIso8601String(),
+                    'shopping_approved_at' => $mealPlan->shopping_approved_at?->toIso8601String(),
                     'safety_review_required' => $readiness['safety_review_required'] || $readiness['ready_for_safety_confirmation'],
                 ],
                 'shopping_list' => $shoppingList,
@@ -189,6 +190,7 @@ class ShoppingListController extends Controller
                     'currency' => 'AUD',
                 ],
                 'cart_automation' => [
+                    'approved' => $mealPlan->shopping_approved_at !== null,
                     'connection_enabled' => (bool) config('automation.connection_enabled'),
                     'cart_mutation_enabled' => (bool) config('automation.cart_mutation_enabled'),
                     'normal_app_sync_proven' => (bool) config('automation.normal_app_sync_proven'),

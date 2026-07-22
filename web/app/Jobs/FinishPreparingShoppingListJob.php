@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Actions\Automation\ContinueApprovedShopping;
 use App\Actions\Shopping\GenerateShoppingList;
 use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Models\MealPlan;
@@ -36,7 +37,7 @@ class FinishPreparingShoppingListJob implements ShouldBeUnique, ShouldQueue
         return 2;
     }
 
-    public function handle(GenerateShoppingList $generate): void
+    public function handle(GenerateShoppingList $generate, ContinueApprovedShopping $continueApprovedShopping): void
     {
         $mealPlan = MealPlan::query()->findOrFail($this->mealPlanId);
         $resolvedMealIds = $mealPlan->shoppingList?->mealResolutions()->pluck('planned_meal_id') ?? collect();
@@ -57,6 +58,19 @@ class FinishPreparingShoppingListJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $generate->handle($mealPlan, User::query()->findOrFail($this->userId));
+        $shoppingList = $mealPlan->shoppingList;
+        $claimRetryAfter = $shoppingList === null
+            ? null
+            : $generate->activeClaimRetryAfter($shoppingList);
+
+        if ($claimRetryAfter !== null) {
+            $this->release($claimRetryAfter);
+
+            return;
+        }
+
+        $user = User::query()->findOrFail($this->userId);
+        $generate->handle($mealPlan, $user);
+        $continueApprovedShopping->handle($mealPlan->refresh(), $user);
     }
 }

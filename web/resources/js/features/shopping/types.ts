@@ -5,6 +5,7 @@ export type ShoppingPlan = {
     ends_on: string;
     revision: number;
     planning_confirmed_at: string;
+    shopping_approved_at: string | null;
     safety_review_required: boolean;
 };
 
@@ -47,6 +48,8 @@ export type ShoppingListItem = {
     included: boolean;
     in_pantry: boolean;
     checked: boolean;
+    ordered_at: string | null;
+    ordered_via_cart_snapshot_id: number | null;
     optional: boolean;
     estimated_price: number | null;
     position: number;
@@ -75,6 +78,9 @@ export type ShoppingList = {
     revision: number;
     source_plan_revision: number;
     status: 'draft' | 'completed';
+    fulfilment_method: 'delivery' | 'pickup' | null;
+    fulfilment_scheduled_for: string | null;
+    fulfilment_confirmed_at: string | null;
     generation_status: 'pending' | 'processing' | 'ready' | 'failed';
     generation_attempts: number;
     last_generation_method: 'one_shot' | 'deterministic_fallback' | null;
@@ -253,6 +259,7 @@ export type AutomationRun = {
 };
 
 export type CartAutomation = {
+    approved: boolean;
     connection_enabled: boolean;
     cart_mutation_enabled: boolean;
     normal_app_sync_proven: boolean;

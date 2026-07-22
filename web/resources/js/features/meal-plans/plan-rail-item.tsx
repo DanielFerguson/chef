@@ -82,6 +82,9 @@ export function PlanRailItem({ plan }: { plan: RecentMealPlan }) {
                             />
                         )}
                         <span className="truncate">{plan.title}</span>
+                        <span className="ml-2 shrink-0 text-[10px] font-normal text-muted-foreground">
+                            {plan.phase}
+                        </span>
                         {isActive && (
                             <span className="sr-only"> (current plan)</span>
                         )}

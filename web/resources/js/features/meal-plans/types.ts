@@ -119,6 +119,7 @@ export type MealPlanWorkspace = {
         ends_on: string;
         revision: number;
         planning_confirmed_at: string | null;
+        shopping_approved_at: string | null;
         safety_reviewed_at: string | null;
         safety_reviewed_context_hash: string | null;
         derived_data_stale_at: string | null;
@@ -181,6 +182,7 @@ export type MealPlanWorkspace = {
         recipes_preparing: number;
         recipes_failed: number;
         recipes_unresolved: number;
+        ready_for_approval: boolean;
         ready_for_safety_review: boolean;
         safety_reviewed: boolean;
         safety_review_required: boolean;
@@ -195,6 +197,7 @@ export type MealPlanWorkspace = {
             | 'wait_for_recipes'
             | 'retry_recipes'
             | 'review_safety'
+            | 'review_and_approve'
             | 'review_and_confirm'
             | 'begin_shopping'
             | 'continue_planning';

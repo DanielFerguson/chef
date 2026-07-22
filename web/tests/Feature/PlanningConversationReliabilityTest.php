@@ -82,14 +82,16 @@ it('derives the next planning action from structured state and guards confirmati
         'open_slots' => 0,
         'ready_for_confirmation' => false,
         'safety_review_required' => true,
-        'next_action' => 'review_safety',
+        'ready_for_approval' => true,
+        'next_action' => 'review_and_approve',
     ]);
 
     app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
 
     expect($assess->handle($workspace['plan']->refresh()))->toMatchArray([
         'ready_for_confirmation' => true,
-        'next_action' => 'review_and_confirm',
+        'ready_for_approval' => true,
+        'next_action' => 'review_and_approve',
     ]);
 
     $first = app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
@@ -197,8 +199,8 @@ it('turns an otherwise blank tool-only completion into a visible acknowledgement
     $assistant = $workspace['conversation']->messages()->where('role', 'assistant')->reorder()->latest('id')->firstOrFail();
 
     expect($stream)->toContain('I completed these plan changes')
-        ->and($assistant->content)->toContain('Review the household safety details')
-        ->and($assistant->content)->toContain('never inferred')
+        ->and($assistant->content)->toContain('complete 3-meal draft')
+        ->and($assistant->content)->toContain('Approving it will start')
         ->and($workspace['plan']->plannedMeals()->count())->toBe(3);
 });
 

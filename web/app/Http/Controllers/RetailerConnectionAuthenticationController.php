@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Automation\ContinueApprovedShopping;
 use App\Actions\Automation\ReleaseRetailerConnectionLease;
 use App\Actions\Automation\StartRetailerConnection;
 use App\Actions\Automation\VerifyRetailerConnection;
@@ -96,11 +97,20 @@ class RetailerConnectionAuthenticationController extends Controller
         Request $request,
         BrowserSession $browserSession,
         VerifyRetailerConnection $verify,
+        ContinueApprovedShopping $continueApprovedShopping,
     ): RedirectResponse {
         $returnUrl = $this->returnUrl($browserSession);
         $verify->handle($browserSession, $request->user());
+        $shoppingListId = $browserSession->metadata['return_shopping_list_id'] ?? null;
+        $shoppingList = is_numeric($shoppingListId)
+            ? ShoppingList::query()->whereKey((int) $shoppingListId)->where('team_id', $browserSession->team_id)->first()
+            : null;
 
-        return redirect($returnUrl)->with('success', 'Woolworths is connected. Start cart preparation when you are ready.');
+        if ($shoppingList !== null) {
+            $continueApprovedShopping->handle($shoppingList->mealPlan, $request->user());
+        }
+
+        return redirect($returnUrl)->with('success', 'Woolworths is connected. Chef is continuing the approved preparation.');
     }
 
     private function returnUrl(BrowserSession $session): string

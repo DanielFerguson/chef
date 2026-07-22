@@ -17,6 +17,7 @@ use App\Actions\Shopping\MatchRetailProduct;
 use App\Actions\Shopping\RecordOrderSnapshot;
 use App\Actions\Shopping\ResolvePlannedMealIngredients;
 use App\Actions\Shopping\SetShoppingBudget;
+use App\Actions\Shopping\SetShoppingFulfilment;
 use App\Actions\Shopping\UpdateShoppingListItem;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Enums\MealSlotKind;
@@ -66,6 +67,30 @@ function shoppingListWorkspace(): array
 
     return compact('user', 'team', 'plan', 'recipe', 'firstMeal', 'secondMeal');
 }
+
+it('stores delivery or pickup intent without extending Chef into checkout', function () {
+    $workspace = shoppingListWorkspace();
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
+
+    $this->actingAs($workspace['user'])
+        ->put(route('shopping-lists.fulfilment.update', $list), [
+            'fulfilment_method' => 'delivery',
+        ])
+        ->assertRedirect();
+
+    expect($list->refresh()->fulfilment_method)->toBe('delivery')
+        ->and($list->fulfilment_scheduled_for)->toBeNull()
+        ->and($list->fulfilment_confirmed_at)->toBeNull();
+
+    expect(fn () => app(SetShoppingFulfilment::class)->handle($list, $workspace['user'], 'courier'))
+        ->toThrow(ValidationException::class, 'Choose delivery or pickup');
+
+    $outsider = User::factory()->create();
+    app(CreateTeamForUser::class)->handle($outsider, 'Other family');
+
+    expect(fn () => app(SetShoppingFulfilment::class)->handle($list, $outsider, 'pickup'))
+        ->toThrow(AuthorizationException::class);
+});
 
 it('generates an idempotent traceable list from scaled recipe requirements', function () {
     $workspace = shoppingListWorkspace();
@@ -356,7 +381,7 @@ it('refuses to complete a stale or unfinished list', function () {
     $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
 
     expect(fn () => app(CompleteShoppingList::class)->handle($list, $workspace['user'], 1))
-        ->toThrow(ValidationException::class, 'Check every included item');
+        ->toThrow(ValidationException::class, 'Buy, order, or mark every included item');
 
     app(UpdatePlannedMeal::class)->handle(
         $workspace['firstMeal'],
@@ -495,6 +520,8 @@ it('resolves custom meal ingredients explicitly and keeps their meal traceabilit
         ['name' => 'Bread rolls', 'quantity' => 4, 'unit' => 'each'],
         ['name' => 'Coleslaw', 'quantity' => 1, 'unit' => 'bag'],
     ], $list->revision);
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
 
     $rolls = $list->items()->where('normalized_name', 'bread rolls')->sole();
     $resolution = $list->mealResolutions()->where('planned_meal_id', $customMeal->id)->sole();

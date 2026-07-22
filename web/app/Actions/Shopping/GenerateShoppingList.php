@@ -102,6 +102,19 @@ class GenerateShoppingList
         }
     }
 
+    public function activeClaimRetryAfter(ShoppingList $shoppingList): ?int
+    {
+        if ($shoppingList->generation_status !== ShoppingListGenerationStatus::Processing
+            || $shoppingList->generation_started_at === null) {
+            return null;
+        }
+
+        $expiresAt = $shoppingList->generation_started_at->copy()->addMinutes(self::CLAIM_EXPIRY_MINUTES);
+        $secondsUntilExpiry = $expiresAt->getTimestamp() - now()->getTimestamp();
+
+        return $secondsUntilExpiry > 0 ? $secondsUntilExpiry + 1 : null;
+    }
+
     private function assertGenerationAllowed(MealPlan $mealPlan): void
     {
         if ($mealPlan->planning_confirmed_at === null) {
@@ -178,10 +191,7 @@ class GenerateShoppingList
                 return $shoppingList;
             }
 
-            $claimActive = $shoppingList->generation_status === ShoppingListGenerationStatus::Processing
-                && $shoppingList->generation_started_at?->isAfter(now()->subMinutes(self::CLAIM_EXPIRY_MINUTES));
-
-            if ($claimActive) {
+            if ($this->activeClaimRetryAfter($shoppingList) !== null) {
                 throw ValidationException::withMessages([
                     'shopping_list' => 'This shopping list is already being prepared.',
                 ]);

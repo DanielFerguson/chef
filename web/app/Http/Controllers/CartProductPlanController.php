@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Automation\BuildCartProductPlan;
+use App\Actions\Automation\ContinueApprovedShopping;
 use App\Actions\Automation\SelectCartProductCandidate;
 use App\Enums\CartProductPlanStatus;
 use App\Models\CartProductPlanItem;
@@ -47,9 +48,14 @@ class CartProductPlanController extends Controller
         Request $request,
         CartProductPlanItem $cartProductPlanItem,
         SelectCartProductCandidate $select,
+        ContinueApprovedShopping $continueApprovedShopping,
     ): RedirectResponse {
         $validated = $request->validate(['candidate_index' => ['required', 'integer', 'min:0']]);
         $plan = $select->handle($cartProductPlanItem, $request->user(), $validated['candidate_index']);
+
+        if ($plan->status === CartProductPlanStatus::Ready) {
+            $continueApprovedShopping->handle($plan->shoppingList->mealPlan, $request->user());
+        }
 
         return to_route('meal-plans.shopping.show', $plan->shoppingList->meal_plan_id)
             ->with('success', $plan->status === CartProductPlanStatus::Ready

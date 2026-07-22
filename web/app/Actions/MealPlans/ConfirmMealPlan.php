@@ -28,7 +28,7 @@ class ConfirmMealPlan
 
         if (! $readiness['ready_for_confirmation'] && ! $readiness['ready_for_safety_confirmation']) {
             throw ValidationException::withMessages([
-                'plan' => 'Fill every meal slot, resolve pending suggestions, confirm participants, review safety details, and finish preparing each cookable recipe before confirming the plan.',
+                'plan' => 'Fill every meal slot, resolve pending suggestions, confirm participants, and review the current safety details before approving the plan.',
             ]);
         }
 

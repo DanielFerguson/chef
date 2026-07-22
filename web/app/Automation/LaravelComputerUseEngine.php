@@ -7,6 +7,7 @@ use App\Actions\Automation\CreateAutomationIntervention;
 use App\Actions\Automation\CreateBrowserSession;
 use App\Actions\Automation\ReleaseRetailerConnectionLease;
 use App\Actions\Automation\TransitionAutomationRun;
+use App\Actions\Shopping\ReconcileOrderedShoppingItems;
 use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\ComputerUseClient;
 use App\Automation\Contracts\ComputerUseEngine;
@@ -49,6 +50,7 @@ class LaravelComputerUseEngine implements ComputerUseEngine
         private readonly ReleaseRetailerConnectionLease $releaseLease,
         private readonly TransitionAutomationRun $transition,
         private readonly CreateAutomationIntervention $createIntervention,
+        private readonly ReconcileOrderedShoppingItems $reconcileOrderedShoppingItems,
     ) {}
 
     public function advance(AutomationRun $run): AutomationAdvanceResult
@@ -332,7 +334,8 @@ class LaravelComputerUseEngine implements ComputerUseEngine
         }
 
         $this->closeOpenSessions($run);
-        $this->createSnapshot($run->refresh(), $finalCart);
+        $snapshot = $this->createSnapshot($run->refresh(), $finalCart);
+        $this->reconcileOrderedShoppingItems->handle($snapshot, $run->starter);
         $this->transition->handle($run->refresh(), AutomationRunStatus::ReadyForReview, [
             'finished_at' => now(),
             'failure_message' => null,

@@ -1,4 +1,4 @@
-import { useForm, usePage } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import {
     CalendarDays,
     Check,
@@ -28,7 +28,6 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
         label: '',
         participant_ids: household.people.map((person) => person.id),
     });
-    const milestoneForm = useForm({ kind: 'planning_confirmed' });
     const confirmed = plan.milestones.some(
         (milestone) => milestone.kind === 'planning_confirmed',
     );
@@ -54,11 +53,13 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                               : 'outline'
                     }
                 >
-                    {readiness.safety_review_required
-                        ? 'Safety review'
-                        : confirmed
-                          ? 'Confirmed'
-                          : 'Planning'}
+                    {readiness.ready_for_approval
+                        ? 'Ready to approve'
+                        : readiness.safety_review_required
+                          ? 'Safety review'
+                          : confirmed
+                            ? 'Confirmed'
+                            : 'Planning'}
                 </Badge>
             </div>
             {plan.derived_data_stale_at && (
@@ -83,41 +84,35 @@ function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
                 {!confirmed && (
                     <Button
                         size="sm"
-                        disabled={
-                            milestoneForm.processing ||
-                            !readiness.ready_for_confirmation
-                        }
+                        disabled={!readiness.ready_for_approval}
                         title={
-                            readiness.ready_for_confirmation
-                                ? 'Confirm this completed plan'
-                                : 'Fill every slot and resolve suggestions before confirming'
+                            readiness.ready_for_approval
+                                ? 'Approve this draft and prepare shopping'
+                                : 'Fill every slot with one clear draft meal before approving'
                         }
                         onClick={() =>
-                            milestoneForm.post(
-                                `/meal-plans/${plan.id}/milestones`,
-                                { preserveScroll: true },
-                            )
+                            router.post(`/meal-plans/${plan.id}/approve`, {
+                                explicitly_reviewed_safety: true,
+                            })
                         }
                     >
-                        <Check /> Confirm plan
+                        <Check /> Approve &amp; prepare
                     </Button>
                 )}
                 {readiness.ready_for_safety_confirmation && (
                     <Button
                         size="sm"
-                        disabled={milestoneForm.processing}
                         onClick={() =>
-                            milestoneForm.post(
-                                `/meal-plans/${plan.id}/milestones`,
-                                { preserveScroll: true },
-                            )
+                            router.post(`/meal-plans/${plan.id}/approve`, {
+                                explicitly_reviewed_safety: true,
+                            })
                         }
                     >
-                        <Check /> Reconfirm plan
+                        <Check /> Reapprove &amp; prepare
                     </Button>
                 )}
             </div>
-            {!confirmed && !readiness.ready_for_confirmation && (
+            {!confirmed && !readiness.ready_for_approval && (
                 <p className="mt-2 text-xs text-muted-foreground">
                     {readiness.uncovered_slots > 0 &&
                     readiness.pending_proposals > 0

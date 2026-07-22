@@ -41,10 +41,15 @@ class CompleteShoppingList
                 ]);
             }
 
-            $remaining = $shoppingList->items()->where('included', true)->where('in_pantry', false)->where('checked', false)->count();
+            $remaining = $shoppingList->items()
+                ->where('included', true)
+                ->where('in_pantry', false)
+                ->where('checked', false)
+                ->whereNull('ordered_at')
+                ->count();
 
             if ($remaining > 0) {
-                throw ValidationException::withMessages(['shopping_list' => 'Check every included item or mark it as already in the pantry first.']);
+                throw ValidationException::withMessages(['shopping_list' => 'Buy, order, or mark every included item as already in the pantry first.']);
             }
 
             $shoppingList->update(['status' => ShoppingListStatus::Completed, 'completed_at' => now()]);

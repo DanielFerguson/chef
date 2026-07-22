@@ -1,8 +1,11 @@
 <?php
 
+use App\Actions\Automation\ContinueApprovedShopping;
 use App\Actions\Households\RecordConstraint;
 use App\Actions\Households\RecordPreference;
 use App\Actions\MealPlans\ConfirmMealPlan;
+use App\Actions\MealPlans\MealPlanSafetyContext;
+use App\Actions\MealPlans\MealPlanShoppingApprovalContext;
 use App\Actions\MealPlans\ReviewMealPlanSafety;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\AcceptMealProposal;
@@ -33,6 +36,7 @@ use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
+use App\Enums\ShoppingListGenerationStatus;
 use App\Enums\ShoppingListItemCategory;
 use App\Jobs\FinishPreparingShoppingListJob;
 use App\Jobs\MaterializeMealPlanRecipesJob;
@@ -99,6 +103,103 @@ function m41ValidDraft(string $title = 'Chicken katsu curry'): RecipeDraft
         notices: [],
     );
 }
+
+it('approves one complete draft and starts safe shopping preparation with one action', function () {
+    Queue::fake();
+    $workspace = m41Workspace(2);
+
+    foreach (['Chicken tacos', 'Beef stir-fry', 'Vegetable pasta'] as $offset => $title) {
+        $slot = app(CreateMealSlot::class)->handle(
+            $workspace['plan'],
+            $workspace['user'],
+            today()->addDays($offset),
+            MealSlotKind::Dinner,
+            $workspace['team']->people,
+        );
+        app(ProposeMeal::class)->handle(
+            $workspace['plan'],
+            $workspace['user'],
+            $title,
+            $slot,
+            'A practical family dinner.',
+            30,
+            12.5,
+        );
+    }
+
+    expect(app(AssessMealPlanReadiness::class)->handle($workspace['plan']->refresh()))
+        ->toMatchArray([
+            'filled_slots' => 0,
+            'pending_proposals' => 3,
+            'ready_for_approval' => true,
+        ]);
+
+    $this->actingAs($workspace['user'])
+        ->post(route('meal-plans.approve', $workspace['plan']), [
+            'explicitly_reviewed_safety' => true,
+        ])
+        ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']));
+
+    $plan = $workspace['plan']->refresh();
+    $list = $plan->shoppingList;
+
+    expect($plan->planning_confirmed_at)->not->toBeNull()
+        ->and($plan->shopping_approved_at)->not->toBeNull()
+        ->and($plan->shopping_approved_by_user_id)->toBe($workspace['user']->id)
+        ->and($plan->shopping_approval_fingerprint)->toHaveLength(64)
+        ->and($plan->plannedMeals)->toHaveCount(3)
+        ->and($plan->proposals()->where('status', 'accepted')->count())->toBe(3)
+        ->and($list)->not->toBeNull()
+        ->and($list->source_plan_revision)->toBe($plan->revision);
+
+    Queue::assertPushed(MaterializeMealPlanRecipesJob::class);
+    Queue::assertPushed(FinishPreparingShoppingListJob::class);
+
+    app()->instance(MealPlanRecipeDrafter::class, new class implements MealPlanRecipeDrafter
+    {
+        public function draft(MealPlanRecipeDraftRequest $request): MealPlanRecipeDraft
+        {
+            return m41ValidBatch($request->meals);
+        }
+    });
+    app(MaterializeMealPlanRecipes::class)->handle($plan);
+
+    $materialized = $plan->refresh();
+    expect($materialized->plannedMeals()->whereNotNull('recipe_version_id')->count())->toBe(3)
+        ->and($materialized->shopping_approved_at)->not->toBeNull()
+        ->and($materialized->confirmed_safety_context_hash)
+        ->toBe(app(MealPlanSafetyContext::class)->fingerprint($materialized))
+        ->and($materialized->shopping_approval_fingerprint)
+        ->toBe(app(MealPlanShoppingApprovalContext::class)->fingerprint($materialized));
+});
+
+it('requires an explicit safety acknowledgement for the combined approval', function () {
+    $workspace = m41Workspace();
+    $slot = app(CreateMealSlot::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        today(),
+        MealSlotKind::Dinner,
+        $workspace['team']->people,
+    );
+    app(ProposeMeal::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        'Chicken tacos',
+        $slot,
+        'A practical family dinner.',
+        30,
+    );
+
+    $this->actingAs($workspace['user'])
+        ->from(route('meal-plans.show', $workspace['plan']))
+        ->post(route('meal-plans.approve', $workspace['plan']))
+        ->assertRedirect(route('meal-plans.show', $workspace['plan']))
+        ->assertSessionHasErrors('explicitly_reviewed_safety');
+
+    expect($workspace['plan']->refresh()->shopping_approved_at)->toBeNull()
+        ->and($workspace['plan']->plannedMeals()->count())->toBe(0);
+});
 
 /** @param array<int, array<string, mixed>> $meals */
 function m41ValidBatch(array $meals): MealPlanRecipeDraft
@@ -361,7 +462,7 @@ it('discards a stale batch when a selected custom meal becomes non-recipe', func
         ->and($readiness['ready_for_confirmation'])->toBeTrue();
 });
 
-it('blocks confirmation and list generation while a cookable recipe is unresolved', function () {
+it('allows plan approval while recipe preparation continues but still blocks list generation', function () {
     Queue::fake();
     $workspace = m41Workspace();
     $slot = app(CreateMealSlot::class)->handle($workspace['plan'], $workspace['user'], today(), MealSlotKind::Dinner, $workspace['team']->people);
@@ -374,13 +475,11 @@ it('blocks confirmation and list generation while a cookable recipe is unresolve
         ->and($readiness['recipes_required'])->toBe(1)
         ->and($readiness['recipes_ready'])->toBe(0)
         ->and($readiness['recipes_preparing'])->toBe(1)
-        ->and($readiness['ready_for_confirmation'])->toBeFalse()
-        ->and($readiness['next_action'])->toBe('wait_for_recipes');
+        ->and($readiness['ready_for_confirmation'])->toBeTrue()
+        ->and($readiness['next_action'])->toBe('review_and_approve');
 
-    expect(fn () => app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']))
-        ->toThrow(ValidationException::class, 'finish preparing each cookable recipe');
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
 
-    $workspace['plan']->forceFill(['planning_confirmed_at' => now()])->save();
     expect(fn () => app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']))
         ->toThrow(ValidationException::class, 'still needs a prepared recipe');
 });
@@ -529,6 +628,48 @@ it('recovers a confirmed legacy plan through the authorised HTTP workflow', func
     $this->actingAs($outsider)
         ->post(route('meal-plans.recipes.prepare', $workspace['plan']->id))
         ->assertNotFound();
+});
+
+it('parks shopping continuation until an active generation claim expires', function () {
+    $workspace = m41Workspace();
+    $recipe = m41CreateRecipe($workspace);
+    $slot = app(CreateMealSlot::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        today(),
+        MealSlotKind::Dinner,
+        $workspace['team']->people,
+    );
+    app(SelectPlannedMeal::class)->handle(
+        $slot,
+        $workspace['user'],
+        PlannedMealType::Recipe,
+        $recipe->latestVersion,
+    );
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $list->update([
+        'generation_status' => ShoppingListGenerationStatus::Processing,
+        'generation_started_at' => now(),
+    ]);
+
+    $generate = app(GenerateShoppingList::class);
+    $retryAfter = $generate->activeClaimRetryAfter($list->refresh());
+    $continueApprovedShopping = Mockery::mock(ContinueApprovedShopping::class);
+    $continueApprovedShopping->shouldNotReceive('handle');
+    $job = (new FinishPreparingShoppingListJob(
+        $workspace['plan']->id,
+        $workspace['user']->id,
+    ))->withFakeQueueInteractions();
+
+    $job->handle($generate, $continueApprovedShopping);
+
+    $job->assertReleased();
+    expect($retryAfter)
+        ->toBeInt()
+        ->toBeGreaterThanOrEqual(299)
+        ->toBeLessThanOrEqual(301);
 });
 
 it('retries failed recipe preparation through the authorised HTTP workflow', function () {

@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 /** @property ShoppingListItemSourceKind $source_kind
  * @property ShoppingListItemCategory $category
  */
-#[Fillable(['team_id', 'shopping_list_id', 'ingredient_id', 'created_by_user_id', 'source_message_id', 'idempotency_key', 'source_kind', 'category', 'name', 'normalized_name', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked', 'optional', 'estimated_price', 'position'])]
+#[Fillable(['team_id', 'shopping_list_id', 'ingredient_id', 'created_by_user_id', 'source_message_id', 'idempotency_key', 'source_kind', 'category', 'name', 'normalized_name', 'quantity', 'unit', 'note', 'included', 'in_pantry', 'checked', 'ordered_at', 'ordered_via_cart_snapshot_id', 'optional', 'estimated_price', 'position'])]
 class ShoppingListItem extends Model
 {
     /** @use HasFactory<ShoppingListItemFactory> */
@@ -63,6 +63,7 @@ class ShoppingListItem extends Model
             'included' => 'boolean',
             'in_pantry' => 'boolean',
             'checked' => 'boolean',
+            'ordered_at' => 'datetime',
             'optional' => 'boolean',
             'estimated_price' => 'float',
         ];

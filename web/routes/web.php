@@ -14,6 +14,7 @@ use App\Http\Controllers\CookingStartController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MealFeedbackController;
 use App\Http\Controllers\MealOutcomeController;
+use App\Http\Controllers\MealPlanApprovalController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\MealPlanMilestoneController;
 use App\Http\Controllers\MealPlanRecipePreparationController;
@@ -35,6 +36,7 @@ use App\Http\Controllers\RecipeVersionController;
 use App\Http\Controllers\RetailerConnectionAuthenticationController;
 use App\Http\Controllers\RetailerConnectionController;
 use App\Http\Controllers\ShoppingBudgetController;
+use App\Http\Controllers\ShoppingFulfilmentController;
 use App\Http\Controllers\ShoppingListCompletionController;
 use App\Http\Controllers\ShoppingListController;
 use App\Http\Controllers\ShoppingListGenerationController;
@@ -44,7 +46,7 @@ use App\Http\Controllers\SwitchTeamController;
 use App\Http\Controllers\TeamInvitationController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::redirect('/', '/dashboard')->middleware('auth')->name('home');
 
 Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -58,6 +60,7 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::get('meal-plans/{mealPlan}', [MealPlanController::class, 'show'])->name('meal-plans.show');
     Route::put('meal-plans/{mealPlan}', [MealPlanController::class, 'update'])->name('meal-plans.update');
     Route::delete('meal-plans/{mealPlan}', [MealPlanController::class, 'destroy'])->name('meal-plans.destroy');
+    Route::post('meal-plans/{mealPlan}/approve', MealPlanApprovalController::class)->name('meal-plans.approve');
     Route::get('shopping', [ShoppingListController::class, 'index'])->name('shopping.index');
     Route::get('meal-plans/{mealPlan}/shopping', [ShoppingListController::class, 'show'])->name('meal-plans.shopping.show');
     Route::post('meal-plans/{mealPlan}/shopping-list', ShoppingListGenerationController::class)->name('meal-plans.shopping-list.generate');
@@ -66,6 +69,7 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::put('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'update'])->name('shopping-list-items.update');
     Route::delete('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'destroy'])->name('shopping-list-items.destroy');
     Route::post('shopping-lists/{shoppingList}/complete', ShoppingListCompletionController::class)->name('shopping-lists.complete');
+    Route::put('shopping-lists/{shoppingList}/fulfilment', ShoppingFulfilmentController::class)->name('shopping-lists.fulfilment.update');
     Route::post('shopping-lists/{shoppingList}/meals/{plannedMeal}/ingredients', ShoppingMealResolutionController::class)->name('shopping-lists.meals.resolve');
     Route::put('meal-plans/{mealPlan}/shopping-budget', ShoppingBudgetController::class)->name('meal-plans.shopping-budget.update');
     Route::put('shopping-list-items/{shoppingListItem}/product-match', ProductMatchController::class)->name('shopping-list-items.product-match.update');

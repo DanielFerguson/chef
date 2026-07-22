@@ -56,11 +56,6 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { AssistantMessage } from '@/features/meal-plans/assistant-message';
 import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
 import type {
@@ -150,7 +145,7 @@ function ShoppingConversation({
                     ? 'This plan is confirmed. Prepare the list when you are ready to review ingredients and pantry stock.'
                     : shoppingList.generation_status !== 'ready'
                       ? 'Chef is preparing the current plan into one structured shopping list.'
-                      : `${shoppingList.items.filter((item) => item.included && !item.in_pantry).length} items are on the current list, ${shoppingList.items.filter((item) => item.in_pantry).length} are marked as already in the pantry, and ${shoppingList.items.filter((item) => item.included && !item.in_pantry && !item.checked).length} remain to buy.`}
+                      : `${shoppingList.items.filter((item) => item.included && !item.in_pantry).length} items are on the current list, ${shoppingList.items.filter((item) => item.in_pantry).length} are marked as already in the pantry, and ${shoppingList.items.filter((item) => item.included && !item.in_pantry && !item.checked && !item.ordered_at).length} remain to buy or order.`}
             </p>
             {showLatestAssistant && latestAssistant && (
                 <div className="mt-3 max-w-[48em] border-l-2 pl-3 text-sm">
@@ -347,6 +342,7 @@ function ShoppingItemRow({
     pantryReview: boolean;
 }) {
     const [editing, setEditing] = useState(false);
+    const complete = item.checked || item.ordered_at !== null;
     const form = useForm<{
         name: string;
         quantity: string | number | null;
@@ -381,9 +377,18 @@ function ShoppingItemRow({
         >
             <Checkbox
                 className="mt-2 size-5"
-                aria-label={`Mark ${item.name} as ${item.checked ? 'not bought' : 'bought'}`}
-                checked={item.checked}
-                disabled={stale || !item.included || item.in_pantry}
+                aria-label={
+                    item.ordered_at
+                        ? `${item.name} is ordered in the Woolworths cart`
+                        : `Mark ${item.name} as ${item.checked ? 'not bought' : 'bought'}`
+                }
+                checked={complete}
+                disabled={
+                    stale ||
+                    !item.included ||
+                    item.in_pantry ||
+                    item.ordered_at !== null
+                }
                 onCheckedChange={(checked) =>
                     updateShoppingItemState(
                         item,
@@ -404,7 +409,7 @@ function ShoppingItemRow({
                                 onChange={(event) =>
                                     form.setData('name', event.target.value)
                                 }
-                                className={`h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input ${item.checked ? 'line-through' : ''}`}
+                                className={`h-9 border-transparent bg-transparent px-1 shadow-none hover:border-input focus-visible:border-input ${complete ? 'line-through' : ''}`}
                             />
                             <Input
                                 aria-label={`${item.name} quantity`}
@@ -482,7 +487,7 @@ function ShoppingItemRow({
                     <div>
                         <div className="flex items-baseline justify-between gap-3">
                             <p
-                                className={`min-w-0 truncate text-sm font-medium ${item.checked ? 'line-through' : ''}`}
+                                className={`min-w-0 truncate text-sm font-medium ${complete ? 'line-through' : ''}`}
                             >
                                 {item.name}
                             </p>
@@ -501,6 +506,7 @@ function ShoppingItemRow({
                             )}
                             {item.note && <span>{item.note}</span>}
                             {item.in_pantry && <span>Already in pantry</span>}
+                            {item.ordered_at && <span>Ordered</span>}
                             {!item.included && <span>Excluded</span>}
                         </div>
                         {pantryReview && (
@@ -558,6 +564,7 @@ function ShoppingItemTableRow({
     const sourceMeals = shoppingItemSourceMeals(item);
     const stateLabels = [
         item.in_pantry ? 'Pantry' : null,
+        item.ordered_at ? 'Ordered' : null,
         !item.included ? 'Excluded' : null,
         item.optional ? 'Optional' : null,
     ].filter((label): label is string => label !== null);
@@ -572,9 +579,18 @@ function ShoppingItemTableRow({
                     data-testid="shopping-item-checkbox"
                     className="m-2 size-5 min-h-5 min-w-5 shrink-0 accent-primary"
                     style={{ width: 20, minWidth: 20, height: 20 }}
-                    aria-label={`Mark ${item.name} as ${item.checked ? 'not bought' : 'bought'}`}
-                    checked={item.checked}
-                    disabled={stale || !item.included || item.in_pantry}
+                    aria-label={
+                        item.ordered_at
+                            ? `${item.name} is ordered in the Woolworths cart`
+                            : `Mark ${item.name} as ${item.checked ? 'not bought' : 'bought'}`
+                    }
+                    checked={item.checked || item.ordered_at !== null}
+                    disabled={
+                        stale ||
+                        !item.included ||
+                        item.in_pantry ||
+                        item.ordered_at !== null
+                    }
                     onChange={(event) =>
                         updateShoppingItemState(
                             item,
@@ -587,7 +603,7 @@ function ShoppingItemTableRow({
             </TableCell>
             <TableCell className="w-[30%] py-2 whitespace-normal">
                 <p
-                    className={`font-medium ${item.checked ? 'line-through' : ''}`}
+                    className={`font-medium ${item.checked || item.ordered_at ? 'line-through' : ''}`}
                 >
                     {item.name}
                 </p>
@@ -743,177 +759,204 @@ function ShoppingItemsSection({
     };
 
     return (
-        <section className="mt-8">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h2 className="font-medium">Items</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        {included} included
-                    </p>
-                </div>
-                <ToggleGroup
-                    type="single"
-                    variant="outline"
-                    size="sm"
-                    value={itemsView}
-                    onValueChange={changeItemsView}
-                    aria-label="Shopping items view"
-                >
-                    <ToggleGroupItem
-                        value="table"
-                        aria-label="Table view"
-                        className="px-2.5"
-                    >
-                        <Table2 /> Table
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                        value="list"
-                        aria-label="List view"
-                        className="px-2.5"
-                    >
-                        <ListIcon /> List
-                    </ToggleGroupItem>
-                </ToggleGroup>
-            </div>
-            {pantryCandidates.length > 0 && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-3">
-                    <div>
-                        <p className="text-sm font-medium">Pantry review</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                            Check {pantryCandidates.length}{' '}
-                            {pantryCandidates.length === 1
-                                ? 'staple'
-                                : 'staples'}{' '}
-                            before shopping.
-                        </p>
-                    </div>
-                    <Button
-                        type="button"
+        <details className="group mt-6 border-t pt-4">
+            <summary
+                aria-label="Shopping list items"
+                className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-lg px-1 py-2"
+            >
+                <span>
+                    <span className="block text-sm font-medium">
+                        Full shopping list
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                        {included} items · Review pantry, quantities or add an
+                        item
+                    </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                    Show items
+                    <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+                </span>
+            </summary>
+            <section className="pt-4" aria-label="Shopping list editor">
+                <div className="flex justify-end">
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
                         size="sm"
-                        variant={pantryReview ? 'secondary' : 'outline'}
-                        onClick={() => {
-                            setPantryReview((value) => !value);
-                            setItemsView('list');
-                        }}
+                        value={itemsView}
+                        onValueChange={changeItemsView}
+                        aria-label="Shopping items view"
                     >
-                        <PackageCheck />
-                        {pantryReview ? 'Show all items' : 'Review pantry'}
-                    </Button>
-                </div>
-            )}
-            {itemsView === 'list' && (
-                <div className="mt-5 space-y-7">
-                    {groupedItems.map((category) => (
-                        <section
-                            key={category.value}
-                            aria-labelledby={`shopping-category-${category.value}`}
+                        <ToggleGroupItem
+                            value="table"
+                            aria-label="Table view"
+                            className="px-2.5"
                         >
-                            <div className="flex items-baseline justify-between gap-3 px-1">
-                                <h3
-                                    id={`shopping-category-${category.value}`}
-                                    className="text-sm font-medium"
-                                >
-                                    {category.label}
-                                </h3>
-                                <span className="text-xs text-muted-foreground">
-                                    {category.items.length}{' '}
-                                    {category.items.length === 1
-                                        ? 'item'
-                                        : 'items'}
-                                </span>
-                            </div>
-                            <div className="mt-2 divide-y border-y">
-                                {category.items.map((item) => (
-                                    <ShoppingItemRow
-                                        key={item.id}
-                                        item={item}
-                                        revision={shoppingList.revision}
-                                        stale={shoppingList.stale_at !== null}
-                                        shoppingCategories={shoppingCategories}
-                                        pantryReview={pantryReview}
-                                    />
-                                ))}
-                            </div>
-                        </section>
-                    ))}
+                            <Table2 /> Table
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                            value="list"
+                            aria-label="List view"
+                            className="px-2.5"
+                        >
+                            <ListIcon /> List
+                        </ToggleGroupItem>
+                    </ToggleGroup>
                 </div>
-            )}
-            {itemsView === 'table' && shoppingList.items.length > 0 && (
-                <div className="mt-5 overflow-x-auto border-y">
-                    <Table className="min-w-[44rem] table-fixed">
-                        <colgroup>
-                            <col className="w-12" />
-                            <col className="w-[30%]" />
-                            <col className="w-20" />
-                            <col className="w-24" />
-                            <col />
-                            <col className="w-14" />
-                        </colgroup>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-10">
-                                    <span className="sr-only">Bought</span>
-                                </TableHead>
-                                <TableHead className="w-[30%]">Item</TableHead>
-                                <TableHead className="text-right">
-                                    Qty
-                                </TableHead>
-                                <TableHead>Unit</TableHead>
-                                <TableHead className="w-[38%]">
-                                    Used for
-                                </TableHead>
-                                <TableHead>
-                                    <span className="sr-only">Actions</span>
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
+                {pantryCandidates.length > 0 && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-3">
+                        <div>
+                            <p className="text-sm font-medium">Pantry review</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                                Optional: review {pantryCandidates.length}{' '}
+                                {pantryCandidates.length === 1
+                                    ? 'staple'
+                                    : 'staples'}{' '}
+                                to avoid ordering things you already have.
+                                Otherwise Chef will order everything on the
+                                list.
+                            </p>
+                        </div>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant={pantryReview ? 'secondary' : 'outline'}
+                            onClick={() => {
+                                setPantryReview((value) => !value);
+                                setItemsView('list');
+                            }}
+                        >
+                            <PackageCheck />
+                            {pantryReview ? 'Show all items' : 'Review pantry'}
+                        </Button>
+                    </div>
+                )}
+                {itemsView === 'list' && (
+                    <div className="mt-5 space-y-7">
                         {groupedItems.map((category) => (
-                            <TableBody key={category.value}>
-                                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                                    <TableCell
-                                        colSpan={6}
-                                        className="px-2 py-2"
+                            <section
+                                key={category.value}
+                                aria-labelledby={`shopping-category-${category.value}`}
+                            >
+                                <div className="flex items-baseline justify-between gap-3 px-1">
+                                    <h3
+                                        id={`shopping-category-${category.value}`}
+                                        className="text-sm font-medium"
                                     >
-                                        <div className="flex items-baseline justify-between gap-3">
-                                            <span className="font-medium">
-                                                {category.label}
-                                            </span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {category.items.length}{' '}
-                                                {category.items.length === 1
-                                                    ? 'item'
-                                                    : 'items'}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                                {category.items.map((item) => (
-                                    <ShoppingItemTableRow
-                                        key={item.id}
-                                        item={item}
-                                        revision={shoppingList.revision}
-                                        stale={shoppingList.stale_at !== null}
-                                        shoppingCategories={shoppingCategories}
-                                    />
-                                ))}
-                            </TableBody>
+                                        {category.label}
+                                    </h3>
+                                    <span className="text-xs text-muted-foreground">
+                                        {category.items.length}{' '}
+                                        {category.items.length === 1
+                                            ? 'item'
+                                            : 'items'}
+                                    </span>
+                                </div>
+                                <div className="mt-2 divide-y border-y">
+                                    {category.items.map((item) => (
+                                        <ShoppingItemRow
+                                            key={item.id}
+                                            item={item}
+                                            revision={shoppingList.revision}
+                                            stale={
+                                                shoppingList.stale_at !== null
+                                            }
+                                            shoppingCategories={
+                                                shoppingCategories
+                                            }
+                                            pantryReview={pantryReview}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
                         ))}
-                    </Table>
-                </div>
-            )}
-            {shoppingList.items.length === 0 && (
-                <p className="mt-5 px-1 py-8 text-sm text-muted-foreground">
-                    This plan does not need any groceries yet. Add a household
-                    item or return to the plan to review its meals.
-                </p>
-            )}
-            {!shoppingList.stale_at && (
-                <AddItemForm
-                    listId={shoppingList.id}
-                    revision={shoppingList.revision}
-                />
-            )}
-        </section>
+                    </div>
+                )}
+                {itemsView === 'table' && shoppingList.items.length > 0 && (
+                    <div className="mt-5 overflow-x-auto border-y">
+                        <Table className="min-w-[44rem] table-fixed">
+                            <colgroup>
+                                <col className="w-12" />
+                                <col className="w-[30%]" />
+                                <col className="w-20" />
+                                <col className="w-24" />
+                                <col />
+                                <col className="w-14" />
+                            </colgroup>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-10">
+                                        <span className="sr-only">Bought</span>
+                                    </TableHead>
+                                    <TableHead className="w-[30%]">
+                                        Item
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        Qty
+                                    </TableHead>
+                                    <TableHead>Unit</TableHead>
+                                    <TableHead className="w-[38%]">
+                                        Used for
+                                    </TableHead>
+                                    <TableHead>
+                                        <span className="sr-only">Actions</span>
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            {groupedItems.map((category) => (
+                                <TableBody key={category.value}>
+                                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                                        <TableCell
+                                            colSpan={6}
+                                            className="px-2 py-2"
+                                        >
+                                            <div className="flex items-baseline justify-between gap-3">
+                                                <span className="font-medium">
+                                                    {category.label}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    {category.items.length}{' '}
+                                                    {category.items.length === 1
+                                                        ? 'item'
+                                                        : 'items'}
+                                                </span>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                    {category.items.map((item) => (
+                                        <ShoppingItemTableRow
+                                            key={item.id}
+                                            item={item}
+                                            revision={shoppingList.revision}
+                                            stale={
+                                                shoppingList.stale_at !== null
+                                            }
+                                            shoppingCategories={
+                                                shoppingCategories
+                                            }
+                                        />
+                                    ))}
+                                </TableBody>
+                            ))}
+                        </Table>
+                    </div>
+                )}
+                {shoppingList.items.length === 0 && (
+                    <p className="mt-5 px-1 py-8 text-sm text-muted-foreground">
+                        This plan does not need any groceries yet. Add a
+                        household item or return to the plan to review its
+                        meals.
+                    </p>
+                )}
+                {!shoppingList.stale_at && (
+                    <AddItemForm
+                        listId={shoppingList.id}
+                        revision={shoppingList.revision}
+                    />
+                )}
+            </section>
+        </details>
     );
 }
 
@@ -1083,7 +1126,7 @@ function OrderRecorder({
     cartSnapshot: AutomationRun['snapshot'] | null;
 }) {
     const form = useForm({
-        actual_total: '',
+        actual_total: cartSnapshot?.cart_total?.toString() ?? '',
         retailer_id: '',
         cart_snapshot_id: cartSnapshot?.id ?? null,
     });
@@ -1098,10 +1141,13 @@ function OrderRecorder({
                 onSubmit={(event) => {
                     event.preventDefault();
                     form.transform((data) => ({
-                        actual_total: Number(data.actual_total),
+                        actual_total: data.actual_total
+                            ? Number(data.actual_total)
+                            : null,
                         retailer_id: data.retailer_id
                             ? Number(data.retailer_id)
                             : null,
+                        cart_snapshot_id: data.cart_snapshot_id,
                     }));
                     form.post(`/shopping-lists/${listId}/orders`, {
                         preserveScroll: true,
@@ -1109,47 +1155,54 @@ function OrderRecorder({
                     });
                 }}
             >
-                <Select
-                    value={form.data.retailer_id}
-                    onValueChange={(value) =>
-                        form.setData('retailer_id', value)
-                    }
-                >
-                    <SelectTrigger aria-label="Order retailer" className="w-40">
-                        <SelectValue placeholder="Retailer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {retailers.map((retailer) => (
-                            <SelectItem
-                                key={retailer.id}
-                                value={retailer.id.toString()}
-                            >
-                                {retailer.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                {!cartSnapshot && (
+                    <Select
+                        value={form.data.retailer_id}
+                        onValueChange={(value) =>
+                            form.setData('retailer_id', value)
+                        }
+                    >
+                        <SelectTrigger
+                            aria-label="Order retailer"
+                            className="w-40"
+                        >
+                            <SelectValue placeholder="Retailer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {retailers.map((retailer) => (
+                                <SelectItem
+                                    key={retailer.id}
+                                    value={retailer.id.toString()}
+                                >
+                                    {retailer.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
                 <Input
                     aria-label="Actual order total"
                     className="w-36"
                     type="number"
                     min="0"
                     step="0.01"
-                    required
-                    placeholder="Actual total"
+                    required={!cartSnapshot}
+                    placeholder={
+                        cartSnapshot ? 'Cart total (optional)' : 'Actual total'
+                    }
                     value={form.data.actual_total}
                     onChange={(event) =>
                         form.setData('actual_total', event.target.value)
                     }
                 />
                 <Button size="sm" disabled={form.processing}>
-                    Record order
+                    {cartSnapshot ? 'Save cart snapshot' : 'Record order'}
                 </Button>
             </form>
             {cartSnapshot && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                    Product lines will come from the verified Woolworths cart
-                    captured{' '}
+                    Chef prefilled the verified Woolworths cart total and
+                    products captured{' '}
                     {new Date(cartSnapshot.captured_at).toLocaleString('en-AU')}
                     .
                 </p>
@@ -1341,16 +1394,34 @@ function AutomationInterventionCard({
     );
 }
 
-function CartSnapshotReview({ run }: { run: AutomationRun }) {
+function CartSnapshotReview({
+    run,
+    shoppingList,
+}: {
+    run: AutomationRun;
+    shoppingList: PreparedShoppingList;
+}) {
+    const fulfilmentForm = useForm({
+        fulfilment_method: shoppingList.fulfilment_method,
+    });
+
     if (!run.snapshot) {
         return null;
     }
+
+    const chooseFulfilment = (method: 'delivery' | 'pickup') => {
+        fulfilmentForm.setData('fulfilment_method', method);
+        fulfilmentForm.transform(() => ({ fulfilment_method: method }));
+        fulfilmentForm.put(`/shopping-lists/${shoppingList.id}/fulfilment`, {
+            preserveScroll: true,
+        });
+    };
 
     return (
         <div className="mt-5 border-t pt-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <p className="text-sm font-medium">Verified cart review</p>
+                    <p className="text-sm font-medium">Your cart is ready</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                         Chef items{' '}
                         {formatMoney(Number(run.snapshot.chef_subtotal ?? 0))} ·
@@ -1358,35 +1429,79 @@ function CartSnapshotReview({ run }: { run: AutomationRun }) {
                         {formatMoney(Number(run.snapshot.cart_total ?? 0))}
                     </p>
                 </div>
+            </div>
+            <div className="mt-4 rounded-xl bg-primary/5 p-3">
+                <p className="text-sm font-medium">
+                    How would you like to receive the shop?
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Choose delivery or pickup here, then select an available
+                    time and complete checkout securely in Woolworths.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={
+                            shoppingList.fulfilment_method === 'delivery'
+                                ? 'default'
+                                : 'outline'
+                        }
+                        disabled={fulfilmentForm.processing}
+                        onClick={() => chooseFulfilment('delivery')}
+                    >
+                        Delivery
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={
+                            shoppingList.fulfilment_method === 'pickup'
+                                ? 'default'
+                                : 'outline'
+                        }
+                        disabled={fulfilmentForm.processing}
+                        onClick={() => chooseFulfilment('pickup')}
+                    >
+                        Pickup
+                    </Button>
+                </div>
                 {run.can_open_woolworths_cart &&
-                    run.open_woolworths_cart_url && (
-                        <Button asChild size="sm">
+                    run.open_woolworths_cart_url &&
+                    shoppingList.fulfilment_method && (
+                        <Button asChild className="mt-3" size="sm">
                             <a
                                 href={run.open_woolworths_cart_url}
                                 target="_blank"
                                 rel="noreferrer"
                             >
-                                Open Woolworths cart <ExternalLink />
+                                Choose a {shoppingList.fulfilment_method} time
+                                &amp; checkout <ExternalLink />
                             </a>
                         </Button>
                     )}
             </div>
-            <ul className="mt-3 divide-y text-xs">
-                {run.snapshot.lines.map((line) => (
-                    <li
-                        key={line.id}
-                        className="flex items-start justify-between gap-3 py-2"
-                    >
-                        <span>{line.product_name}</span>
-                        <span className="text-right text-muted-foreground capitalize">
-                            {snapshotLineLabel(line)}
-                            {line.total_price !== null
-                                ? ` · ${formatMoney(Number(line.total_price))}`
-                                : ''}
-                        </span>
-                    </li>
-                ))}
-            </ul>
+            <details className="mt-4 text-xs">
+                <summary className="cursor-pointer text-muted-foreground">
+                    Review cart products
+                </summary>
+                <ul className="mt-2 divide-y">
+                    {run.snapshot.lines.map((line) => (
+                        <li
+                            key={line.id}
+                            className="flex items-start justify-between gap-3 py-2"
+                        >
+                            <span>{line.product_name}</span>
+                            <span className="text-right text-muted-foreground capitalize">
+                                {snapshotLineLabel(line)}
+                                {line.total_price !== null
+                                    ? ` · ${formatMoney(Number(line.total_price))}`
+                                    : ''}
+                            </span>
+                        </li>
+                    ))}
+                </ul>
+            </details>
             {!run.normal_app_sync_proven && (
                 <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
                     The normal-app cart synchronisation release trial is not yet
@@ -1407,6 +1522,7 @@ function CartAutomationRunPanel({
     onReauthenticate,
     onResolve,
     onTakeover,
+    shoppingList,
 }: {
     intervention: AutomationRun['intervention'] | undefined;
     processing: boolean;
@@ -1416,6 +1532,7 @@ function CartAutomationRunPanel({
     onReauthenticate: () => void;
     onResolve: (choice: AutomationResolutionChoice) => void;
     onTakeover: () => void;
+    shoppingList: PreparedShoppingList;
 }) {
     if (runTerminal && run.status !== 'ready_for_review') {
         return (
@@ -1542,7 +1659,7 @@ function CartAutomationRunPanel({
                 </details>
             )}
 
-            <CartSnapshotReview run={run} />
+            <CartSnapshotReview run={run} shoppingList={shoppingList} />
         </div>
     );
 }
@@ -1760,7 +1877,10 @@ function ExactProductMatchEditor({
 }
 
 function CartProductPreflight({
+    approved,
+    cartMutationEnabled,
     onBuildPlan,
+    onPrepare,
     onProductPlanReviewedChange,
     onSelectCandidate,
     onSafetyAcknowledgedChange,
@@ -1768,11 +1888,15 @@ function CartProductPreflight({
     processing,
     productPlan,
     productPlanReviewed,
+    ready,
     retailers,
     safetyAcknowledged,
     shoppingList,
 }: {
+    approved: boolean;
+    cartMutationEnabled: boolean;
     onBuildPlan: () => void;
+    onPrepare: () => void;
     onProductPlanReviewedChange: (checked: boolean) => void;
     onSelectCandidate: (itemId: number, candidateIndex: number) => void;
     onSafetyAcknowledgedChange: (checked: boolean) => void;
@@ -1780,6 +1904,7 @@ function CartProductPreflight({
     processing: boolean;
     productPlan: CartAutomation['product_plan'];
     productPlanReviewed: boolean;
+    ready: boolean;
     retailers: ShoppingWorkspace['retailers'];
     safetyAcknowledged: boolean;
     shoppingList: PreparedShoppingList;
@@ -1788,26 +1913,33 @@ function CartProductPreflight({
         productPlan?.items.filter((item) => item.status !== 'exact') ?? [];
     const currentItem = pendingItems[0] ?? null;
     const planReady = productPlan?.status === 'ready';
+    const nextStep = !productPlan
+        ? 'Find products for your list'
+        : productPlan.discovery_failed
+          ? 'Retry Woolworths product matching'
+          : planReady
+            ? 'Prepare your Woolworths cart'
+            : currentItem
+              ? `Choose a product for ${currentItem.name}`
+              : 'Review product choices';
 
     return (
-        <div className="mb-5 rounded-xl border bg-muted/30 p-4">
-            <p className="text-sm font-medium">
-                {!productPlan
-                    ? 'Find matching products'
-                    : productPlan.discovery_failed
-                      ? 'Product search needs another try'
-                      : planReady
-                        ? 'Product plan ready'
-                        : 'Review product choices'}
+        <div
+            className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-5"
+            data-testid="shopping-next-step"
+        >
+            <p className="text-[11px] font-medium tracking-wide text-primary uppercase">
+                Next step
             </p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <p className="mt-1 text-base font-semibold">{nextStep}</p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
                 {!productPlan
-                    ? `Chef will search Woolworths for ${preflight.total_items} items before opening the authenticated cart.`
+                    ? `Chef will search Woolworths for ${preflight.total_items} items before opening your authenticated cart.`
                     : productPlan.discovery_failed
                       ? 'Woolworths did not return usable catalogue results. No cart changes were attempted.'
                       : planReady
-                        ? `${productPlan.exact_items} exact products are ready for your final review.`
-                        : `${pendingItems.length} ${pendingItems.length === 1 ? 'choice' : 'choices'} remaining. Review one product at a time.`}
+                        ? `All ${productPlan.exact_items} products are matched. Chef can now prepare and verify the cart for you.`
+                        : `${productPlan.exact_items} products were matched automatically. Choose the best option below so Chef can continue; ${pendingItems.length} ${pendingItems.length === 1 ? 'decision remains' : 'decisions remain'}.`}
             </p>
             {preflight.constraints.length > 0 && (
                 <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
@@ -1849,18 +1981,16 @@ function CartProductPreflight({
                 </div>
             )}
             {currentItem && !productPlan?.discovery_failed && (
-                <div className="mt-3 rounded-lg border bg-background p-3">
+                <div className="mt-4 rounded-lg border bg-background p-3">
                     <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                        Next choice · {pendingItems.length} remaining
-                    </p>
-                    <p className="mt-1 text-sm font-medium">
-                        {currentItem.name}
+                        Choose one · {pendingItems.length} remaining
                     </p>
                     {currentItem.candidates.length > 0 ? (
                         <div className="mt-3 grid gap-2">
                             {currentItem.candidates.map((candidate, index) => (
                                 <Button
                                     key={`${currentItem.id}-${String(candidate.external_id ?? index)}`}
+                                    aria-label={`Choose ${String(candidate.product_name ?? 'Woolworths product')} for ${currentItem.name}`}
                                     size="sm"
                                     variant="outline"
                                     className="h-auto justify-start px-3 py-2 text-left whitespace-normal"
@@ -1919,19 +2049,29 @@ function CartProductPreflight({
             )}
             {planReady && productPlan && (
                 <>
-                    <label className="mt-3 flex items-start gap-2 text-xs leading-5">
-                        <Checkbox
-                            aria-label="Confirm exact Woolworths product plan review"
-                            checked={productPlanReviewed}
-                            onCheckedChange={(checked) =>
-                                onProductPlanReviewedChange(Boolean(checked))
-                            }
-                        />
-                        <span>
-                            I reviewed the exact Woolworths products that Chef
-                            will add and verify.
-                        </span>
-                    </label>
+                    {approved ? (
+                        <p className="mt-3 rounded-lg bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                            These routine matches are inside the approved plan.
+                            Chef will continue automatically and pause if the
+                            retailer presents a material difference.
+                        </p>
+                    ) : (
+                        <label className="mt-3 flex items-start gap-2 text-xs leading-5">
+                            <Checkbox
+                                aria-label="Confirm exact Woolworths product plan review"
+                                checked={productPlanReviewed}
+                                onCheckedChange={(checked) =>
+                                    onProductPlanReviewedChange(
+                                        Boolean(checked),
+                                    )
+                                }
+                            />
+                            <span>
+                                I reviewed the exact Woolworths products that
+                                Chef will add and verify.
+                            </span>
+                        </label>
+                    )}
                     <details className="mt-3 text-xs text-muted-foreground">
                         <summary className="cursor-pointer">
                             Exact products
@@ -1948,19 +2088,40 @@ function CartProductPreflight({
                             ))}
                         </ul>
                     </details>
-                    <label className="mt-3 flex items-start gap-2 text-xs leading-5">
-                        <Checkbox
-                            aria-label="Confirm cart product plan safety review"
-                            checked={safetyAcknowledged}
-                            onCheckedChange={(checked) =>
-                                onSafetyAcknowledgedChange(Boolean(checked))
-                            }
-                        />
-                        <span>
-                            I reviewed the household safety context and this
-                            product plan.
-                        </span>
-                    </label>
+                    {!approved && (
+                        <label className="mt-3 flex items-start gap-2 text-xs leading-5">
+                            <Checkbox
+                                aria-label="Confirm cart product plan safety review"
+                                checked={safetyAcknowledged}
+                                onCheckedChange={(checked) =>
+                                    onSafetyAcknowledgedChange(Boolean(checked))
+                                }
+                            />
+                            <span>
+                                I reviewed the household safety context and this
+                                product plan.
+                            </span>
+                        </label>
+                    )}
+                    <Button
+                        className="mt-4"
+                        disabled={
+                            processing ||
+                            !ready ||
+                            !cartMutationEnabled ||
+                            (!approved &&
+                                (!safetyAcknowledged || !productPlanReviewed))
+                        }
+                        onClick={onPrepare}
+                    >
+                        <ShoppingBasket /> Prepare Woolworths cart
+                    </Button>
+                    {!cartMutationEnabled && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Cart preparation is disabled until the configured
+                            provider and live release gates are ready.
+                        </p>
+                    )}
                 </>
             )}
         </div>
@@ -2030,8 +2191,8 @@ function CartAutomationSection({
             shopping_list_revision_id: automation.shopping_list_revision_id,
             retailer_connection_id: connection.id,
             idempotency_key: crypto.randomUUID(),
-            safety_acknowledged: safetyAcknowledged,
-            product_plan_reviewed: productPlanReviewed,
+            safety_acknowledged: automation.approved || safetyAcknowledged,
+            product_plan_reviewed: automation.approved || productPlanReviewed,
         });
     };
     const buildProductPlan = () => {
@@ -2076,10 +2237,7 @@ function CartAutomationSection({
     }
 
     return (
-        <section
-            className="mt-8 border-b pb-6"
-            aria-labelledby="woolworths-cart-heading"
-        >
+        <section className="mt-8" aria-labelledby="woolworths-cart-heading">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="max-w-2xl">
                     <p className="flex items-center gap-2 text-sm font-medium">
@@ -2087,15 +2245,19 @@ function CartAutomationSection({
                         <span id="woolworths-cart-heading">
                             Woolworths cart
                         </span>
+                        {connection?.status === 'connected' && (
+                            <Badge variant="secondary">Connected</Badge>
+                        )}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        Chef can prepare and verify this revision in your
-                        Woolworths account. You review the result and complete
-                        checkout in your normal Woolworths app or browser.
+                        {connection?.status === 'connected'
+                            ? `${connection.last_verified_at ? `Verified ${new Date(connection.last_verified_at).toLocaleString('en-AU')}. ` : ''}Resolve only the exceptions below; Chef will handle the routine cart work.`
+                            : 'Chef can prepare and verify this revision in your Woolworths account. You review the result and complete checkout in your normal Woolworths app or browser.'}
                     </p>
                 </div>
                 {connection && connection.status !== 'disconnected' && (
                     <Button
+                        className="self-start sm:self-auto"
                         size="sm"
                         variant="ghost"
                         disabled={processing || (run !== null && !runTerminal)}
@@ -2168,7 +2330,12 @@ function CartAutomationSection({
                 <div className="mt-5">
                     {(!run || runTerminal) && (
                         <CartProductPreflight
+                            approved={automation.approved}
+                            cartMutationEnabled={
+                                automation.cart_mutation_enabled
+                            }
                             onBuildPlan={buildProductPlan}
+                            onPrepare={prepare}
                             onProductPlanReviewedChange={setProductPlanReviewed}
                             onSelectCandidate={selectProductCandidate}
                             onSafetyAcknowledgedChange={setSafetyAcknowledged}
@@ -2176,46 +2343,11 @@ function CartAutomationSection({
                             processing={processing}
                             productPlan={automation.product_plan}
                             productPlanReviewed={productPlanReviewed}
+                            ready={automation.ready}
                             retailers={retailers}
                             safetyAcknowledged={safetyAcknowledged}
                             shoppingList={shoppingList}
                         />
-                    )}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <p className="text-sm font-medium">
-                                Woolworths connected
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                {connection.last_verified_at
-                                    ? `Verified ${new Date(connection.last_verified_at).toLocaleString('en-AU')}`
-                                    : 'Authentication will be checked again before every run.'}
-                            </p>
-                        </div>
-                        {(!run || runTerminal) &&
-                            automation.product_plan?.status === 'ready' && (
-                                <Button
-                                    size="sm"
-                                    disabled={
-                                        processing ||
-                                        !automation.ready ||
-                                        !automation.cart_mutation_enabled ||
-                                        automation.product_plan?.status !==
-                                            'ready' ||
-                                        !safetyAcknowledged ||
-                                        !productPlanReviewed
-                                    }
-                                    onClick={prepare}
-                                >
-                                    <ShoppingBasket /> Prepare Woolworths cart
-                                </Button>
-                            )}
-                    </div>
-                    {!automation.cart_mutation_enabled && (
-                        <p className="mt-3 text-xs text-muted-foreground">
-                            Cart mutation is disabled until the configured
-                            provider and live release gates are ready.
-                        </p>
                     )}
                 </div>
             )}
@@ -2230,6 +2362,7 @@ function CartAutomationSection({
                     onReauthenticate={reauthenticate}
                     onResolve={resolve}
                     onTakeover={takeover}
+                    shoppingList={shoppingList}
                 />
             )}
         </section>
@@ -2288,7 +2421,7 @@ function shoppingCompletionDisabledReason(
     }
 
     if (remaining > 0) {
-        return `Mark the ${remaining} remaining ${remaining === 1 ? 'item' : 'items'} as bought to complete this shop.`;
+        return `Buy or order the ${remaining} remaining ${remaining === 1 ? 'item' : 'items'} to complete this shop.`;
     }
 
     return null;
@@ -2368,15 +2501,15 @@ function FailedMealRecovery({
 }
 
 function PreparingShoppingList({
-    active,
     failedMeals,
     onPrepare,
+    recipesPreparing,
     recipePreparation,
     shoppingList,
 }: {
-    active: boolean;
     failedMeals: MissingMeal[];
     onPrepare: () => void;
+    recipesPreparing: boolean;
     recipePreparation: ShoppingWorkspace['recipe_preparation'];
     shoppingList: PreparedShoppingList;
 }) {
@@ -2423,14 +2556,17 @@ function PreparingShoppingList({
                 <div className="mx-auto max-w-lg text-center">
                     <LoaderCircle className="mx-auto size-6 animate-spin text-primary" />
                     <p className="mt-3 text-sm font-medium">
-                        {active
+                        {recipesPreparing
                             ? 'Preparing your recipes'
-                            : 'Combining your ingredients'}
+                            : shoppingList.generation_status === 'pending'
+                              ? 'Shopping list queued'
+                              : 'Building your shopping list'}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        {recipePreparation.ready} of{' '}
-                        {recipePreparation.required} recipes are ready. This
-                        page will update automatically.
+                        {recipesPreparing
+                            ? `${recipePreparation.ready} of ${recipePreparation.required} recipes are ready.`
+                            : `${recipePreparation.required > 0 ? 'All recipes are ready.' : 'The plan is ready.'} Chef is combining ingredients and quantities now.`}{' '}
+                        This page will update automatically.
                     </p>
                 </div>
             )}
@@ -2588,7 +2724,11 @@ export default function ShoppingShow({
     } = workspace;
     const remaining =
         shoppingList?.items.filter(
-            (item) => item.included && !item.in_pantry && !item.checked,
+            (item) =>
+                item.included &&
+                !item.in_pantry &&
+                !item.checked &&
+                !item.ordered_at,
         ).length ?? 0;
     const included =
         shoppingList?.items.filter((item) => item.included && !item.in_pantry)
@@ -2614,9 +2754,9 @@ export default function ShoppingShow({
         : null;
     const listPreparing =
         shoppingList !== null && shoppingList.generation_status !== 'ready';
+    const recipesPreparing = recipePreparation.preparing > 0;
     const preparationActive =
-        recipePreparation.preparing > 0 ||
-        shoppingList?.generation_status === 'processing';
+        recipesPreparing || shoppingList?.generation_status === 'processing';
     const automationPolling = Boolean(
         cartAutomation.run &&
         activeAutomationStatuses.has(cartAutomation.run.status),
@@ -2694,46 +2834,25 @@ export default function ShoppingShow({
                                 {formatDate(plan.ends_on)}
                             </p>
                         </div>
-                        {shoppingList && !listPreparing && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <span
-                                        className="inline-flex"
-                                        data-testid="complete-shop-tooltip-trigger"
-                                        tabIndex={
-                                            completionDisabledReason
-                                                ? 0
-                                                : undefined
-                                        }
-                                    >
-                                        <Button
-                                            disabled={Boolean(
-                                                completionDisabledReason,
-                                            )}
-                                            onClick={() => {
-                                                completionForm.transform(
-                                                    () => ({
-                                                        expected_revision:
-                                                            shoppingList.revision,
-                                                    }),
-                                                );
-                                                completionForm.post(
-                                                    `/shopping-lists/${shoppingList.id}/complete`,
-                                                    { preserveScroll: true },
-                                                );
-                                            }}
-                                        >
-                                            <Check /> Complete shop
-                                        </Button>
-                                    </span>
-                                </TooltipTrigger>
-                                {completionDisabledReason && (
-                                    <TooltipContent align="end" side="bottom">
-                                        {completionDisabledReason}
-                                    </TooltipContent>
-                                )}
-                            </Tooltip>
-                        )}
+                        {shoppingList &&
+                            !listPreparing &&
+                            shoppingList.status !== 'completed' &&
+                            completionDisabledReason === null && (
+                                <Button
+                                    onClick={() => {
+                                        completionForm.transform(() => ({
+                                            expected_revision:
+                                                shoppingList.revision,
+                                        }));
+                                        completionForm.post(
+                                            `/shopping-lists/${shoppingList.id}/complete`,
+                                            { preserveScroll: true },
+                                        );
+                                    }}
+                                >
+                                    <Check /> Complete shop
+                                </Button>
+                            )}
                     </header>
                     {completionError && (
                         <p
@@ -2750,9 +2869,9 @@ export default function ShoppingShow({
                         <StartShoppingList onPrepare={prepareShopping} />
                     ) : listPreparing ? (
                         <PreparingShoppingList
-                            active={preparationActive}
                             failedMeals={failedMeals}
                             onPrepare={prepareShopping}
+                            recipesPreparing={recipesPreparing}
                             recipePreparation={recipePreparation}
                             shoppingList={shoppingList}
                         />

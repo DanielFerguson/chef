@@ -21,8 +21,11 @@ use Illuminate\Support\Carbon;
  * @property ShoppingListGenerationMethod|null $last_generation_method
  * @property int $generation_attempts
  * @property Carbon|null $generation_started_at
+ * @property string|null $fulfilment_method
+ * @property Carbon|null $fulfilment_scheduled_for
+ * @property Carbon|null $fulfilment_confirmed_at
  */
-#[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'revision', 'source_plan_revision', 'status', 'generation_status', 'generation_token', 'generation_attempts', 'generation_context_hash', 'last_generation_method', 'generation_failure_code', 'generation_failure_message', 'generation_started_at', 'generation_completed_at', 'completed_at', 'stale_at', 'stale_reason', 'stale_diff'])]
+#[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'revision', 'source_plan_revision', 'status', 'fulfilment_method', 'fulfilment_scheduled_for', 'fulfilment_confirmed_at', 'generation_status', 'generation_token', 'generation_attempts', 'generation_context_hash', 'last_generation_method', 'generation_failure_code', 'generation_failure_message', 'generation_started_at', 'generation_completed_at', 'completed_at', 'stale_at', 'stale_reason', 'stale_diff'])]
 class ShoppingList extends Model
 {
     /** @use HasFactory<ShoppingListFactory> */
@@ -93,6 +96,8 @@ class ShoppingList extends Model
             'generation_started_at' => 'datetime',
             'generation_completed_at' => 'datetime',
             'completed_at' => 'datetime',
+            'fulfilment_scheduled_for' => 'datetime',
+            'fulfilment_confirmed_at' => 'datetime',
             'stale_at' => 'datetime',
             'stale_diff' => 'array',
         ];

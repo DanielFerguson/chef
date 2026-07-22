@@ -8,6 +8,7 @@ import {
     LoaderCircle,
     RefreshCw,
     ShieldCheck,
+    ShoppingBasket,
     Sparkles,
     X,
 } from 'lucide-react';
@@ -360,7 +361,10 @@ function PlanNextStep({
     workspace: MealPlanWorkspace;
     onOpenPlanDetails: () => void;
 }) {
-    if (workspace.readiness.recipes_failed > 0) {
+    if (
+        workspace.readiness.confirmed &&
+        workspace.readiness.recipes_failed > 0
+    ) {
         return (
             <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-destructive/5 px-4 py-3">
                 <div>
@@ -369,7 +373,7 @@ function PlanNextStep({
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                         Chef kept every meal choice. Retry the single recipe
-                        batch before confirming the plan.
+                        batch before Chef continues preparing the shop.
                     </p>
                 </div>
                 <Button
@@ -389,7 +393,10 @@ function PlanNextStep({
         );
     }
 
-    if (workspace.readiness.recipes_preparing > 0) {
+    if (
+        workspace.readiness.confirmed &&
+        workspace.readiness.recipes_preparing > 0
+    ) {
         return (
             <section className="mx-auto w-full max-w-xl rounded-xl bg-primary/5 px-4 py-3">
                 <p className="text-sm font-medium">
@@ -408,6 +415,7 @@ function PlanNextStep({
     }
 
     if (
+        workspace.readiness.confirmed &&
         workspace.readiness.ready_for_safety_review &&
         workspace.readiness.safety_review_required
     ) {
@@ -475,32 +483,99 @@ function PlanNextStep({
         );
     }
 
-    if (!workspace.readiness.ready_for_confirmation) {
+    if (!workspace.readiness.ready_for_approval) {
         return null;
     }
 
+    const pendingBySlot = new Map<
+        number | null,
+        (typeof workspace.plan.proposals)[number]
+    >();
+
+    for (const proposal of workspace.plan.proposals) {
+        if (proposal.status === 'pending') {
+            pendingBySlot.set(proposal.meal_slot_id, proposal);
+        }
+    }
+
+    const draftMeals = workspace.plan.slots.map((slot) => ({
+        slot,
+        meal: slot.planned_meal ?? pendingBySlot.get(slot.id) ?? null,
+    }));
+
+    const safetyConstraints = [
+        ...workspace.household.constraints,
+        ...workspace.household.people.flatMap((person) => person.constraints),
+    ];
+
     return (
-        <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 px-4 py-3">
-            <div>
-                <p className="text-sm font-medium">
-                    Your plan is ready to confirm
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                    All {workspace.readiness.total_slots} meal slots are filled.
-                    Shopping comes next.
+        <section
+            data-plan-approval
+            className="mx-auto w-full max-w-xl rounded-2xl border bg-card p-4 shadow-sm"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-sm font-medium">
+                        Your plan is ready to approve
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Review the whole plan once. You can keep chatting to
+                        swap anything before approving it.
+                    </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                    {draftMeals.length} meals
+                </span>
+            </div>
+            <ul className="mt-4 divide-y border-y text-sm">
+                {draftMeals.map(({ slot, meal }) => (
+                    <li
+                        key={slot.id}
+                        className="grid grid-cols-[5.5rem_1fr] gap-3 py-2.5"
+                    >
+                        <span className="text-xs text-muted-foreground">
+                            {formatDay(slot.date)}
+                        </span>
+                        <span>
+                            <span className="font-medium">
+                                {meal?.title ?? 'Open meal'}
+                            </span>
+                            {meal?.estimated_minutes && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                    {meal.estimated_minutes} min
+                                </span>
+                            )}
+                            {meal?.estimated_cost && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                    ~${meal.estimated_cost.toFixed(2)}
+                                </span>
+                            )}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+            <div className="mt-4 rounded-xl bg-muted/50 px-3 py-2.5 text-xs leading-5">
+                <p className="font-medium">Safety check</p>
+                <p className="text-muted-foreground">
+                    {safetyConstraints.length > 0
+                        ? `${safetyConstraints.length} explicit household ${safetyConstraints.length === 1 ? 'rule is' : 'rules are'} included in this plan.`
+                        : 'No allergies or safety rules are currently recorded. Approving confirms this is current.'}
                 </p>
             </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                Chef will prepare the recipes, combine the shopping list, match
+                routine Woolworths products, and prepare the connected cart. It
+                will pause for genuine exceptions and leave checkout to you.
+            </p>
             <Button
-                size="sm"
+                className="mt-4 w-full sm:w-auto"
                 onClick={() =>
-                    router.post(
-                        `/meal-plans/${workspace.plan.id}/milestones`,
-                        { kind: 'planning_confirmed' },
-                        { preserveScroll: true },
-                    )
+                    router.post(`/meal-plans/${workspace.plan.id}/approve`, {
+                        explicitly_reviewed_safety: true,
+                    })
                 }
             >
-                <Check /> Review and confirm
+                <ShoppingBasket /> Approve plan &amp; prepare cart
             </Button>
         </section>
     );
@@ -542,9 +617,11 @@ export function ConversationPanel({
 
         return () => window.clearInterval(interval);
     }, [workspace.readiness.recipes_preparing]);
-    const hasPendingProposals = workspace.plan.proposals.some(
-        (proposal) => proposal.status === 'pending',
-    );
+    const hasPendingProposals =
+        !workspace.readiness.ready_for_approval &&
+        workspace.plan.proposals.some(
+            (proposal) => proposal.status === 'pending',
+        );
     const viewportRef = useRef<HTMLDivElement>(null);
     const positionedConversationId = useRef<number | null>(null);
     const sourceHighlightTimeout = useRef<number | null>(null);

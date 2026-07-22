@@ -7,7 +7,7 @@ use App\Actions\Households\CreateHouseholdPerson as CreateHouseholdPersonAction;
 use App\Actions\Households\RecordConstraint;
 use App\Actions\Households\RecordPreference;
 use App\Actions\Households\ValidatePreferenceEvidence;
-use App\Actions\MealPlans\ConfirmMealPlan;
+use App\Actions\MealPlans\ApproveMealPlanForShopping;
 use App\Actions\MealPlans\UpdateMealPlanDateSpan;
 use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\CreateMealSlot;
@@ -117,18 +117,18 @@ class ChefAgent implements Agent, Conversational, HasProviderOptions, HasTools
         Planning momentum rules:
         - Before creating, selecting, or moving meal options, call InspectMealPlan and use its current slots, selected meals, pending proposals, and plan_progress.
         - Meals named in response to a question about this week or the current plan are plan-specific options. Create one reviewable proposal per named meal; do not save them as household preferences unless the person explicitly asks Chef to remember them beyond this plan.
-        - When asked to suggest the remaining meals, create one distinct proposal for each uncovered slot in chronological order. Do not duplicate a pending or selected meal.
-        - A pending proposal is a suggestion, not a filled or selected meal. Only filled_slots may be described as planned dinners, and proposals remain reviewable until a person accepts them.
+        - When asked to plan or suggest the remaining meals, create one distinct proposal for every uncovered slot in chronological order in the same turn. Do not ask whether you should suggest the rest, tidy proposal state, show the completed week, or check back after background work.
+        - Treat a complete set of pending proposals as one visible draft week. A pending proposal is not yet approved, but it may be described as part of the draft as long as that status is clear.
         - Treat plan_progress returned by planning tools as authoritative. Do not reconstruct the selected plan from prose.
-        - After each selection, state what changed and immediately guide the household to the reported next_action.
-        - When ready_for_confirmation is true, say that every slot is filled and ask one direct question: whether to review and confirm the plan. Explain that shopping follows confirmation.
-        - Filling the final slot is not consent to confirm. Call ConfirmPlan only after the user explicitly agrees.
-        - After confirmation, acknowledge it and offer to begin the shopping-list step. Never end a completed planning turn with only “the week is fully filled”.
+        - After a safe planning change, state what changed and keep moving toward one coherent draft rather than asking permission for the obvious next planning action.
+        - When ready_for_approval is true, summarise the complete draft and invite one explicit approval. Explain that approval starts recipe, shopping-list, product-matching, and connected-cart preparation.
+        - Creating the final proposal is not consent to approve. Call ConfirmPlan only after the user explicitly approves the visible whole-plan draft.
+        - After approval, acknowledge that preparation has started. Do not ask the household to start the shopping-list step separately.
 
         Recipe and shopping rules:
         - A selected ordinary cookable meal needs a prepared recipe. Recipe preparation happens automatically; report plan_progress instead of asking the household to type ingredients.
         - If recipes are still preparing, say so clearly and let the household continue. If preparation failed, offer a retry rather than silently omitting the meal.
-        - When the household asks to begin shopping, call PreparePlanShoppingList. Do not merely describe a possible list in prose.
+        - Approval starts shopping preparation automatically. Use PreparePlanShoppingList only to recover an older confirmed plan whose preparation did not start.
         - Inspect the shopping list before editing it. Use exact item identifiers and the current list revision.
         - When one message requests multiple household extras, call AddPlanShoppingItems once with every requested item. Never split one addition request into repeated single-item writes.
         - Pantry, quantity, inclusion, check-off, household-extra, and budget requests must update structured list state through their tools before you say they are done.
@@ -188,7 +188,7 @@ class ChefAgent implements Agent, Conversational, HasProviderOptions, HasTools
             new MoveSelectedMeal($mealPlan, $this->actor, app(MovePlannedMeal::class)),
             new RecordHouseholdPreference($team, $this->actor, $this->currentMessage, app(RecordPreference::class), app(ValidatePreferenceEvidence::class)),
             new CorrectHouseholdPreference($team, $this->actor, $this->currentMessage, app(CorrectPreference::class)),
-            new ConfirmPlan($mealPlan, $this->actor, app(ConfirmMealPlan::class), app(AssessMealPlanReadiness::class)),
+            new ConfirmPlan($mealPlan, $this->actor, app(ApproveMealPlanForShopping::class), app(AssessMealPlanReadiness::class)),
             new RecordSafetyConstraint($team, $this->actor, $this->currentMessage, app(RecordConstraint::class)),
         ];
 

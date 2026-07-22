@@ -11,7 +11,7 @@ class AssessMealPlanReadiness
 {
     public function __construct(private readonly MealPlanSafetyContext $safetyContext) {}
 
-    /** @return array{total_slots: int, filled_slots: int, open_slots: int, uncovered_slots: int, pending_proposals: int, slots_without_participants: int, recipes_required: int, recipes_ready: int, recipes_preparing: int, recipes_failed: int, recipes_unresolved: int, ready_for_safety_review: bool, safety_reviewed: bool, safety_review_required: bool, ready_for_safety_confirmation: bool, ready_for_confirmation: bool, confirmed: bool, next_action: string} */
+    /** @return array{total_slots: int, filled_slots: int, open_slots: int, uncovered_slots: int, pending_proposals: int, slots_without_participants: int, recipes_required: int, recipes_ready: int, recipes_preparing: int, recipes_failed: int, recipes_unresolved: int, ready_for_approval: bool, ready_for_safety_review: bool, safety_reviewed: bool, safety_review_required: bool, ready_for_safety_confirmation: bool, ready_for_confirmation: bool, confirmed: bool, next_action: string} */
     public function handle(MealPlan $mealPlan): array
     {
         $totalSlots = $mealPlan->slots()->count();
@@ -27,6 +27,11 @@ class AssessMealPlanReadiness
             ->when($pendingProposalSlotIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $pendingProposalSlotIds))
             ->count();
         $slotsWithoutParticipants = $mealPlan->slots()->whereDoesntHave('participants')->count();
+        $proposalCoveredSlots = $mealPlan->proposals()
+            ->where('status', MealProposalStatus::Pending)
+            ->whereNotNull('meal_slot_id')
+            ->distinct()
+            ->count('meal_slot_id');
         $resolvedMealIds = $mealPlan->shoppingList?->mealResolutions()->pluck('planned_meal_id') ?? collect();
         $recipeRequired = $mealPlan->plannedMeals()
             ->where('status', 'planned')
@@ -52,7 +57,10 @@ class AssessMealPlanReadiness
             && $openSlots === 0
             && $pendingProposals === 0
             && $slotsWithoutParticipants === 0;
-        $ready = $structurallyReady && $recipesUnresolved === 0;
+        $draftReady = $totalSlots > 0
+            && $uncoveredSlots === 0
+            && $slotsWithoutParticipants === 0
+            && ($filledSlots + $proposalCoveredSlots) === $totalSlots;
         $safetyHash = $this->safetyContext->fingerprint($mealPlan);
         $safetyReviewed = is_string($mealPlan->safety_reviewed_context_hash)
             && hash_equals($mealPlan->safety_reviewed_context_hash, $safetyHash);
@@ -65,12 +73,8 @@ class AssessMealPlanReadiness
             $pendingProposals > 0 => 'resolve_proposals',
             $openSlots > 0 => 'fill_open_slots',
             $slotsWithoutParticipants > 0 => 'confirm_participants',
-            $recipesFailed > 0 => 'retry_recipes',
-            $recipesPreparing > 0 => 'wait_for_recipes',
-            $recipesUnresolved > 0 => 'prepare_recipes',
-            $safetyReviewRequired => 'review_safety',
             $confirmed => 'begin_shopping',
-            $ready => 'review_and_confirm',
+            $draftReady => 'review_and_approve',
             default => 'continue_planning',
         };
 
@@ -86,11 +90,12 @@ class AssessMealPlanReadiness
             'recipes_preparing' => $recipesPreparing,
             'recipes_failed' => $recipesFailed,
             'recipes_unresolved' => $recipesUnresolved,
-            'ready_for_safety_review' => $structurallyReady && $recipesUnresolved === 0,
+            'ready_for_approval' => $draftReady && ! $confirmed,
+            'ready_for_safety_review' => $draftReady,
             'safety_reviewed' => $safetyReviewed,
             'safety_review_required' => $safetyReviewRequired,
             'ready_for_safety_confirmation' => $structurallyReady && $confirmed && $safetyReviewed && ! $confirmedSafetyIsCurrent,
-            'ready_for_confirmation' => $ready && $safetyReviewed && ! $confirmed,
+            'ready_for_confirmation' => $structurallyReady && $safetyReviewed && ! $confirmed,
             'confirmed' => $confirmed,
             'next_action' => $nextAction,
         ];

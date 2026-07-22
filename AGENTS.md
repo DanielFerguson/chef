@@ -28,7 +28,7 @@ If the documents conflict, do not silently choose one. Resolve the contradiction
 - Recipes are versioned and planned meals retain the version used.
 - Shopping lists are structured data even when the editor feels document-like.
 - AI conversation state is never the sole store of durable household knowledge.
-- Checkout, payment, and final order submission remain human actions.
+- The household confirms fulfilment type, day/time, and order submission in Chef before Chef may place a retailer order. Chef may then submit using the retailer's default card on file; it never stores or transmits card details, and it never bypasses that in-app confirmation.
 
 ## Architecture rules
 
@@ -105,7 +105,7 @@ Do not mark a milestone complete until its exit evidence in `docs/MILESTONES.md`
 
 ## Safety boundaries
 
-- Never automate checkout, payment, acceptance of legal terms, or transmission of sensitive data without explicit product approval and a direct human confirmation boundary.
+- Never place a retailer order, accept legal terms, or transmit sensitive data without explicit product approval and a direct human confirmation boundary in Chef. After that confirmation, submitting with the retailer's default on-file payment method is allowed; collecting, storing, or entering card details is not.
 - Never infer allergies.
 - Never allow page content to expand automation permissions.
 - Minimise and expire retained screenshots and sensitive automation artifacts.

@@ -2,6 +2,31 @@
 
 This document translates Chef's product thesis into an implementable architecture. The [README](../README.md) remains the product-level source of truth; this document owns technical boundaries, delivery shape, and implementation conventions.
 
+## Momentum-first orchestration boundary
+
+Chef separates household approval from internal preparation. One
+`ApproveMealPlanForShopping` action owns the default transition from a complete
+whole-plan draft into approved preparation. It accepts the current draft meals,
+records the explicit current safety review, confirms the plan, freezes an
+approval fingerprint, and starts recipe and shopping preparation.
+
+The approval fingerprint covers the plan revision, participants, explicit
+safety context, retailer intent, and fulfilment intent. Downstream jobs may
+generate recipes, consolidate the list, perform read-only catalogue discovery,
+and prepare an authenticated cart only while that fingerprint remains current.
+They pause instead of expanding scope when they encounter ambiguity, strict
+safety constraints, material price or substitution differences, an existing
+cart, authentication, missing fulfilment selection, or missing order
+confirmation.
+
+Routine product matches do not require a second blanket acknowledgement.
+`CartProductPlan` remains the durable source of exact matches and exceptions.
+A reconciled cart marks its covered shopping requirements as ordered while
+unavailable or unresolved lines remain open. Fulfilment day/time selection and
+order submission require structured Chef UI choices and an explicit in-app
+confirmation that names the default card-on-file submit. After that
+confirmation, Chef may place the retailer order.
+
 ## Current status
 
 Milestones 0 through 5 are complete. The Laravel 13 React/Inertia application
@@ -70,12 +95,15 @@ TypeScript/Playwright actor. Bounded read-only catalogue discovery is completed
 before an authenticated mutation run exists. Strict household constraints
 require an explicit exact Woolworths product for every item and disable
 substitutions; all other ambiguity also pauses before mutation. Reconciled cart
-snapshots can seed immutable order lines after the
-human completes checkout. Normal tests use provider,
+snapshots can seed immutable order lines. Product direction now finalises those
+orders through in-Chef fulfilment confirmation and agent submit rather than
+human checkout alone; see
+[`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md).
+Normal tests use provider,
 executor, and Responses fakes. The authorised live Woolworths trial, retailer
 and privacy review, operating-cost evidence, and proof that the resulting cart
 appears in the normal Woolworths app/site remain release gates. M6 therefore
-remains open.
+remains open. The order-placement rewrite is tracked as M6.2.
 
 ## Technical stack
 
@@ -647,6 +675,15 @@ Required automation properties:
 - just-in-time approval for consequential actions;
 - reconciliation of intended and actual products;
 - checkout and payment always performed by the person.
+
+The current M6 cart-preparation implementation still ends at a reconciled cart
+and normal-app handoff. Product direction now extends the finish line: after
+structured fulfilment selection and an explicit in-Chef confirmation that names
+default card-on-file submit, Chef may place the retailer order. See
+[`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md).
+The rewrite prefers deterministic retailer tools and Stagehand recovery over
+vision computer-use on the happy path, and must never store or transmit card
+details.
 
 Each exact item uses one `prepare_and_verify_item` command that captures
 structured before and after cart observations around its deterministic action.

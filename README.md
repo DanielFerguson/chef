@@ -22,13 +22,13 @@ household-item, quantity, and budget changes. One plan-level preparation and
 retry state keeps manual ingredient entry out of the normal path. M5 adds a
 Today surface, focused step-by-step cooking with durable progress and timers,
 meal outcomes, person-specific feedback, and inspectable preference candidates
-that can never become safety rules. The first M6 Woolworths cart-preparation
-slice is now implemented behind disabled release flags. It includes read-only
-product discovery and an exact reviewed product plan before authentication,
-one persistent fenced browser actor per keep-alive session, a dedicated
-automation queue, GPT-5.6 GA computer-use fallback, and immutable cart evidence
-linked into order history. Its authenticated live trial, retailer review, and
-normal-app cart-synchronisation evidence remain open, so M6 is not complete.
+that can never become safety rules. The first M6 Woolworths cart-preparation slice is implemented behind disabled
+release flags. Product direction has since moved the finish line from a human
+checkout handoff to in-Chef fulfilment selection and confirmed order placement
+with the retailer's default card on file; see
+[`docs/plans/2026-07-22-retailer-order-placement-design.md`](docs/plans/2026-07-22-retailer-order-placement-design.md).
+Authenticated live trial evidence for cart prep remains open, so M6 is not
+complete, and the order-placement rewrite is not yet implemented.
 
 The intended stack is:
 
@@ -40,10 +40,10 @@ The intended stack is:
 - shadcn/ui
 - Pest
 - Laravel AI SDK with the OpenAI provider for ordinary planning agents
-- A Chef-owned OpenAI Responses API client for native computer-use agents
 - OpenAI Realtime API for native voice conversation
-- Browserbase Contexts and recording-disabled sessions for the first Woolworths execution slice
-- An in-repo persistent TypeScript/Playwright session actor behind a versioned internal RPC protocol
+- Browserbase Contexts and recording-disabled sessions for Woolworths execution
+- A thin TypeScript Stagehand/Playwright worker for deterministic retailer tools
+  (order-placement rewrite; current computer-use actor remains until replaced)
 - A future permissioned Chef Chrome extension behind the same executor contract
 - An MCP server exposing Chef's household, planning, recipe, shopping, and feedback capabilities
 
@@ -76,7 +76,7 @@ Contributes preferences, rejects ideas, requests favourites, and may add househo
 
 ### The shopper
 
-Needs one consolidated, editable list with quantities, preferred products, price context, substitutions, and a safe handoff to a supermarket trolley.
+Needs one consolidated, editable list with quantities, preferred products, price context, substitutions, and a safe path to a placed supermarket order.
 
 ### The cook
 
@@ -198,6 +198,19 @@ Every permission should have a visible status, scope, and revocation path. Decli
 
 ## The four-stage experience
 
+The default household journey is intentionally momentum-first:
+
+1. **Riff** on one complete, visible meal-plan proposal.
+2. **Approve and prepare** with one clearly scoped action that confirms the plan and authorises Chef to prepare the connected retailer cart.
+3. **Choose fulfilment and place** by resolving only genuine exceptions, choosing delivery or pickup, selecting an available day and time in Chef, confirming, and letting Chef submit the order with the retailer's default card on file.
+4. **Cook** from the reconciled plan, products, preparation notices, and placed-order expectation.
+
+Chef may maintain many durable preparation, matching, automation, and recovery
+states internally. Those states do not become household steps by default. Safe,
+reversible, and read-only work proceeds inside the approved scope; Chef
+interrupts only when it needs new information, new authority, or a decision
+whose consequence differs materially from what the household approved.
+
 ### 1. Plan — converse and explore
 
 **Intent:** Decide what the household might eat over a date range.
@@ -219,7 +232,8 @@ The assistant should propose a coherent week, explain trade-offs, accept loosely
 
 **Supporting UI:** A live week preview beside the conversation, showing draft meals, estimated cost, effort, repeated ingredients, and unresolved questions.
 
-**Exit condition:** The household confirms a meal plan.
+**Exit condition:** The household approves one visible meal-plan proposal and
+authorises the stated preparation scope.
 
 ### 2. Review — make the week concrete
 
@@ -253,11 +267,13 @@ Chef should:
 - remember preferred brands, pack sizes, and acceptable substitutes;
 - estimate the order and compare it with the weekly budget;
 - preserve actual order prices for historical reporting;
-- prepare an online trolley through a retailer integration or computer use.
+- prepare an online trolley through a retailer integration;
+- present available delivery or pickup slots in Chef;
+- after an explicit in-app confirmation, submit the retailer order using the account's default card on file.
 
-Computer use is a retailer adapter, not the source of truth. Chef owns the intended shopping list and records what was ultimately ordered. Browser automation may prepare a trolley, but checkout and payment always remain an explicit human action.
+Browser automation is a retailer adapter, not the source of truth. Chef owns the intended shopping list, the selected fulfilment slot, the confirmation boundary, and the recorded order result. The household chooses type, day, and time and confirms in Chef; Chef then places the order. Chef never stores card details and never submits without that confirmation.
 
-**Supporting UI:** A source-attributed shopping list, budget summary, product matches, substitution preferences, pantry exclusions, and order-review state. Retailer-backed aisle grouping and rejected-product history arrive with catalogue discovery and reconciliation in the retailer-handoff milestone.
+**Supporting UI:** A source-attributed shopping list, budget summary, product matches, substitution preferences, pantry exclusions, fulfilment slot picker, order confirmation, and order-review state. Retailer-backed aisle grouping and rejected-product history arrive with catalogue discovery and reconciliation in the retailer order-placement work.
 
 **Exit condition:** The shopping list is completed in store or reconciled with a reviewed retailer order.
 
@@ -461,20 +477,20 @@ then authenticates and reconciles the real cart before any mutation. A
 future local Chrome extension can implement the same `ComputerExecutor`
 contract without changing run creation, policy, or reconciliation actions.
 
-### Computer-use lifecycle
+### Retailer order lifecycle
 
-When a household approves a shopping list for cart preparation:
+When a household approves a shopping list for retailer preparation:
 
 1. Chef performs bounded read-only catalogue discovery before opening an authenticated cart run.
 2. Chef shows exact products, genuinely ambiguous or unresolved choices, and applicable explicit household safety constraints. Strict constraints always require an explicit exact product.
 3. The person resolves ambiguity and reviews the exact product plan and safety context; Chef freezes that plan with the shopping-list revision.
-4. Laravel creates a scoped `AutomationRun` and dispatches it to the dedicated `automation` queue.
-5. Deterministic Playwright prepares and visibly verifies each exact product atomically. GPT-5.6 GA computer use is a bounded fallback for unfamiliar UI and returns ordered `actions[]`.
-6. Chef validates the actions against retailer, tab, and risk policy.
-7. The persistent actor executes allowed actions in the Browserbase session and returns a sanitised observation.
-8. The loop continues until the cart is prepared, a decision requires approval, or the run fails safely.
-9. Chef presents products, substitutions, unresolved items, estimated total, and material differences for review.
-10. After human checkout, the reviewed cart snapshot can seed immutable order lines while the person records the actual total.
+4. Laravel creates a scoped retailer order run and dispatches it to the dedicated `automation` queue.
+5. Deterministic Playwright (with Stagehand recovery in the rewrite) prepares and visibly verifies each exact product.
+6. Chef validates retailer actions against origin and risk policy.
+7. The browser worker executes allowed tools in the Browserbase session and returns sanitised observations.
+8. After the cart is verified, Chef scrapes available delivery or pickup options and presents them in structured UI.
+9. The household selects fulfilment type, day, and time, then confirms that Chef may submit using the default card on file.
+10. Chef applies the slot, submits the order, and records the retailer confirmation into durable order history.
 
 Before the first mutation Chef inspects the actual Woolworths cart. A non-empty
 cart always pauses for an explicit merge, replace, or cancel decision. Replace
@@ -497,18 +513,21 @@ Page content, retailer messages, advertisements, and on-screen instructions are 
 
 Chef may search and compare public catalogue products before authentication, but
 the authenticated run starts only from a reviewed exact product plan. It may
-then deterministically add and verify those products, using bounded computer
-use only for unfamiliar UI. It should pause immediately before:
+then deterministically add and verify those products, using bounded semantic
+browser recovery only for unfamiliar UI. It should pause immediately before:
 
 - a material substitution outside the household's stated policy;
 - exceeding the approved budget or tolerance;
-- changing the selected store, delivery address, or fulfilment method;
+- changing the selected store, delivery address, or account settings;
 - transmitting sensitive personal information;
 - responding to authentication, bot-detection, or suspicious instructions;
-- selecting a consequential delivery window;
-- placing an order or initiating payment.
+- selecting a fulfilment day or time without structured Chef UI choice;
+- placing an order without an explicit in-Chef confirmation that names the
+  fulfilment choice and that Chef will use the retailer's default card on file.
 
-Checkout, payment details, and final order submission always remain under direct human control.
+Card numbers and payment-instrument selection remain outside Chef. After the
+household confirms in Chef, submitting the retailer order with the default
+on-file payment method is an authorised agent action.
 
 ## OpenAI and MCP boundary
 
@@ -523,8 +542,8 @@ Initial MCP capabilities should be narrow and composable:
 - generate and reconcile a shopping list;
 - inspect budget and historical order context;
 - record feedback and meal outcomes;
-- prepare a retailer-cart handoff;
-- record the reviewed result of an order.
+- prepare a retailer order through cart preparation, fulfilment selection, and confirmed submit;
+- record the result of a placed order.
 
 Tool responses should return stable identifiers and structured data so an assistant can continue a conversation without scraping the UI. Write tools should be explicit about their side effects and support idempotency where retries are plausible.
 
@@ -548,14 +567,15 @@ The first useful slice should support one family team, multiple collaborating us
 - consolidated shopping list with manual items;
 - estimated and actual order totals;
 - meal feedback and recent-meal history;
-- a reviewed Browserbase computer-use handoff for Woolworths, after its gated authenticated release evidence passes.
+- a reviewed Browserbase Woolworths path that prepares the cart, presents fulfilment options in Chef, and places the order after in-app confirmation, after its gated authenticated release evidence passes.
 
 ### Not initially included
 
 - public recipe discovery or a social network;
 - nutrition or medical advice;
 - perfect pantry inventory automation;
-- autonomous checkout or payment;
+- autonomous order submission without an explicit in-Chef confirmation;
+- collecting, storing, or choosing among card details inside Chef;
 - multi-retailer price optimisation;
 - native mobile applications;
 - complex real-time household collaboration;
@@ -568,7 +588,7 @@ The first useful slice should support one family team, multiple collaborating us
 3. **Recipes and complete planning** — Recipe versions, imports, richer meal occasions, calendar and list views, revisions, and explainable recommendations.
 4. **Shopping and budgets** — Ingredient aggregation, manual staples, pantry exclusions, product matches, list revisions, and order snapshots.
 5. **Cooking and feedback** — Tonight view, preparation notices, steps, outcomes, and inspectable preference candidates.
-6. **Retailer handoff** — Browserbase-first Woolworths preparation, Responses API computer use, risk-scoped interventions, reconciliation, normal-app handoff, and human checkout; Coles and the Chrome extension follow as adapters.
+6. **Retailer order placement** — Browserbase-first Woolworths cart preparation, fulfilment options in Chef, confirmed submit with the default card on file, reconciliation, and durable order evidence; Coles and the Chrome extension follow as adapters.
 7. **Native voice** — Realtime WebRTC input and output over the same durable conversations and domain actions.
 8. **MCP** — Read tools first, then reviewed planning, shopping, and feedback writes for external hosts.
 9. **Public launch** — Operational, privacy, accessibility, security, recovery, and support gates for version 1.
