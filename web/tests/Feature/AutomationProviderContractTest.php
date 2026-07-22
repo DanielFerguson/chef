@@ -1,29 +1,16 @@
 <?php
 
-use App\Actions\Automation\StartCartPreparation;
-use App\Actions\Automation\StartRetailerConnection;
-use App\Actions\Automation\VerifyRetailerConnection;
-use App\Actions\Teams\CreateTeamForUser;
 use App\Automation\Browserbase\BrowserbaseBrowserSessionProvider;
 use App\Automation\Browserbase\WoolworthsCatalogueDiscovery;
 use App\Automation\Exceptions\BrowserSessionLostException;
 use App\Automation\Exceptions\RetailerContextRevokedException;
-use App\Automation\OpenAI\OpenAIComputerUseClient;
 use App\Enums\BrowserSessionPurpose;
 use App\Models\BrowserSession;
-use App\Models\MealPlan;
 use App\Models\Retailer;
 use App\Models\RetailerConnection;
-use App\Models\ShoppingList;
-use App\Models\ShoppingListItem;
-use App\Models\ShoppingListRevision;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -121,64 +108,6 @@ it('does not misclassify a rejected Woolworths catalogue request as no candidate
         'unit' => 'each',
     ]]))->toThrow(RuntimeException::class, 'did not return a usable response');
 });
-
-/** @return array<string, mixed> */
-function providerCartWorkspace(): array
-{
-    $user = User::factory()->create();
-    $team = app(CreateTeamForUser::class)->handle($user, 'Provider family');
-    $plan = MealPlan::factory()->create([
-        'team_id' => $team->id,
-        'created_by_user_id' => $user->id,
-        'revision' => 1,
-        'planning_confirmed_at' => now(),
-    ]);
-    $list = ShoppingList::factory()->create([
-        'team_id' => $team->id,
-        'meal_plan_id' => $plan->id,
-        'created_by_user_id' => $user->id,
-        'revision' => 1,
-        'source_plan_revision' => 1,
-    ]);
-    $item = ShoppingListItem::factory()->create([
-        'team_id' => $team->id,
-        'shopping_list_id' => $list->id,
-        'name' => 'Milk',
-        'normalized_name' => 'milk',
-    ]);
-    $revision = ShoppingListRevision::factory()->create([
-        'team_id' => $team->id,
-        'shopping_list_id' => $list->id,
-        'user_id' => $user->id,
-        'revision' => 1,
-        'snapshot' => [
-            'source_plan_revision' => 1,
-            'status' => 'draft',
-            'items' => [[
-                'id' => $item->id,
-                'name' => 'Milk',
-                'quantity' => 1,
-                'unit' => 'litre',
-                'included' => true,
-                'in_pantry' => false,
-                'optional' => false,
-                'product_match' => null,
-                'source_planned_meal_ids' => [],
-            ]],
-        ],
-    ]);
-
-    return compact('user', 'team', 'plan', 'list', 'item', 'revision');
-}
-
-function providerConnectedWoolworths(array $workspace): RetailerConnection
-{
-    config()->set('automation.connection_enabled', true);
-    $session = app(StartRetailerConnection::class)->handle($workspace['team'], $workspace['user']);
-    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
-
-    return $session->retailerConnection->refresh();
-}
 
 it('records only explicitly enabled local cart preparation Browserbase sessions', function () {
     $this->app['env'] = 'local';
@@ -304,73 +233,14 @@ it('maps completed Browserbase sessions without a CDP URL to a lost session', fu
         ->toThrow(BrowserSessionLostException::class);
 });
 
-it('uses the direct Responses computer-call protocol without persisting screenshots', function () {
-    $workspace = providerCartWorkspace();
-    $connection = providerConnectedWoolworths($workspace);
-    config()->set('automation.cart_mutation_enabled', true);
-    config()->set('services.openai.api_key', 'test-openai-key');
-    config()->set('services.openai.base_url', 'https://api.openai.test');
-    config()->set('services.openai.store', false);
-    config()->set('services.openai.computer_use_model', 'gpt-5.6-sol');
-    config()->set('services.openai.computer_use_reasoning_effort', 'low');
-    Queue::fake();
-    $run = app(StartCartPreparation::class)->handle(
-        $workspace['list'],
-        $workspace['revision'],
-        $connection,
-        $workspace['user'],
-        (string) Str::uuid(),
-        true,
-        true,
-    );
-    $item = $run->items()->sole();
-    $screenshot = 'data:image/png;base64,'.base64_encode('transient pixels');
-
-    $fixture = json_decode(
-        file_get_contents(base_path('tests/Fixtures/Automation/openai-computer-ga.json')),
-        true,
-        flags: JSON_THROW_ON_ERROR,
-    );
-    Http::fakeSequence('api.openai.test/*')
-        ->push($fixture['initial_response'])
-        ->push($fixture['continuation_response']);
-
-    $client = new OpenAIComputerUseClient;
-    $first = $client->next($run, $item, $screenshot);
-    $run->update(['openai_response_id' => $first->responseId]);
-    $second = $client->next($run->refresh(), $item, $screenshot, [
-        'call_id' => $first->callId,
-        'acknowledged_safety_checks' => [],
-    ]);
-
-    expect($first->actions)->toHaveCount(2)
-        ->and($first->actions[0]['type'])->toBe('click')
-        ->and($first->actions[1]['type'])->toBe('keypress')
-        ->and($first->pendingSafetyChecks)->toBe([])
-        ->and($second->complete)->toBeTrue()
-        ->and($second->message)->toBe('Done')
-        ->and(DB::table('automation_steps')->where('input_summary', 'like', '%transient pixels%')->exists())->toBeFalse();
-
-    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/v1/responses')
-        && $request['store'] === false
-        && $request['model'] === 'gpt-5.6-sol'
-        && $request['tools'] === [['type' => 'computer']]
-        && $request['reasoning']['effort'] === 'low'
-        && data_get($request->data(), 'input.0.content.1.image_url') === $screenshot);
-    Http::assertSent(fn (Request $request) => ($request['previous_response_id'] ?? null) === 'resp_ga_1'
-        && $request['input'][0]['type'] === 'computer_call_output'
-        && $request['input'][0]['call_id'] === 'call_ga_1'
-        && $request['input'][0]['output']['detail'] === 'original');
-});
-
 it('reports automation readiness and fails closed on incomplete enabled provider configuration', function () {
     $this->app['env'] = 'local';
     config()->set('services.browserbase.api_key', 'secret-test-key');
     config()->set('services.browserbase.project_id', 'project-test');
-    config()->set('services.openai.api_key', 'secret-openai-key');
     config()->set('services.chef_automation.worker_path', __FILE__);
     config()->set('services.chef_automation.actor_path', __FILE__);
     config()->set('services.chef_automation.actor_launcher_path', __FILE__);
+    config()->set('services.chef_automation.stagehand_worker_path', __FILE__);
     config()->set('automation.connection_enabled', false);
     config()->set('automation.queue', 'automation');
     config()->set('services.browserbase.record_local_cart_sessions', true);
@@ -379,7 +249,6 @@ it('reports automation readiness and fails closed on incomplete enabled provider
         ->expectsOutputToContain('Connection flag: disabled')
         ->expectsOutputToContain('Local cart-session recording: enabled')
         ->expectsOutputToContain('Browser viewport: 1024 × 768')
-        ->expectsOutputToContain('Computer-use model: gpt-5.6-sol')
         ->expectsOutputToContain('Automation queue: automation')
         ->assertSuccessful();
 

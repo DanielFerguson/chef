@@ -13,7 +13,6 @@ use LogicException;
  * @property int $id
  * @property int $team_id
  * @property int $cart_snapshot_id
- * @property int|null $automation_run_item_id
  * @property int|null $shopping_list_item_id
  * @property CartLineClassification $classification
  * @property string|null $external_product_id
@@ -25,7 +24,7 @@ use LogicException;
  * @property bool $pre_existing
  * @property array<string, mixed>|null $metadata
  */
-#[Fillable(['team_id', 'cart_snapshot_id', 'automation_run_item_id', 'shopping_list_item_id', 'classification', 'external_product_id', 'product_name', 'quantity', 'unit', 'unit_price', 'total_price', 'pre_existing', 'metadata'])]
+#[Fillable(['team_id', 'cart_snapshot_id', 'shopping_list_item_id', 'classification', 'external_product_id', 'product_name', 'quantity', 'unit', 'unit_price', 'total_price', 'pre_existing', 'metadata'])]
 class CartSnapshotLine extends Model
 {
     use ResolvesWithinCurrentTeam;
@@ -45,12 +44,6 @@ class CartSnapshotLine extends Model
     public function snapshot(): BelongsTo
     {
         return $this->belongsTo(CartSnapshot::class, 'cart_snapshot_id');
-    }
-
-    /** @return BelongsTo<AutomationRunItem, $this> */
-    public function runItem(): BelongsTo
-    {
-        return $this->belongsTo(AutomationRunItem::class, 'automation_run_item_id');
     }
 
     /** @return BelongsTo<ShoppingListItem, $this> */

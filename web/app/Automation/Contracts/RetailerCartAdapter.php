@@ -4,8 +4,6 @@ namespace App\Automation\Contracts;
 
 use App\Automation\Data\AuthenticationCheck;
 use App\Automation\Data\CartInspection;
-use App\Automation\Data\PreparedCartItem;
-use App\Models\AutomationRunItem;
 use App\Models\BrowserSession;
 
 interface RetailerCartAdapter
@@ -18,21 +16,7 @@ interface RetailerCartAdapter
 
     public function openLogin(BrowserSession $session): void;
 
-    public function openCart(BrowserSession $session): void;
-
     public function checkAuthentication(BrowserSession $session): AuthenticationCheck;
 
     public function inspectCart(BrowserSession $session): CartInspection;
-
-    public function clearCart(BrowserSession $session): CartInspection;
-
-    /** @param array<int, array<string, mixed>> $preExistingLines */
-    public function prepareAndVerifyItem(
-        BrowserSession $session,
-        AutomationRunItem $item,
-        CartInspection $cartBefore,
-        array $preExistingLines = [],
-    ): PreparedCartItem;
-
-    public function reconcile(BrowserSession $session): CartInspection;
 }

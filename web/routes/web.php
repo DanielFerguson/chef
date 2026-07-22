@@ -1,9 +1,5 @@
 <?php
 
-use App\Http\Controllers\AutomationInterventionController;
-use App\Http\Controllers\AutomationRunController;
-use App\Http\Controllers\AutomationRunStatusController;
-use App\Http\Controllers\AutomationTakeoverController;
 use App\Http\Controllers\CartProductPlanController;
 use App\Http\Controllers\ConstraintController;
 use App\Http\Controllers\ConversationFeedbackController;
@@ -78,18 +74,12 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::post('shopping-lists/{shoppingList}/retailer-connections', [RetailerConnectionController::class, 'store'])->name('shopping-lists.retailer-connections.store');
     Route::post('shopping-lists/{shoppingList}/cart-product-plan', [CartProductPlanController::class, 'store'])->name('shopping-lists.cart-product-plan.store');
     Route::put('cart-product-plan-items/{cartProductPlanItem}', [CartProductPlanController::class, 'update'])->name('cart-product-plan-items.update');
-    Route::post('shopping-lists/{shoppingList}/automation-runs', [AutomationRunController::class, 'store'])->name('shopping-lists.automation-runs.store');
+    Route::post('shopping-lists/{shoppingList}/retailer-order-runs', [RetailerOrderRunController::class, 'store'])->name('shopping-lists.retailer-order-runs.store');
     Route::post('retailer-connections/{retailerConnection}/authenticate', [RetailerConnectionAuthenticationController::class, 'start'])->name('retailer-connections.authenticate.start');
     Route::delete('retailer-connections/{retailerConnection}', [RetailerConnectionController::class, 'destroy'])->name('retailer-connections.destroy');
     Route::get('browser-sessions/{browserSession}/authenticate', [RetailerConnectionAuthenticationController::class, 'show'])->name('browser-sessions.authenticate.show');
     Route::get('browser-sessions/{browserSession}/live-view', [RetailerConnectionAuthenticationController::class, 'liveView'])->name('browser-sessions.live-view');
     Route::post('browser-sessions/{browserSession}/verify', [RetailerConnectionAuthenticationController::class, 'verify'])->name('browser-sessions.verify');
-    Route::get('automation-runs/{automationRun}/status', AutomationRunStatusController::class)->name('automation-runs.status');
-    Route::post('automation-runs/{automationRun}/takeover', [AutomationTakeoverController::class, 'store'])->name('automation-runs.takeover.store');
-    Route::get('browser-sessions/{browserSession}/takeover', [AutomationTakeoverController::class, 'show'])->name('browser-sessions.takeover.show');
-    Route::post('browser-sessions/{browserSession}/takeover/finish', [AutomationTakeoverController::class, 'finish'])->name('browser-sessions.takeover.finish');
-    Route::delete('automation-runs/{automationRun}', [AutomationRunController::class, 'destroy'])->name('automation-runs.destroy');
-    Route::put('automation-interventions/{automationIntervention}', [AutomationInterventionController::class, 'update'])->name('automation-interventions.update');
     Route::post('retailer-order-runs/{retailerOrderRun}/fulfilment', [RetailerOrderRunController::class, 'selectFulfilment'])->name('retailer-order-runs.fulfilment.select');
     Route::post('retailer-order-runs/{retailerOrderRun}/confirm', [RetailerOrderRunController::class, 'confirm'])->name('retailer-order-runs.confirm');
     Route::post('retailer-order-runs/{retailerOrderRun}/verify', [RetailerOrderRunController::class, 'verify'])->name('retailer-order-runs.verify');

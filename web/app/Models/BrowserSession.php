@@ -19,7 +19,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $id
  * @property int $team_id
  * @property int $retailer_connection_id
- * @property int|null $automation_run_id
  * @property string $provider_session_id
  * @property BrowserSessionPurpose $purpose
  * @property BrowserSessionStatus $status
@@ -29,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property Carbon|null $ended_at
  * @property array<string, mixed>|null $metadata
  */
-#[Fillable(['team_id', 'retailer_connection_id', 'automation_run_id', 'provider_session_id', 'purpose', 'status', 'recording_enabled', 'started_at', 'expires_at', 'ended_at', 'metadata'])]
+#[Fillable(['team_id', 'retailer_connection_id', 'provider_session_id', 'purpose', 'status', 'recording_enabled', 'started_at', 'expires_at', 'ended_at', 'metadata'])]
 #[Hidden(['provider_session_id'])]
 class BrowserSession extends Model
 {
@@ -48,12 +47,6 @@ class BrowserSession extends Model
     public function retailerConnection(): BelongsTo
     {
         return $this->belongsTo(RetailerConnection::class);
-    }
-
-    /** @return BelongsTo<AutomationRun, $this> */
-    public function run(): BelongsTo
-    {
-        return $this->belongsTo(AutomationRun::class, 'automation_run_id');
     }
 
     /** @return HasMany<BrowserActor, $this> */

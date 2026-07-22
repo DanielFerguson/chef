@@ -16,7 +16,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $shopping_list_id
  * @property int $shopping_list_revision_id
  * @property int $retailer_id
- * @property int|null $automation_run_id
  * @property CartProductPlanStatus $status
  * @property string $input_checksum
  * @property string $safety_fingerprint
@@ -25,7 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property Carbon|null $reviewed_at
  * @property Carbon|null $frozen_at
  */
-#[Fillable(['team_id', 'shopping_list_id', 'shopping_list_revision_id', 'retailer_id', 'automation_run_id', 'status', 'input_checksum', 'safety_fingerprint', 'snapshot', 'reviewed_by_user_id', 'reviewed_at', 'frozen_at'])]
+#[Fillable(['team_id', 'shopping_list_id', 'shopping_list_revision_id', 'retailer_id', 'status', 'input_checksum', 'safety_fingerprint', 'snapshot', 'reviewed_by_user_id', 'reviewed_at', 'frozen_at'])]
 class CartProductPlan extends Model
 {
     use ResolvesWithinCurrentTeam;
@@ -52,12 +51,6 @@ class CartProductPlan extends Model
     public function retailer(): BelongsTo
     {
         return $this->belongsTo(Retailer::class);
-    }
-
-    /** @return BelongsTo<AutomationRun, $this> */
-    public function automationRun(): BelongsTo
-    {
-        return $this->belongsTo(AutomationRun::class);
     }
 
     /** @return BelongsTo<User, $this> */

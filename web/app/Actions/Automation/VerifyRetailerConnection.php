@@ -5,14 +5,10 @@ namespace App\Actions\Automation;
 use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\RetailerCartAdapter;
 use App\Automation\Exceptions\BrowserSessionLostException;
-use App\Enums\AutomationInterventionStatus;
-use App\Enums\AutomationInterventionType;
-use App\Enums\AutomationRunStatus;
 use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
 use App\Enums\RetailerConnectionStatus;
 use App\Enums\RetailerOrderRunStatus;
-use App\Jobs\AdvanceAutomationRunJob;
 use App\Jobs\AdvanceRetailerOrderRunJob;
 use App\Models\BrowserSession;
 use App\Models\RetailerOrderRun;
@@ -28,7 +24,6 @@ class VerifyRetailerConnection
         private readonly RetailerCartAdapter $adapter,
         private readonly ComputerExecutor $executor,
         private readonly ReleaseRetailerConnectionLease $releaseLease,
-        private readonly TransitionAutomationRun $transition,
     ) {}
 
     public function handle(BrowserSession $session, User $user): void
@@ -86,14 +81,7 @@ class VerifyRetailerConnection
             ->oldest('id')
             ->first();
 
-        $automationRun = $orderRun === null
-            ? $connection->runs()
-                ->where('status', AutomationRunStatus::AwaitingReauthentication->value)
-                ->oldest('id')
-                ->first()
-            : null;
-
-        if ($orderRun === null && $automationRun === null) {
+        if ($orderRun === null) {
             $session->update([
                 'purpose' => BrowserSessionPurpose::CartPreparation,
                 'status' => BrowserSessionStatus::AgentControl,
@@ -102,7 +90,7 @@ class VerifyRetailerConnection
                     'verified_for_cart_preparation_at' => now()->toIso8601String(),
                 ],
             ]);
-        } elseif ($orderRun !== null) {
+        } else {
             $session->update([
                 'purpose' => BrowserSessionPurpose::CartPreparation,
                 'status' => BrowserSessionStatus::AgentControl,
@@ -110,16 +98,6 @@ class VerifyRetailerConnection
                     ...($session->metadata ?? []),
                     'resumed_after_reauthentication' => true,
                     'retailer_order_run_id' => $orderRun->id,
-                ],
-            ]);
-        } else {
-            $session->update([
-                'automation_run_id' => $automationRun->id,
-                'purpose' => BrowserSessionPurpose::CartPreparation,
-                'status' => BrowserSessionStatus::AgentControl,
-                'metadata' => [
-                    ...($session->metadata ?? []),
-                    'resumed_after_reauthentication' => true,
                 ],
             ]);
         }
@@ -132,19 +110,6 @@ class VerifyRetailerConnection
 
         if ($orderRun !== null) {
             $this->resumeOrderRun($orderRun);
-        } elseif ($automationRun !== null) {
-            $automationRun->interventions()
-                ->where('type', AutomationInterventionType::Reauthentication->value)
-                ->where('status', AutomationInterventionStatus::Pending->value)
-                ->update([
-                    'status' => AutomationInterventionStatus::Resolved->value,
-                    'resolution' => json_encode(['choice' => 'authentication_verified'], JSON_THROW_ON_ERROR),
-                    'resolved_by_user_id' => $user->id,
-                    'resolved_at' => now(),
-                ]);
-            $this->transition->handle($automationRun, AutomationRunStatus::Queued);
-            AdvanceAutomationRunJob::dispatch($automationRun->id)
-                ->onQueue((string) config('automation.queue', 'automation'));
         }
     }
 

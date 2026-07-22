@@ -52,9 +52,6 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
         'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com'),
         'store' => env('OPENAI_STORE', false),
-        'computer_use_model' => env('OPENAI_COMPUTER_USE_MODEL', 'gpt-5.6-sol'),
-        'computer_use_reasoning_effort' => env('OPENAI_COMPUTER_USE_REASONING_EFFORT', 'low'),
-        'computer_use_timeout' => (int) env('OPENAI_COMPUTER_USE_TIMEOUT', 90),
     ],
 
     'chef_automation' => [

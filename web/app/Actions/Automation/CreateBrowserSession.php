@@ -5,7 +5,6 @@ namespace App\Actions\Automation;
 use App\Automation\Contracts\BrowserSessionProvider;
 use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
-use App\Models\AutomationRun;
 use App\Models\BrowserSession;
 use App\Models\RetailerConnection;
 use Throwable;
@@ -21,7 +20,6 @@ class CreateBrowserSession
     public function handle(
         RetailerConnection $connection,
         BrowserSessionPurpose $purpose,
-        ?AutomationRun $run = null,
     ): BrowserSession {
         $leaseToken = $this->acquireLease->handle($connection);
         $reservationOwner = 'reservation:'.$leaseToken;
@@ -33,7 +31,6 @@ class CreateBrowserSession
             $session = BrowserSession::query()->create([
                 'team_id' => $connection->team_id,
                 'retailer_connection_id' => $connection->id,
-                'automation_run_id' => $run?->id,
                 'provider_session_id' => $providerSession->id,
                 'purpose' => $purpose,
                 'status' => in_array($purpose, [

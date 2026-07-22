@@ -12,7 +12,6 @@ use App\Enums\RetailerOrderRunItemStatus;
 use App\Enums\RetailerOrderRunStatus;
 use App\Enums\ShoppingListGenerationStatus;
 use App\Jobs\AdvanceRetailerOrderRunJob;
-use App\Models\AutomationRun;
 use App\Models\MealPlan;
 use App\Models\RetailerConnection;
 use App\Models\RetailerOrderRun;
@@ -215,7 +214,7 @@ it('requires safety acknowledgement and a reviewed ready product plan', function
     ))->toThrow(ValidationException::class, 'Review the exact Woolworths product plan');
 });
 
-it('starts a retailer order run from ContinueApprovedShopping instead of an AutomationRun', function () {
+it('starts a retailer order run from ContinueApprovedShopping', function () {
     $workspace = retailerOrderRunWorkspace();
     $connection = connectedWoolworthsForOrderRun($workspace);
     config()->set('automation.cart_mutation_enabled', true);
@@ -232,7 +231,6 @@ it('starts a retailer order run from ContinueApprovedShopping instead of an Auto
 
     expect($productPlan)->not->toBeNull()
         ->and($productPlan->refresh()->status)->toBe(CartProductPlanStatus::Frozen)
-        ->and(AutomationRun::query()->count())->toBe(0)
         ->and(RetailerOrderRun::query()->count())->toBe(1)
         ->and(RetailerOrderRun::query()->sole()->status)->toBe(RetailerOrderRunStatus::PreparingCart)
         ->and(RetailerOrderRun::query()->sole()->cart_product_plan_id)->toBe($productPlan->id);

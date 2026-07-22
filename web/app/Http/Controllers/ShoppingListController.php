@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Actions\Automation\BuildCartPreparationPreflight;
 use App\Actions\Planning\AssessMealPlanReadiness;
-use App\Automation\AutomationRunView;
 use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
@@ -46,7 +45,6 @@ class ShoppingListController extends Controller
     public function show(
         Request $request,
         MealPlan $mealPlan,
-        AutomationRunView $automationRunView,
         RetailerOrderRunView $retailerOrderRunView,
         BuildCartPreparationPreflight $buildCartPreparationPreflight,
         AssessMealPlanReadiness $assessReadiness,
@@ -108,12 +106,6 @@ class ShoppingListController extends Controller
             : $mealPlan->team->retailerConnections()
                 ->where('retailer_id', $woolworths->id)
                 ->where('owner_user_id', $request->user()->id)
-                ->first();
-        $automationRun = $shoppingList === null || $retailerConnection === null
-            ? null
-            : $shoppingList->automationRuns()
-                ->where('retailer_connection_id', $retailerConnection->id)
-                ->latest()
                 ->first();
         $retailerOrderRun = $shoppingList === null
             ? null
@@ -237,7 +229,6 @@ class ShoppingListController extends Controller
                         'owner_user_id' => $retailerConnection->owner_user_id,
                         'last_verified_at' => $retailerConnection->last_verified_at?->toIso8601String(),
                     ],
-                    'run' => $automationRun === null ? null : $automationRunView->make($automationRun),
                 ],
                 'retailer_order_run' => $retailerOrderRun === null
                     ? null

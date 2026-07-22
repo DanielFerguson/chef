@@ -6,8 +6,6 @@ import {
     ChevronDown,
     CircleAlert,
     Ellipsis,
-    ExternalLink,
-    Hand,
     List as ListIcon,
     LoaderCircle,
     LogIn,
@@ -63,9 +61,7 @@ import { ConfirmOrderPanel } from '@/features/shopping/confirm-order-panel';
 import { FulfilmentSlotPicker } from '@/features/shopping/fulfilment-slot-picker';
 import { PlacementVerificationPanel } from '@/features/shopping/placement-verification-panel';
 import type {
-    AutomationRun,
     CartAutomation,
-    CartSnapshotLine,
     RetailerOrderRun,
     ShoppingListItem,
     ShoppingListItemCategory,
@@ -1123,17 +1119,15 @@ function OrderRecorder({
     listId,
     retailers,
     orders,
-    cartSnapshot,
 }: {
     listId: number;
     retailers: { id: number; name: string }[];
     orders: NonNullable<ShoppingWorkspace['shopping_list']>['orders'];
-    cartSnapshot: AutomationRun['snapshot'] | null;
 }) {
     const form = useForm({
-        actual_total: cartSnapshot?.cart_total?.toString() ?? '',
+        actual_total: '',
         retailer_id: '',
-        cart_snapshot_id: cartSnapshot?.id ?? null,
+        cart_snapshot_id: null as number | null,
     });
 
     return (
@@ -1160,60 +1154,45 @@ function OrderRecorder({
                     });
                 }}
             >
-                {!cartSnapshot && (
-                    <Select
-                        value={form.data.retailer_id}
-                        onValueChange={(value) =>
-                            form.setData('retailer_id', value)
-                        }
-                    >
-                        <SelectTrigger
-                            aria-label="Order retailer"
-                            className="w-40"
-                        >
-                            <SelectValue placeholder="Retailer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {retailers.map((retailer) => (
-                                <SelectItem
-                                    key={retailer.id}
-                                    value={retailer.id.toString()}
-                                >
-                                    {retailer.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
-                <Input
-                    aria-label="Actual order total"
-                    className="w-36"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required={!cartSnapshot}
-                    placeholder={
-                        cartSnapshot ? 'Cart total (optional)' : 'Actual total'
+                <Select
+                    value={form.data.retailer_id}
+                    onValueChange={(value) =>
+                        form.setData('retailer_id', value)
                     }
+                >
+                    <SelectTrigger
+                        aria-label="Order retailer"
+                        className="w-40"
+                    >
+                        <SelectValue placeholder="Retailer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {retailers.map((retailer) => (
+                            <SelectItem
+                                key={retailer.id}
+                                value={String(retailer.id)}
+                            >
+                                {retailer.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Input
+                    className="w-36"
+                    inputMode="decimal"
+                    placeholder="Actual total"
+                    required
                     value={form.data.actual_total}
                     onChange={(event) =>
                         form.setData('actual_total', event.target.value)
                     }
                 />
                 <Button size="sm" disabled={form.processing}>
-                    {cartSnapshot ? 'Save cart snapshot' : 'Record order'}
+                    Record order
                 </Button>
             </form>
-            {cartSnapshot && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                    Chef prefilled the verified Woolworths cart total and
-                    products captured{' '}
-                    {new Date(cartSnapshot.captured_at).toLocaleString('en-AU')}
-                    .
-                </p>
-            )}
             {orders.length > 0 && (
-                <ul className="mt-4 divide-y text-xs">
+                <ul className="mt-4 divide-y text-sm">
                     {orders.map((order) => (
                         <li
                             key={order.id}
@@ -1235,21 +1214,6 @@ function OrderRecorder({
         </section>
     );
 }
-
-const activeAutomationStatuses = new Set([
-    'checking_connection',
-    'inspecting_existing_cart',
-    'queued',
-    'running',
-    'reconciling',
-]);
-const terminalAutomationStatuses = new Set([
-    'ready_for_review',
-    'superseded',
-    'cancelled',
-    'failed',
-    'expired',
-]);
 
 const activeRetailerOrderStatuses = new Set([
     'preparing_cart',
@@ -1308,420 +1272,6 @@ function RetailerOrderRunSection({ run }: { run: RetailerOrderRun }) {
     }
 
     return null;
-}
-
-function snapshotLineLabel(line: CartSnapshotLine) {
-    return line.classification.replaceAll('_', ' ');
-}
-
-type AutomationResolutionChoice =
-    | 'merge'
-    | 'replace'
-    | 'cancel'
-    | 'retry'
-    | 'skip'
-    | 'accept_substitution'
-    | 'accept_product';
-
-function AutomationInterventionCard({
-    intervention,
-    processing,
-    onReauthenticate,
-    onResolve,
-}: {
-    intervention: NonNullable<AutomationRun['intervention']>;
-    processing: boolean;
-    onReauthenticate: () => void;
-    onResolve: (choice: AutomationResolutionChoice) => void;
-}) {
-    return (
-        <div className="mt-4 rounded-lg bg-muted/50 p-3">
-            <p className="text-sm font-medium">
-                {intervention.payload?.message ??
-                    'Chef needs a decision before continuing.'}
-            </p>
-            {intervention.type === 'existing_cart' &&
-                intervention.payload?.lines && (
-                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-                        {intervention.payload.lines.map((line) => (
-                            <li
-                                key={
-                                    line.external_product_id ??
-                                    `${line.product_name}-${line.unit ?? ''}`
-                                }
-                            >
-                                {line.product_name}
-                                {line.quantity ? ` × ${line.quantity}` : ''}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            <div className="mt-3 flex flex-wrap gap-2">
-                {(intervention.type === 'existing_cart' ||
-                    (intervention.type === 'cart_changed' &&
-                        intervention.automation_run_item_id === null)) && (
-                    <>
-                        <Button
-                            size="sm"
-                            disabled={processing}
-                            onClick={() => onResolve('merge')}
-                        >
-                            Merge carts
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={processing}
-                            onClick={() => onResolve('replace')}
-                        >
-                            Replace existing cart
-                        </Button>
-                    </>
-                )}
-                {intervention.type === 'reauthentication' && (
-                    <Button
-                        size="sm"
-                        disabled={processing}
-                        onClick={onReauthenticate}
-                    >
-                        <LogIn /> Reauthenticate
-                    </Button>
-                )}
-                {intervention.type === 'manual_takeover' &&
-                    intervention.takeover_url && (
-                        <Button asChild size="sm">
-                            <Link href={intervention.takeover_url}>
-                                <Hand /> Continue manual control
-                            </Link>
-                        </Button>
-                    )}
-                {[
-                    'item_decision',
-                    'price_limit',
-                    'substitution',
-                    'cart_changed',
-                ].includes(intervention.type) &&
-                    intervention.automation_run_item_id !== null && (
-                        <>
-                            {intervention.type === 'price_limit' && (
-                                <Button
-                                    size="sm"
-                                    disabled={processing}
-                                    onClick={() => onResolve('accept_product')}
-                                >
-                                    Accept price
-                                </Button>
-                            )}
-                            {intervention.type === 'substitution' && (
-                                <Button
-                                    size="sm"
-                                    disabled={processing}
-                                    onClick={() =>
-                                        onResolve('accept_substitution')
-                                    }
-                                >
-                                    Accept substitution
-                                </Button>
-                            )}
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={processing}
-                                onClick={() => onResolve('retry')}
-                            >
-                                Retry item
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="ghost"
-                                disabled={processing}
-                                onClick={() => onResolve('skip')}
-                            >
-                                Skip item
-                            </Button>
-                        </>
-                    )}
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={processing}
-                    onClick={() => onResolve('cancel')}
-                >
-                    Cancel run
-                </Button>
-            </div>
-        </div>
-    );
-}
-
-function CartSnapshotReview({
-    run,
-    shoppingList,
-}: {
-    run: AutomationRun;
-    shoppingList: PreparedShoppingList;
-}) {
-    const fulfilmentForm = useForm({
-        fulfilment_method: shoppingList.fulfilment_method,
-    });
-
-    if (!run.snapshot) {
-        return null;
-    }
-
-    const chooseFulfilment = (method: 'delivery' | 'pickup') => {
-        fulfilmentForm.setData('fulfilment_method', method);
-        fulfilmentForm.transform(() => ({ fulfilment_method: method }));
-        fulfilmentForm.put(`/shopping-lists/${shoppingList.id}/fulfilment`, {
-            preserveScroll: true,
-        });
-    };
-
-    return (
-        <div className="mt-5 border-t pt-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <p className="text-sm font-medium">Your cart is ready</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Chef items{' '}
-                        {formatMoney(Number(run.snapshot.chef_subtotal ?? 0))} ·
-                        whole cart{' '}
-                        {formatMoney(Number(run.snapshot.cart_total ?? 0))}
-                    </p>
-                </div>
-            </div>
-            <div className="mt-4 rounded-xl bg-primary/5 p-3">
-                <p className="text-sm font-medium">
-                    How would you like to receive the shop?
-                </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Choose delivery or pickup here, then select an available
-                    time and complete checkout securely in Woolworths.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant={
-                            shoppingList.fulfilment_method === 'delivery'
-                                ? 'default'
-                                : 'outline'
-                        }
-                        disabled={fulfilmentForm.processing}
-                        onClick={() => chooseFulfilment('delivery')}
-                    >
-                        Delivery
-                    </Button>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant={
-                            shoppingList.fulfilment_method === 'pickup'
-                                ? 'default'
-                                : 'outline'
-                        }
-                        disabled={fulfilmentForm.processing}
-                        onClick={() => chooseFulfilment('pickup')}
-                    >
-                        Pickup
-                    </Button>
-                </div>
-                {run.can_open_woolworths_cart &&
-                    run.open_woolworths_cart_url &&
-                    shoppingList.fulfilment_method && (
-                        <Button asChild className="mt-3" size="sm">
-                            <a
-                                href={run.open_woolworths_cart_url}
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                Choose a {shoppingList.fulfilment_method} time
-                                &amp; checkout <ExternalLink />
-                            </a>
-                        </Button>
-                    )}
-            </div>
-            <details className="mt-4 text-xs">
-                <summary className="cursor-pointer text-muted-foreground">
-                    Review cart products
-                </summary>
-                <ul className="mt-2 divide-y">
-                    {run.snapshot.lines.map((line) => (
-                        <li
-                            key={line.id}
-                            className="flex items-start justify-between gap-3 py-2"
-                        >
-                            <span>{line.product_name}</span>
-                            <span className="text-right text-muted-foreground capitalize">
-                                {snapshotLineLabel(line)}
-                                {line.total_price !== null
-                                    ? ` · ${formatMoney(Number(line.total_price))}`
-                                    : ''}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
-            </details>
-            {!run.normal_app_sync_proven && (
-                <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
-                    The normal-app cart synchronisation release trial is not yet
-                    recorded as proven. Do not treat this run as M6 release
-                    evidence.
-                </p>
-            )}
-        </div>
-    );
-}
-
-function CartAutomationRunPanel({
-    intervention,
-    processing,
-    run,
-    runTerminal,
-    onCancel,
-    onReauthenticate,
-    onResolve,
-    onTakeover,
-    shoppingList,
-}: {
-    intervention: AutomationRun['intervention'] | undefined;
-    processing: boolean;
-    run: AutomationRun;
-    runTerminal: boolean;
-    onCancel: () => void;
-    onReauthenticate: () => void;
-    onResolve: (choice: AutomationResolutionChoice) => void;
-    onTakeover: () => void;
-    shoppingList: PreparedShoppingList;
-}) {
-    if (runTerminal && run.status !== 'ready_for_review') {
-        return (
-            <details className="mt-5 rounded-xl border bg-background p-4">
-                <summary className="cursor-pointer list-none text-sm font-medium capitalize">
-                    Previous cart attempt: {automationStatusLabel(run.status)}
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {run.progress.resolved} of {run.progress.total} items
-                    </span>
-                </summary>
-                <p className="mt-2 text-xs text-muted-foreground">
-                    Frozen at shopping-list revision{' '}
-                    {run.shopping_list_revision}. This history does not block a
-                    new product plan.
-                </p>
-                {run.failure_message && (
-                    <p className="mt-2 text-xs text-destructive">
-                        {run.failure_message}
-                    </p>
-                )}
-            </details>
-        );
-    }
-
-    return (
-        <div className="mt-5 rounded-xl border bg-background p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium capitalize">
-                            {automationStatusLabel(run.status)}
-                        </p>
-                        <Badge variant="secondary">
-                            {run.progress.resolved} of {run.progress.total}{' '}
-                            items
-                        </Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Frozen at shopping-list revision{' '}
-                        {run.shopping_list_revision}
-                    </p>
-                </div>
-                {!runTerminal && !intervention && (
-                    <div className="flex flex-wrap gap-2">
-                        {activeAutomationStatuses.has(run.status) && (
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={processing}
-                                onClick={onTakeover}
-                            >
-                                <Hand /> Pause and take over
-                            </Button>
-                        )}
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={processing}
-                            onClick={onCancel}
-                        >
-                            Cancel run
-                        </Button>
-                    </div>
-                )}
-            </div>
-
-            {activeAutomationStatuses.has(run.status) && (
-                <div className="mt-4" role="status">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                            className="h-full w-full origin-left rounded-full bg-primary transition-transform"
-                            style={{
-                                transform: `scaleX(${run.progress.total === 0 ? 0 : run.progress.resolved / run.progress.total})`,
-                            }}
-                        />
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                        Chef verifies the remote cart after every item.
-                    </p>
-                </div>
-            )}
-
-            {run.revision_diverged && !runTerminal && (
-                <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-                    The shopping list changed after this run was approved.
-                    Cancel this frozen run and prepare a new one from revision{' '}
-                    {run.current_shopping_list_revision}.
-                </div>
-            )}
-
-            {intervention && (
-                <AutomationInterventionCard
-                    intervention={intervention}
-                    processing={processing}
-                    onReauthenticate={onReauthenticate}
-                    onResolve={onResolve}
-                />
-            )}
-
-            {run.failure_message && (
-                <p className="mt-4 text-xs text-destructive">
-                    {run.failure_message}
-                </p>
-            )}
-
-            {run.items.length > 0 && !run.snapshot && (
-                <details className="mt-4 border-t pt-3 text-xs">
-                    <summary className="cursor-pointer text-muted-foreground">
-                        View item progress
-                    </summary>
-                    <ul className="mt-2 divide-y">
-                        {run.items.map((item) => (
-                            <li
-                                key={item.id}
-                                className="flex items-center justify-between gap-3 py-2"
-                            >
-                                <span>{item.name}</span>
-                                <span className="text-muted-foreground capitalize">
-                                    {automationStatusLabel(item.status)}
-                                </span>
-                            </li>
-                        ))}
-                    </ul>
-                </details>
-            )}
-
-            <CartSnapshotReview run={run} shoppingList={shoppingList} />
-        </div>
-    );
 }
 
 function ExactProductMatchEditor({
@@ -2201,9 +1751,6 @@ function CartAutomationSection({
     const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
     const [productPlanReviewed, setProductPlanReviewed] = useState(false);
     const connection = automation.connection;
-    const run = automation.run;
-    const intervention = run?.intervention;
-    const runTerminal = run ? terminalAutomationStatuses.has(run.status) : true;
     const submit = (
         method: 'post' | 'put' | 'delete',
         url: string,
@@ -2247,13 +1794,18 @@ function CartAutomationSection({
             return;
         }
 
-        submit('post', `/shopping-lists/${shoppingList.id}/automation-runs`, {
-            shopping_list_revision_id: automation.shopping_list_revision_id,
-            retailer_connection_id: connection.id,
-            idempotency_key: crypto.randomUUID(),
-            safety_acknowledged: automation.approved || safetyAcknowledged,
-            product_plan_reviewed: automation.approved || productPlanReviewed,
-        });
+        submit(
+            'post',
+            `/shopping-lists/${shoppingList.id}/retailer-order-runs`,
+            {
+                shopping_list_revision_id: automation.shopping_list_revision_id,
+                retailer_connection_id: connection.id,
+                idempotency_key: crypto.randomUUID(),
+                safety_acknowledged: automation.approved || safetyAcknowledged,
+                product_plan_reviewed:
+                    automation.approved || productPlanReviewed,
+            },
+        );
     };
     const buildProductPlan = () => {
         if (!connection || !automation.shopping_list_revision_id) {
@@ -2272,110 +1824,40 @@ function CartAutomationSection({
             candidate_index: candidateIndex,
         });
     };
-    const cancel = () => {
-        if (run) {
-            submit('delete', `/automation-runs/${run.id}`);
-        }
-    };
-    const takeover = () => {
-        if (run) {
-            submit('post', `/automation-runs/${run.id}/takeover`);
-        }
-    };
-    const resolve = (choice: AutomationResolutionChoice) => {
-        if (!intervention) {
-            return;
-        }
-
-        submit('put', `/automation-interventions/${intervention.id}`, {
-            choice,
-        });
-    };
-
-    if (!automation.connection_enabled) {
-        return null;
-    }
 
     return (
-        <section className="mt-8" aria-labelledby="woolworths-cart-heading">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="max-w-2xl">
-                    <p className="flex items-center gap-2 text-sm font-medium">
-                        <ShieldCheck className="size-4 text-primary" />
-                        <span id="woolworths-cart-heading">
-                            Woolworths cart
-                        </span>
-                        {connection?.status === 'connected' && (
-                            <Badge variant="secondary">Connected</Badge>
-                        )}
+        <section className="mt-8 border-t pt-6">
+            <p className="flex items-center gap-2 text-sm font-medium">
+                <ShoppingBasket className="size-4" /> Woolworths cart
+            </p>
+            {!connection ? (
+                <div className="mt-4">
+                    <p className="text-sm text-muted-foreground">
+                        Connect your Woolworths account once so Chef can prepare
+                        the cart in a secure browser session.
                     </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {connection?.status === 'connected'
-                            ? `${connection.last_verified_at ? `Verified ${new Date(connection.last_verified_at).toLocaleString('en-AU')}. ` : ''}Resolve only the exceptions below; Chef will handle the routine cart work.`
-                            : 'Chef can prepare and verify this revision in your Woolworths account. You review the result and complete checkout in your normal Woolworths app or browser.'}
-                    </p>
-                </div>
-                {connection && connection.status !== 'disconnected' && (
-                    <Button
-                        className="self-start sm:self-auto"
-                        size="sm"
-                        variant="ghost"
-                        disabled={processing || (run !== null && !runTerminal)}
-                        onClick={() => {
-                            if (
-                                window.confirm(
-                                    'Disconnect Woolworths and delete its saved browser context?',
-                                )
-                            ) {
-                                submit(
-                                    'delete',
-                                    `/retailer-connections/${connection.id}`,
-                                );
-                            }
-                        }}
-                    >
-                        <Unplug /> Disconnect
-                    </Button>
-                )}
-            </div>
-
-            {!connection || connection.status === 'disconnected' ? (
-                <div className="mt-5 rounded-xl bg-muted/40 p-4">
-                    <p className="text-sm font-medium">
-                        Connect Woolworths when the list is ready
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        A private, recording-disabled browser opens for you to
-                        enter your password and MFA. Chef&rsquo;s model is not
-                        attached during sign-in.
-                    </p>
-                    <Button
-                        className="mt-4"
-                        size="sm"
-                        disabled={processing || !automation.ready}
-                        onClick={connect}
-                    >
-                        <LogIn /> Connect Woolworths
-                    </Button>
-                    {!automation.ready && (
-                        <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
-                            {automation.readiness_reasons.map((reason) => (
-                                <li key={reason}>{reason}</li>
-                            ))}
-                        </ul>
+                    {automation.connection_enabled ? (
+                        <Button
+                            className="mt-4"
+                            size="sm"
+                            disabled={processing}
+                            onClick={connect}
+                        >
+                            <LogIn /> Connect Woolworths
+                        </Button>
+                    ) : (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Woolworths connection is disabled in this
+                            environment.
+                        </p>
                     )}
                 </div>
-            ) : connection.status !== 'connected' ? (
-                <div className="mt-5 rounded-xl bg-muted/40 p-4">
-                    <p className="text-sm font-medium">
-                        {connection.status === 'pending_login' ||
-                        connection.status === 'checking'
-                            ? 'Finish the secure Woolworths sign-in'
-                            : 'Woolworths needs to be reconnected'}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        Cart automation remains stopped until a deterministic
-                        protected-page check passes.
+            ) : connection.status === 'reauthentication_required' ||
+              connection.status === 'pending_login' ||
+              connection.status === 'checking' ? (
+                <div className="mt-4">
+                    <p className="text-sm text-muted-foreground">
+                        Finish secure Woolworths sign-in, then return here.
                     </p>
                     <Button
                         className="mt-4"
@@ -2388,42 +1870,24 @@ function CartAutomationSection({
                 </div>
             ) : (
                 <div className="mt-5">
-                    {(!run || runTerminal) && (
-                        <CartProductPreflight
-                            approved={automation.approved}
-                            cartMutationEnabled={
-                                automation.cart_mutation_enabled
-                            }
-                            onBuildPlan={buildProductPlan}
-                            onPrepare={prepare}
-                            onProductPlanReviewedChange={setProductPlanReviewed}
-                            onSelectCandidate={selectProductCandidate}
-                            onSafetyAcknowledgedChange={setSafetyAcknowledged}
-                            preflight={automation.preflight}
-                            processing={processing}
-                            productPlan={automation.product_plan}
-                            productPlanReviewed={productPlanReviewed}
-                            ready={automation.ready}
-                            retailers={retailers}
-                            safetyAcknowledged={safetyAcknowledged}
-                            shoppingList={shoppingList}
-                        />
-                    )}
+                    <CartProductPreflight
+                        approved={automation.approved}
+                        cartMutationEnabled={automation.cart_mutation_enabled}
+                        onBuildPlan={buildProductPlan}
+                        onPrepare={prepare}
+                        onProductPlanReviewedChange={setProductPlanReviewed}
+                        onSelectCandidate={selectProductCandidate}
+                        onSafetyAcknowledgedChange={setSafetyAcknowledged}
+                        preflight={automation.preflight}
+                        processing={processing}
+                        productPlan={automation.product_plan}
+                        productPlanReviewed={productPlanReviewed}
+                        ready={automation.ready}
+                        retailers={retailers}
+                        safetyAcknowledged={safetyAcknowledged}
+                        shoppingList={shoppingList}
+                    />
                 </div>
-            )}
-
-            {run && (
-                <CartAutomationRunPanel
-                    intervention={intervention}
-                    processing={processing}
-                    run={run}
-                    runTerminal={runTerminal}
-                    onCancel={cancel}
-                    onReauthenticate={reauthenticate}
-                    onResolve={resolve}
-                    onTakeover={takeover}
-                    shoppingList={shoppingList}
-                />
             )}
         </section>
     );
@@ -2760,11 +2224,6 @@ function ReadyShoppingList({
                     listId={shoppingList.id}
                     retailers={retailers}
                     orders={shoppingList.orders}
-                    cartSnapshot={
-                        cartAutomation.run?.status === 'ready_for_review'
-                            ? cartAutomation.run.snapshot
-                            : null
-                    }
                 />
             )}
         </>
@@ -2823,10 +2282,6 @@ export default function ShoppingShow({
     const recipesPreparing = recipePreparation.preparing > 0;
     const preparationActive =
         recipesPreparing || shoppingList?.generation_status === 'processing';
-    const automationPolling = Boolean(
-        cartAutomation.run &&
-        activeAutomationStatuses.has(cartAutomation.run.status),
-    );
     const retailerOrderPolling = Boolean(
         retailerOrderRun &&
         activeRetailerOrderStatuses.has(retailerOrderRun.status),
@@ -2835,10 +2290,7 @@ export default function ShoppingShow({
         shoppingList?.generation_status === 'pending' &&
         shoppingList.generation_failure_code === null;
     const shouldPoll =
-        preparationActive ||
-        generationQueued ||
-        automationPolling ||
-        retailerOrderPolling;
+        preparationActive || generationQueued || retailerOrderPolling;
 
     useEffect(() => {
         if (!shouldPoll) {

@@ -1,6 +1,5 @@
 <?php
 
-use App\Actions\Automation\StartCartPreparation;
 use App\Actions\Automation\StartRetailerConnection;
 use App\Actions\Automation\VerifyRetailerConnection;
 use App\Actions\Conversations\CreateUserMessage;
@@ -24,13 +23,14 @@ use App\Enums\RetailerOrderRunItemStatus;
 use App\Enums\RetailerOrderRunStatus;
 use App\Enums\ShoppingListGenerationStatus;
 use App\Enums\ShoppingListItemSourceKind;
+use App\Models\MealPlan;
 use App\Models\Retailer;
 use App\Models\RetailerConnection;
 use App\Models\RetailerOrderRun;
 use App\Models\RetailerOrderRunItem;
+use App\Models\ShoppingList;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -413,99 +413,6 @@ it('turns a catalogue outage into one compact retry instead of a manual item lis
         ->assertNoJavaScriptErrors();
 });
 
-it('reviews a non-empty cart decision and reconciled normal-Woolworths handoff', function () {
-    $workspace = browserShoppingWorkspace();
-    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    config()->set('automation.connection_enabled', true);
-    config()->set('automation.cart_mutation_enabled', true);
-    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
-    putenv('WOOLWORTHS_CART_MUTATION_ENABLED=true');
-    $session = app(StartRetailerConnection::class)->handle(
-        $workspace['user']->currentTeam,
-        $workspace['user'],
-    );
-    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
-    $connection = $session->retailerConnection->refresh();
-    $executor = app(ComputerExecutor::class);
-    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
-    $executor->cartLines = [[
-        'external_product_id' => 'browser-existing-bread',
-        'product_name' => 'Wholemeal bread',
-        'quantity' => 1,
-        'unit' => 'loaf',
-        'unit_price' => 4,
-        'total_price' => 4,
-    ]];
-    $run = app(StartCartPreparation::class)->handle(
-        $list,
-        $list->revisions()->where('revision', $list->revision)->firstOrFail(),
-        $connection,
-        $workspace['user'],
-        (string) Str::uuid(),
-        true,
-        true,
-    )->refresh();
-    $this->actingAs($workspace['user']);
-
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
-        ->assertSee('Woolworths already has items in this account’s cart')
-        ->assertSee('Wholemeal bread × 1')
-        ->assertSee('Merge carts')
-        ->assertSee('Replace existing cart')
-        ->pressAndWaitFor('Merge carts')
-        ->assertSee('Your cart is ready')
-        ->click('summary:has-text("Review cart products")')
-        ->assertSee('Wholemeal bread')
-        ->assertSee('pre existing')
-        ->pressAndWaitFor('Delivery')
-        ->assertSee('Choose a delivery time & checkout')
-        ->assertSee('normal-app cart synchronisation release trial is not yet recorded as proven')
-        ->assertNoJavaScriptErrors();
-
-    expect($run->refresh()->latestSnapshot)->not->toBeNull();
-});
-
-it('lets the connection owner pause for recording-disabled manual takeover', function () {
-    $workspace = browserShoppingWorkspace();
-    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    config()->set('automation.connection_enabled', true);
-    config()->set('automation.cart_mutation_enabled', true);
-    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
-    putenv('WOOLWORTHS_CART_MUTATION_ENABLED=true');
-    $session = app(StartRetailerConnection::class)->handle(
-        $workspace['user']->currentTeam,
-        $workspace['user'],
-    );
-    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
-    Queue::fake();
-    $run = app(StartCartPreparation::class)->handle(
-        $list,
-        $list->revisions()->where('revision', $list->revision)->firstOrFail(),
-        $session->retailerConnection->refresh(),
-        $workspace['user'],
-        (string) Str::uuid(),
-        true,
-        true,
-    );
-    $this->actingAs($workspace['user']);
-
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
-        ->resize(390, 844)
-        ->assertSee('Pause and take over')
-        ->pressAndWaitFor('Pause and take over')
-        ->assertSee('You control the Woolworths cart')
-        ->assertSee('Its model is disconnected while you inspect or edit the cart')
-        ->assertSee('Recording disabled')
-        ->assertPresent('iframe[title="Manual Woolworths cart control"]')
-        ->assertNotPresent('iframe[title="Manual Woolworths cart control"][allow*="clipboard"]')
-        ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
-        ->pressAndWaitFor('Reconcile and resume')
-        ->assertSee('queued')
-        ->assertNoJavaScriptErrors();
-
-    expect($run->refresh()->status->value)->toBe('queued');
-});
-
 it('keeps a failed MFA probe in human control and verifies it before returning to Shopping', function () {
     $workspace = browserShoppingWorkspace();
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
@@ -565,83 +472,11 @@ it('shows a recoverable retry when the protected-cart probe times out', function
         ->assertNoJavaScriptErrors();
 });
 
-it('shows bounded progress and lets the owner cancel an active run', function () {
-    $workspace = browserShoppingWorkspace();
-    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    config()->set('automation.connection_enabled', true);
-    config()->set('automation.cart_mutation_enabled', true);
-    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
-    putenv('WOOLWORTHS_CART_MUTATION_ENABLED=true');
-    $session = app(StartRetailerConnection::class)->handle(
-        $workspace['user']->currentTeam,
-        $workspace['user'],
-    );
-    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
-    Queue::fake();
-    $run = app(StartCartPreparation::class)->handle(
-        $list,
-        $list->revisions()->where('revision', $list->revision)->firstOrFail(),
-        $session->retailerConnection->refresh(),
-        $workspace['user'],
-        (string) Str::uuid(),
-        true,
-        true,
-    );
-    $this->actingAs($workspace['user']);
-
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
-        ->assertSee('checking connection')
-        ->assertSee('0 of 2 items')
-        ->assertSee('Chef verifies the remote cart after every item')
-        ->pressAndWaitFor('Cancel run')
-        ->assertSee('cancelled')
-        ->assertNoJavaScriptErrors();
-
-    expect($run->refresh()->status->value)->toBe('cancelled');
-});
-
-it('surfaces bot detection as a calm intervention before cancellation', function () {
-    $workspace = browserShoppingWorkspace();
-    $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    config()->set('automation.connection_enabled', true);
-    config()->set('automation.cart_mutation_enabled', true);
-    putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
-    putenv('WOOLWORTHS_CART_MUTATION_ENABLED=true');
-    $session = app(StartRetailerConnection::class)->handle(
-        $workspace['user']->currentTeam,
-        $workspace['user'],
-    );
-    app(VerifyRetailerConnection::class)->handle($session, $workspace['user']);
-    $executor = app(ComputerExecutor::class);
-    expect($executor)->toBeInstanceOf(FakeComputerExecutor::class);
-    $executor->cartBotDetected = true;
-    $run = app(StartCartPreparation::class)->handle(
-        $list,
-        $list->revisions()->where('revision', $list->revision)->firstOrFail(),
-        $session->retailerConnection->refresh(),
-        $workspace['user'],
-        (string) Str::uuid(),
-        true,
-        true,
-    );
-    $this->actingAs($workspace['user']);
-
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
-        ->resize(390, 844)
-        ->assertSee('Woolworths presented bot detection')
-        ->pressAndWaitFor('Cancel run')
-        ->assertSee('cancelled')
-        ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
-        ->assertNoJavaScriptErrors();
-
-    expect($run->refresh()->status->value)->toBe('cancelled');
-});
-
 /**
  * @return array{
  *     user: User,
- *     plan: \App\Models\MealPlan,
- *     list: \App\Models\ShoppingList,
+ *     plan: MealPlan,
+ *     list: ShoppingList,
  *     run: RetailerOrderRun,
  *     slot: array<string, mixed>,
  * }

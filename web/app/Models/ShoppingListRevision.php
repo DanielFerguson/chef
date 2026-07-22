@@ -31,12 +31,6 @@ class ShoppingListRevision extends Model
         return $this->belongsTo(User::class);
     }
 
-    /** @return HasMany<AutomationRun, $this> */
-    public function automationRuns(): HasMany
-    {
-        return $this->hasMany(AutomationRun::class);
-    }
-
     /** @return HasMany<CartProductPlan, $this> */
     public function cartProductPlans(): HasMany
     {

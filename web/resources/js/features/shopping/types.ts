@@ -141,126 +141,60 @@ export type ProductPreference = {
     retailer: { id: number; name: string; slug: string } | null;
 };
 
-export type AutomationRunItem = {
-    id: number;
-    position: number;
-    name: string;
-    quantity: number | null;
-    unit: string | null;
-    status:
-        | 'pending'
-        | 'searching'
-        | 'matched'
-        | 'substituted'
-        | 'unavailable'
-        | 'skipped'
-        | 'awaiting_decision'
-        | 'failed';
-    product: {
-        external_product_id: string | null;
-        product_name: string;
-        quantity: number | null;
-        unit: string | null;
-        unit_price: number | null;
-        total_price: number | null;
-    } | null;
-    failure_message: string | null;
-};
-
-export type CartSnapshotLine = {
-    id: number;
-    classification:
-        | 'matched'
-        | 'substituted'
-        | 'unavailable'
-        | 'quantity_adjusted'
-        | 'price_changed'
-        | 'pre_existing'
-        | 'unresolved';
-    product_name: string;
-    quantity: number | string | null;
-    unit: string | null;
-    unit_price: number | string | null;
-    total_price: number | string | null;
-    pre_existing: boolean;
-    metadata: Record<string, unknown> | null;
-};
-
-export type ObservedCartLine = {
-    external_product_id: string | null;
-    product_name: string;
-    quantity: number | string | null;
-    unit: string | null;
-    unit_price: number | string | null;
-    total_price: number | string | null;
-};
-
-export type AutomationRun = {
-    id: number;
-    status:
-        | 'checking_connection'
-        | 'awaiting_reauthentication'
-        | 'inspecting_existing_cart'
-        | 'awaiting_existing_cart_decision'
-        | 'queued'
-        | 'running'
-        | 'awaiting_item_decision'
-        | 'reconciling'
-        | 'ready_for_review'
-        | 'superseded'
-        | 'cancelled'
-        | 'failed'
-        | 'expired';
-    shopping_list_revision: number;
-    shopping_list_revision_id: number;
-    current_shopping_list_revision: number;
-    revision_diverged: boolean;
-    existing_cart_decision: 'merge' | 'replace' | 'cancel' | null;
-    started_at: string | null;
-    finished_at: string | null;
-    expires_at: string | null;
-    failure_message: string | null;
-    progress: {
-        resolved: number;
-        total: number;
-        actions_taken: number;
-        max_actions: number | null;
-    };
-    items: AutomationRunItem[];
-    intervention: {
-        id: number;
-        type:
-            | 'reauthentication'
-            | 'existing_cart'
-            | 'item_decision'
-            | 'price_limit'
-            | 'substitution'
-            | 'bot_detection'
-            | 'sensitive_screen'
-            | 'cart_changed'
-            | 'manual_takeover';
-        payload: {
-            message?: string;
-            lines?: ObservedCartLine[];
-            cart_total?: number | null;
-            currency?: string;
-            product?: Record<string, unknown> | null;
-        } | null;
-        requested_at: string;
-        automation_run_item_id: number | null;
-        takeover_url: string | null;
-    } | null;
-    snapshot: {
-        id: number;
-        currency: string;
-        chef_subtotal: number | string | null;
-        cart_total: number | string | null;
-        captured_at: string;
-        lines: CartSnapshotLine[];
-    } | null;
-    can_open_woolworths_cart: boolean;
-    open_woolworths_cart_url: string | null;
+export type CartAutomation = {
+    approved: boolean;
+    connection_enabled: boolean;
+    cart_mutation_enabled: boolean;
     normal_app_sync_proven: boolean;
+    ready: boolean;
+    readiness_reasons: string[];
+    shopping_list_revision_id: number | null;
+    preflight: {
+        total_items: number;
+        matched_items: number;
+        automatic_search_items: number;
+        automatic_search_item_names: string[];
+        requires_exact_matches: boolean;
+        can_prepare: boolean;
+        constraints: {
+            id: number;
+            kind: string;
+            subject: string;
+            severity: string | null;
+            person: string | null;
+        }[];
+    };
+    product_plan: {
+        id: number;
+        status: 'needs_review' | 'ready' | 'frozen' | 'superseded' | 'failed';
+        exact_items: number;
+        ambiguous_items: number;
+        unresolved_items: number;
+        discovery_failed: boolean;
+        discovery_ms: number | null;
+        items: {
+            id: number;
+            shopping_list_item_id: number | null;
+            name: string;
+            status: 'exact' | 'ambiguous' | 'unresolved';
+            decision_reason: string | null;
+            selected_product: Record<string, unknown> | null;
+            candidates: Record<string, unknown>[];
+        }[];
+    } | null;
+    connection: {
+        id: number;
+        status:
+            | 'pending_login'
+            | 'checking'
+            | 'connected'
+            | 'reauthentication_required'
+            | 'disconnected'
+            | 'revoked'
+            | 'error';
+        owner_user_id: number;
+        last_verified_at: string | null;
+    } | null;
 };
 
 export type RetailerOrderRunItem = {
@@ -340,63 +274,6 @@ export type RetailerOrderRun = {
     items: RetailerOrderRunItem[];
     can_open_woolworths_cart: boolean;
     open_woolworths_cart_url: string | null;
-};
-
-export type CartAutomation = {
-    approved: boolean;
-    connection_enabled: boolean;
-    cart_mutation_enabled: boolean;
-    normal_app_sync_proven: boolean;
-    ready: boolean;
-    readiness_reasons: string[];
-    shopping_list_revision_id: number | null;
-    preflight: {
-        total_items: number;
-        matched_items: number;
-        automatic_search_items: number;
-        automatic_search_item_names: string[];
-        requires_exact_matches: boolean;
-        can_prepare: boolean;
-        constraints: {
-            id: number;
-            kind: string;
-            subject: string;
-            severity: string | null;
-            person: string | null;
-        }[];
-    };
-    product_plan: {
-        id: number;
-        status: 'needs_review' | 'ready' | 'frozen' | 'superseded' | 'failed';
-        exact_items: number;
-        ambiguous_items: number;
-        unresolved_items: number;
-        discovery_failed: boolean;
-        discovery_ms: number | null;
-        items: {
-            id: number;
-            shopping_list_item_id: number | null;
-            name: string;
-            status: 'exact' | 'ambiguous' | 'unresolved';
-            decision_reason: string | null;
-            selected_product: Record<string, unknown> | null;
-            candidates: Record<string, unknown>[];
-        }[];
-    } | null;
-    connection: {
-        id: number;
-        status:
-            | 'pending_login'
-            | 'checking'
-            | 'connected'
-            | 'reauthentication_required'
-            | 'disconnected'
-            | 'revoked'
-            | 'error';
-        owner_user_id: number;
-        last_verified_at: string | null;
-    } | null;
-    run: AutomationRun | null;
 };
 
 export type ShoppingWorkspace = {

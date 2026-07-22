@@ -2,10 +2,11 @@
 
 namespace App\Actions\Automation;
 
+use App\Actions\Retailer\CancelRetailerOrderRun;
 use App\Automation\Contracts\BrowserSessionProvider;
-use App\Enums\AutomationRunStatus;
 use App\Enums\BrowserSessionStatus;
 use App\Enums\RetailerConnectionStatus;
+use App\Enums\RetailerOrderRunStatus;
 use App\Models\RetailerConnection;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -16,7 +17,7 @@ class DisconnectRetailerConnection
 {
     public function __construct(
         private readonly BrowserSessionProvider $provider,
-        private readonly CancelAutomationRun $cancelRun,
+        private readonly CancelRetailerOrderRun $cancelOrderRun,
     ) {}
 
     public function handle(RetailerConnection $connection, User $user): void
@@ -25,10 +26,10 @@ class DisconnectRetailerConnection
             throw new AuthorizationException('Only the connection owner can disconnect Woolworths.');
         }
 
-        $activeStatus = collect(AutomationRunStatus::cases())->reject->isTerminal()->map->value->all();
+        $activeStatuses = collect(RetailerOrderRunStatus::cases())->reject->isTerminal()->map->value->all();
 
-        foreach ($connection->runs()->whereIn('status', $activeStatus)->get() as $run) {
-            $this->cancelRun->handle($run, $user);
+        foreach ($connection->orderRuns()->whereIn('status', $activeStatuses)->get() as $run) {
+            $this->cancelOrderRun->handle($run, $user);
         }
 
         $sessions = $connection->browserSessions()

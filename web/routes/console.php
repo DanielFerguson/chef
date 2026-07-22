@@ -63,12 +63,13 @@ Artisan::command('chef:automation:status', function (): int {
     $checks = [
         'Browserbase API key' => filled(config('services.browserbase.api_key')),
         'Browserbase project ID' => filled(config('services.browserbase.project_id')),
-        'OpenAI API key' => filled(config('services.openai.api_key')),
         'Compiled browser actor' => collect([
             config('services.chef_automation.worker_path'),
             config('services.chef_automation.actor_path'),
             config('services.chef_automation.actor_launcher_path'),
         ])->every(fn ($path): bool => is_string($path) && is_file($path)),
+        'Compiled Stagehand worker' => is_string(config('services.chef_automation.stagehand_worker_path'))
+            && is_file(config('services.chef_automation.stagehand_worker_path')),
     ];
 
     $this->table(['Requirement', 'Status'], collect($checks)
@@ -89,7 +90,6 @@ Artisan::command('chef:automation:status', function (): int {
         (int) config('services.browserbase.viewport_height'),
     ));
     $this->line('Normal-app sync proof: '.(config('automation.normal_app_sync_proven') ? 'recorded' : 'not recorded'));
-    $this->line('Computer-use model: '.config('services.openai.computer_use_model'));
     $this->line('Automation queue: '.config('automation.queue'));
 
     $providerReady = $checks['Browserbase API key'] && $checks['Browserbase project ID'];

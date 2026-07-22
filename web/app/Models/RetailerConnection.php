@@ -54,12 +54,6 @@ class RetailerConnection extends Model
         return $this->belongsTo(User::class, 'owner_user_id');
     }
 
-    /** @return HasMany<AutomationRun, $this> */
-    public function runs(): HasMany
-    {
-        return $this->hasMany(AutomationRun::class);
-    }
-
     /** @return HasMany<RetailerOrderRun, $this> */
     public function orderRuns(): HasMany
     {

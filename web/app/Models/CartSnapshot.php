@@ -13,8 +13,7 @@ use LogicException;
 /**
  * @property int $id
  * @property int $team_id
- * @property int $automation_run_id
- * @property int $created_by_user_id
+ * @property int|null $created_by_user_id
  * @property int $version
  * @property string $currency
  * @property numeric-string|null $chef_subtotal
@@ -22,7 +21,7 @@ use LogicException;
  * @property string $checksum
  * @property Carbon $captured_at
  */
-#[Fillable(['team_id', 'automation_run_id', 'created_by_user_id', 'version', 'currency', 'chef_subtotal', 'cart_total', 'checksum', 'captured_at'])]
+#[Fillable(['team_id', 'created_by_user_id', 'version', 'currency', 'chef_subtotal', 'cart_total', 'checksum', 'captured_at'])]
 class CartSnapshot extends Model
 {
     use ResolvesWithinCurrentTeam;
@@ -36,12 +35,6 @@ class CartSnapshot extends Model
     public function team(): BelongsTo
     {
         return $this->belongsTo(Team::class);
-    }
-
-    /** @return BelongsTo<AutomationRun, $this> */
-    public function run(): BelongsTo
-    {
-        return $this->belongsTo(AutomationRun::class, 'automation_run_id');
     }
 
     /** @return BelongsTo<User, $this> */

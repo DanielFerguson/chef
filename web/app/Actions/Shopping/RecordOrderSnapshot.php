@@ -2,7 +2,6 @@
 
 namespace App\Actions\Shopping;
 
-use App\Enums\AutomationRunStatus;
 use App\Enums\ShoppingListStatus;
 use App\Models\CartSnapshot;
 use App\Models\Order;
@@ -30,21 +29,11 @@ class RecordOrderSnapshot
         }
 
         if ($cartSnapshot !== null) {
-            $cartSnapshot->loadMissing('run.retailerConnection', 'lines.runItem');
-            $cartRetailer = $cartSnapshot->run->retailerConnection->retailer_id;
+            $cartSnapshot->loadMissing('lines');
 
-            if ($cartSnapshot->team_id !== $shoppingList->team_id
-                || $cartSnapshot->run->shopping_list_id !== $shoppingList->id
-                || $cartSnapshot->run->status !== AutomationRunStatus::ReadyForReview
-                || ! $this->snapshotMatchesCurrentList($shoppingList, $cartSnapshot)) {
-                throw ValidationException::withMessages(['cart_snapshot_id' => 'Use a verified cart from this exact shopping-list revision.']);
+            if ($cartSnapshot->team_id !== $shoppingList->team_id) {
+                throw ValidationException::withMessages(['cart_snapshot_id' => 'Use a verified cart from this family.']);
             }
-
-            if ($retailer !== null && $retailer->id !== $cartRetailer) {
-                throw ValidationException::withMessages(['retailer_id' => 'The retailer must match the verified cart.']);
-            }
-
-            $retailer ??= Retailer::query()->findOrFail($cartRetailer);
         }
 
         return DB::transaction(function () use ($shoppingList, $user, $actualTotal, $retailer, $cartSnapshot): Order {
@@ -71,7 +60,6 @@ class RecordOrderSnapshot
                 foreach ($cartSnapshot->lines->where('pre_existing', false)->filter(
                     fn ($line): bool => ! in_array($line->classification->value, ['unavailable', 'unresolved'], true),
                 ) as $line) {
-                    $requestedName = $line->runItem?->requirement_snapshot['name'] ?? null;
                     $order->lines()->create([
                         'team_id' => $shoppingList->team_id,
                         'shopping_list_item_id' => $line->shopping_list_item_id,
@@ -83,9 +71,7 @@ class RecordOrderSnapshot
                         'quantity' => max(1, (int) ceil((float) ($line->quantity ?? 1))),
                         'unit_price' => $line->unit_price,
                         'total_price' => $line->total_price,
-                        'substituted_from_name' => $line->classification->value === 'substituted'
-                            ? $requestedName
-                            : null,
+                        'substituted_from_name' => null,
                     ]);
                 }
 
@@ -129,38 +115,5 @@ class RecordOrderSnapshot
 
             return $order->load('lines');
         });
-    }
-
-    private function snapshotMatchesCurrentList(ShoppingList $shoppingList, CartSnapshot $cartSnapshot): bool
-    {
-        $frozenItems = $cartSnapshot->run->frozen_snapshot['items'] ?? null;
-
-        if (! is_array($frozenItems)) {
-            return false;
-        }
-
-        $frozen = collect($frozenItems)
-            ->map(fn (array $item): array => [
-                'id' => is_numeric($item['shopping_list_item_id'] ?? null) ? (int) $item['shopping_list_item_id'] : null,
-                'name' => (string) ($item['name'] ?? ''),
-                'quantity' => is_numeric($item['quantity'] ?? null) ? (float) $item['quantity'] : null,
-                'unit' => filled($item['unit'] ?? null) ? (string) $item['unit'] : null,
-            ])
-            ->sortBy('id')
-            ->values();
-        $current = $shoppingList->items()
-            ->where('included', true)
-            ->where('in_pantry', false)
-            ->get()
-            ->map(fn ($item): array => [
-                'id' => $item->id,
-                'name' => $item->name,
-                'quantity' => is_numeric($item->quantity) ? (float) $item->quantity : null,
-                'unit' => filled($item->unit) ? (string) $item->unit : null,
-            ])
-            ->sortBy('id')
-            ->values();
-
-        return $frozen->all() === $current->all();
     }
 }

@@ -75,12 +75,6 @@ class ShoppingList extends Model
         return $this->hasMany(Order::class)->orderByDesc('recorded_at');
     }
 
-    /** @return HasMany<AutomationRun, $this> */
-    public function automationRuns(): HasMany
-    {
-        return $this->hasMany(AutomationRun::class)->latest();
-    }
-
     /** @return HasMany<RetailerOrderRun, $this> */
     public function retailerOrderRuns(): HasMany
     {
