@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -93,6 +94,18 @@ class RetailerOrderRun extends Model
     public function cartProductPlan(): BelongsTo
     {
         return $this->belongsTo(CartProductPlan::class);
+    }
+
+    /** @return HasMany<RetailerOrderRunItem, $this> */
+    public function items(): HasMany
+    {
+        return $this->hasMany(RetailerOrderRunItem::class)->orderBy('position');
+    }
+
+    /** @return HasMany<RetailerOrderStep, $this> */
+    public function steps(): HasMany
+    {
+        return $this->hasMany(RetailerOrderStep::class)->orderBy('sequence');
     }
 
     protected function casts(): array
