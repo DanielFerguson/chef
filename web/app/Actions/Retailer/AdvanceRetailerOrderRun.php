@@ -77,6 +77,7 @@ class AdvanceRetailerOrderRun
                     ? $auth->reason
                     : 'Woolworths needs to be reconnected before cart preparation can continue.',
             ]);
+            $this->closeBrowserSession->handle($session);
 
             return new RetailerOrderAdvanceResult(false, RetailerOrderRunStatus::AwaitingReauthentication->value);
         }

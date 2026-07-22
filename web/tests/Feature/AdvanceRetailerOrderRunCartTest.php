@@ -86,10 +86,18 @@ it('pauses for reauthentication when the auth probe fails', function () {
 
     $result = app(AdvanceRetailerOrderRun::class)->handle($fixture['run']);
 
+    $session = BrowserSession::query()
+        ->where('retailer_connection_id', $fixture['connection']->id)
+        ->latest('id')
+        ->first();
+
     expect($result->shouldContinue)->toBeFalse()
         ->and($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::AwaitingReauthentication)
         ->and($fixture['run']->failure_message)->toBe('Woolworths session expired.')
-        ->and($fixture['connection']->refresh()->status)->toBe(RetailerConnectionStatus::ReauthenticationRequired);
+        ->and($fixture['connection']->refresh()->status)->toBe(RetailerConnectionStatus::ReauthenticationRequired)
+        ->and($session)->not->toBeNull()
+        ->and($session->status)->toBe(BrowserSessionStatus::Closed)
+        ->and($fixture['connection']->refresh()->lease_owner)->toBeNull();
 });
 
 it('awaits a cart decision when the remote cart already has items', function () {

@@ -60,6 +60,12 @@ class RetailerConnection extends Model
         return $this->hasMany(AutomationRun::class);
     }
 
+    /** @return HasMany<RetailerOrderRun, $this> */
+    public function orderRuns(): HasMany
+    {
+        return $this->hasMany(RetailerOrderRun::class);
+    }
+
     /** @return HasMany<BrowserSession, $this> */
     public function browserSessions(): HasMany
     {

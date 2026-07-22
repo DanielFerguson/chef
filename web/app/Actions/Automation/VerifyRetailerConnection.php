@@ -11,8 +11,11 @@ use App\Enums\AutomationRunStatus;
 use App\Enums\BrowserSessionPurpose;
 use App\Enums\BrowserSessionStatus;
 use App\Enums\RetailerConnectionStatus;
+use App\Enums\RetailerOrderRunStatus;
 use App\Jobs\AdvanceAutomationRunJob;
+use App\Jobs\AdvanceRetailerOrderRunJob;
 use App\Models\BrowserSession;
+use App\Models\RetailerOrderRun;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Log;
@@ -78,12 +81,19 @@ class VerifyRetailerConnection
             ]);
         }
 
-        $run = $connection->runs()
-            ->where('status', AutomationRunStatus::AwaitingReauthentication->value)
+        $orderRun = $connection->orderRuns()
+            ->where('status', RetailerOrderRunStatus::AwaitingReauthentication->value)
             ->oldest('id')
             ->first();
 
-        if ($run === null) {
+        $automationRun = $orderRun === null
+            ? $connection->runs()
+                ->where('status', AutomationRunStatus::AwaitingReauthentication->value)
+                ->oldest('id')
+                ->first()
+            : null;
+
+        if ($orderRun === null && $automationRun === null) {
             $session->update([
                 'purpose' => BrowserSessionPurpose::CartPreparation,
                 'status' => BrowserSessionStatus::AgentControl,
@@ -92,9 +102,19 @@ class VerifyRetailerConnection
                     'verified_for_cart_preparation_at' => now()->toIso8601String(),
                 ],
             ]);
+        } elseif ($orderRun !== null) {
+            $session->update([
+                'purpose' => BrowserSessionPurpose::CartPreparation,
+                'status' => BrowserSessionStatus::AgentControl,
+                'metadata' => [
+                    ...($session->metadata ?? []),
+                    'resumed_after_reauthentication' => true,
+                    'retailer_order_run_id' => $orderRun->id,
+                ],
+            ]);
         } else {
             $session->update([
-                'automation_run_id' => $run->id,
+                'automation_run_id' => $automationRun->id,
                 'purpose' => BrowserSessionPurpose::CartPreparation,
                 'status' => BrowserSessionStatus::AgentControl,
                 'metadata' => [
@@ -110,8 +130,10 @@ class VerifyRetailerConnection
             'disconnected_at' => null,
         ]);
 
-        if ($run !== null) {
-            $run->interventions()
+        if ($orderRun !== null) {
+            $this->resumeOrderRun($orderRun);
+        } elseif ($automationRun !== null) {
+            $automationRun->interventions()
                 ->where('type', AutomationInterventionType::Reauthentication->value)
                 ->where('status', AutomationInterventionStatus::Pending->value)
                 ->update([
@@ -120,10 +142,21 @@ class VerifyRetailerConnection
                     'resolved_by_user_id' => $user->id,
                     'resolved_at' => now(),
                 ]);
-            $this->transition->handle($run, AutomationRunStatus::Queued);
-            AdvanceAutomationRunJob::dispatch($run->id)
+            $this->transition->handle($automationRun, AutomationRunStatus::Queued);
+            AdvanceAutomationRunJob::dispatch($automationRun->id)
                 ->onQueue((string) config('automation.queue', 'automation'));
         }
+    }
+
+    private function resumeOrderRun(RetailerOrderRun $run): void
+    {
+        $run->update([
+            'status' => RetailerOrderRunStatus::PreparingCart,
+            'failure_message' => null,
+        ]);
+
+        AdvanceRetailerOrderRunJob::dispatch($run->id)
+            ->onQueue((string) config('automation.queue', 'automation'));
     }
 
     private function yieldBackToHuman(BrowserSession $session): void
