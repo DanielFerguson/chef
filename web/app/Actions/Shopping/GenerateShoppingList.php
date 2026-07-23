@@ -123,12 +123,10 @@ class GenerateShoppingList
             ]);
         }
 
-        $resolvedMealIds = $mealPlan->shoppingList?->mealResolutions()->pluck('planned_meal_id') ?? collect();
         $unresolvedCookableMeals = $mealPlan->plannedMeals()
             ->where('status', 'planned')
             ->where('type', 'custom')
             ->whereNull('recipe_version_id')
-            ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
             ->count();
 
         if ($unresolvedCookableMeals > 0) {
@@ -323,7 +321,7 @@ class GenerateShoppingList
                 $preservedItem->update(['position' => $position++]);
             }
 
-            $this->removeObsoleteMealResolutions($lockedPlan, $lockedList);
+            $this->removeObsoleteMealItems($lockedPlan, $lockedList);
             $lockedList->update([
                 'source_plan_revision' => $lockedPlan->revision,
                 'status' => ShoppingListStatus::Draft,
@@ -376,14 +374,13 @@ class GenerateShoppingList
         return [$bySignature, $byIdentity];
     }
 
-    private function removeObsoleteMealResolutions(MealPlan $mealPlan, ShoppingList $shoppingList): void
+    private function removeObsoleteMealItems(MealPlan $mealPlan, ShoppingList $shoppingList): void
     {
         $currentCustomMealIds = $mealPlan->plannedMeals()
             ->where('status', 'planned')
             ->where('type', 'custom')
             ->whereNull('recipe_version_id')
             ->pluck('id');
-        $shoppingList->mealResolutions()->whereNotIn('planned_meal_id', $currentCustomMealIds)->delete();
         $obsoleteMealItems = $shoppingList->items()
             ->where('source_kind', ShoppingListItemSourceKind::PlannedMeal)
             ->whereHas('sources', fn ($query) => $query->whereNotIn('planned_meal_id', $currentCustomMealIds))

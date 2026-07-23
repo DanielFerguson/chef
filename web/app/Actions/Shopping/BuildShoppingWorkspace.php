@@ -58,19 +58,16 @@ class BuildShoppingWorkspace
             'shoppingList.items.sources.plannedMeal.mealSlot',
             'shoppingList.items.productMatch.retailProduct.retailer',
             'shoppingList.revisions' => fn ($query) => $query->limit(10),
-            'shoppingList.mealResolutions',
             'shoppingList.orders.retailer',
             'plannedMeals.mealSlot',
             'plannedMeals.recipeVersion:id,team_id,recipe_id,title,servings',
         ]);
 
         $shoppingList = $mealPlan->shoppingList;
-        $resolvedMealIds = $shoppingList?->mealResolutions->pluck('planned_meal_id') ?? collect();
         $missingMeals = $mealPlan->plannedMeals
             ->filter(fn ($meal) => $meal->getRawOriginal('status') === PlannedMealStatus::Planned->value
                 && $meal->getRawOriginal('type') === PlannedMealType::Custom->value
-                && $meal->recipe_version_id === null
-                && ! $resolvedMealIds->contains($meal->id))
+                && $meal->recipe_version_id === null)
             ->values()
             ->map(fn (PlannedMeal $meal): array => [
                 'id' => $meal->id,

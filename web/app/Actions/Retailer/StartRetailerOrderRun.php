@@ -235,12 +235,10 @@ class StartRetailerOrderRun
             throw ValidationException::withMessages(['connection' => 'Use this family’s Woolworths connection.']);
         }
 
-        $resolvedMealIds = $shoppingList->mealResolutions()->pluck('planned_meal_id');
         $unresolvedRecipes = $shoppingList->mealPlan->plannedMeals()
             ->where('status', 'planned')
             ->where('type', 'custom')
             ->whereNull('recipe_version_id')
-            ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
             ->exists();
 
         if ($unresolvedRecipes) {

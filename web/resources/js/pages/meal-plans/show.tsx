@@ -259,16 +259,12 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                         </div>
                     ) : (
                         <div className="flex min-h-0 flex-1 flex-col">
-                            <div className="min-h-0 flex-1 overflow-y-auto">
-                                <PlanWorkspace
-                                    workspace={workspace}
-                                    view={
-                                        view === 'calendar'
-                                            ? 'calendar'
-                                            : 'list'
-                                    }
-                                />
-                            </div>
+                            <PlanWorkspace
+                                workspace={workspace}
+                                view={
+                                    view === 'calendar' ? 'calendar' : 'list'
+                                }
+                            />
                             {composer}
                         </div>
                     )}

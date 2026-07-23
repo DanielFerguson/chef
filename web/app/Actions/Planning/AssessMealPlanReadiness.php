@@ -32,17 +32,14 @@ class AssessMealPlanReadiness
             ->whereNotNull('meal_slot_id')
             ->distinct()
             ->count('meal_slot_id');
-        $resolvedMealIds = $mealPlan->shoppingList?->mealResolutions()->pluck('planned_meal_id') ?? collect();
         $recipeRequired = $mealPlan->plannedMeals()
             ->where('status', 'planned')
             ->whereIn('type', ['recipe', 'custom'])
-            ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
             ->count();
         $recipesReady = $mealPlan->plannedMeals()
             ->where('status', 'planned')
             ->whereIn('type', ['recipe', 'custom'])
             ->whereNotNull('recipe_version_id')
-            ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
             ->count();
         $recipesUnresolved = max(0, $recipeRequired - $recipesReady);
         $recipesPreparing = in_array($mealPlan->recipe_generation_status, [

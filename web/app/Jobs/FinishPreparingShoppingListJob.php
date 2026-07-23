@@ -40,12 +40,10 @@ class FinishPreparingShoppingListJob implements ShouldBeUnique, ShouldQueue
     public function handle(GenerateShoppingList $generate, ContinueApprovedShopping $continueApprovedShopping): void
     {
         $mealPlan = MealPlan::query()->findOrFail($this->mealPlanId);
-        $resolvedMealIds = $mealPlan->shoppingList?->mealResolutions()->pluck('planned_meal_id') ?? collect();
         $unresolved = $mealPlan->plannedMeals()
             ->where('status', 'planned')
             ->where('type', 'custom')
             ->whereNull('recipe_version_id')
-            ->when($resolvedMealIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $resolvedMealIds))
             ->get();
 
         if ($unresolved->isNotEmpty() && $mealPlan->recipe_generation_status === MealPlanRecipeGenerationStatus::Failed) {

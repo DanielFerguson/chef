@@ -27,12 +27,10 @@ class CompleteShoppingList
 
         return DB::transaction(function () use ($shoppingList, $user, $expectedRevision): ShoppingList {
             $shoppingList = $this->ensureEditable->handle($shoppingList);
-            $resolvedMealIds = $shoppingList->mealResolutions()->pluck('planned_meal_id');
             $mealsWithoutIngredients = $shoppingList->mealPlan->plannedMeals()
                 ->where('status', 'planned')
                 ->where('type', 'custom')
                 ->whereNull('recipe_version_id')
-                ->whereNotIn('id', $resolvedMealIds)
                 ->count();
 
             if ($mealsWithoutIngredients > 0) {

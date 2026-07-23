@@ -15,7 +15,7 @@ Chef is an Australian household meal-coordination product. It turns a normal hou
 - [Homepage](${url('/')}): Product overview, household problem, Plan → Review → List → Trolley → Cook workflow, household memory, shopping-list traceability, retailer-trolley preparation, pricing, and FAQ.
 - [How it works](${url('/how-it-works')}): The complete household planning loop.
 - [Meal planning](${url('/meal-planning')}): Conversation plus a visible, editable shared plan.
-- [Shopping](${url('/shopping')}): Source-attributed quantities, pantry decisions, retailer review, and human checkout.
+- [Shopping](${url('/')}#shopping): Source-attributed quantities, pantry decisions, retailer review, and human confirmation in Chef.
 - [Pricing](${url('/pricing')}): One household subscription, inclusions, trial, and billing answers.
 - [Security and privacy](${url('/security-and-privacy')}): Household data, AI, permissions, retailer access, export, and deletion boundaries.
 

@@ -753,7 +753,7 @@ export function PlanWorkspace({
 
     if (view === 'list') {
         return (
-            <main className="min-w-0 flex-1 overflow-y-auto">
+            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
                 <div className="mx-auto max-w-3xl space-y-5 px-5 py-7 sm:px-8">
                     {workspace.plan.slots.length === 0 && (
                         <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">

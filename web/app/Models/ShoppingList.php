@@ -63,12 +63,6 @@ class ShoppingList extends Model
         return $this->hasMany(ShoppingListRevision::class)->orderByDesc('revision');
     }
 
-    /** @return HasMany<ShoppingListMealResolution, $this> */
-    public function mealResolutions(): HasMany
-    {
-        return $this->hasMany(ShoppingListMealResolution::class);
-    }
-
     /** @return HasMany<Order, $this> */
     public function orders(): HasMany
     {

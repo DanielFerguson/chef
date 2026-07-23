@@ -269,8 +269,8 @@ export default function Dashboard({
                                                         'cart_ready'
                                                             ? today.journey
                                                                   .fulfilment_method
-                                                                ? `Finish choosing a ${today.journey.fulfilment_method} time and checkout in Woolworths.`
-                                                                : 'Choose delivery or pickup, then complete checkout in Woolworths.'
+                                                                ? `Choose a ${today.journey.fulfilment_method} time in Chef, then confirm the order.`
+                                                                : 'Choose delivery or pickup in Chef, then confirm the order.'
                                                             : 'Recipes, the combined list, and routine product matches are moving ahead.'}
                                                     </span>
                                                 </span>
