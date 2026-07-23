@@ -59,8 +59,14 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
     useEffect(() => {
         if (workspace.phase === 'shopping' && shoppingAvailable) {
             setView('shopping');
-        } else if (workspace.phase === 'shopping' && !shoppingAvailable) {
-            setView('conversation');
+
+            return;
+        }
+
+        if (!shoppingAvailable) {
+            setView((current) =>
+                current === 'shopping' ? 'conversation' : current,
+            );
         }
     }, [workspace.phase, shoppingAvailable, workspace.plan.id]);
 
@@ -124,6 +130,15 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
         );
     };
 
+    const openStructuredView = (next: 'calendar' | 'list') => {
+        setView(next);
+        router.get(
+            `/meal-plans/${workspace.plan.id}`,
+            { phase: next },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
     const showMessageSource = (messageId: number) => {
         setSourceMessageId(messageId);
         openConversation();
@@ -170,7 +185,7 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                     size="sm"
                     variant={view === 'calendar' ? 'secondary' : 'ghost'}
                     className="px-2 sm:px-3"
-                    onClick={() => setView('calendar')}
+                    onClick={() => openStructuredView('calendar')}
                     aria-label="Calendar"
                 >
                     <CalendarDays />
@@ -180,7 +195,7 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                     size="sm"
                     variant={view === 'list' ? 'secondary' : 'ghost'}
                     className="px-2 sm:px-3"
-                    onClick={() => setView('list')}
+                    onClick={() => openStructuredView('list')}
                     aria-label="List"
                 >
                     <List />

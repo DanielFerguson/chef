@@ -330,7 +330,7 @@ it('requires explicit product and safety review before preparing a cart', functi
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
 
-    expect($list->automationRuns)->toHaveCount(0);
+    expect($list->retailerOrderRuns)->toHaveCount(0);
 });
 
 it('turns a catalogue outage into one compact retry instead of a manual item list', function () {

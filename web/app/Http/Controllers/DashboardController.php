@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PreferenceCandidateStatus;
+use App\Enums\RetailerOrderRunStatus;
 use App\Models\MealPlan;
 use App\Models\MealSlot;
 use Illuminate\Http\Request;
@@ -96,8 +97,16 @@ class DashboardController extends Controller
         $journey = null;
         if ($activePlan !== null) {
             $shoppingList = $activePlan->shoppingList;
-            $latestRun = $shoppingList?->automationRuns()->with('latestSnapshot')->latest('id')->first();
-            $cartReady = $latestRun?->latestSnapshot !== null;
+            $latestRun = $shoppingList?->retailerOrderRuns()->latest('id')->first();
+            $cartReady = $latestRun !== null && in_array($latestRun->status, [
+                RetailerOrderRunStatus::CartReady,
+                RetailerOrderRunStatus::FetchingFulfilmentOptions,
+                RetailerOrderRunStatus::AwaitingFulfilmentSelection,
+                RetailerOrderRunStatus::AwaitingOrderConfirmation,
+                RetailerOrderRunStatus::SubmittingOrder,
+                RetailerOrderRunStatus::AwaitingPlacementVerification,
+                RetailerOrderRunStatus::Placed,
+            ], true);
 
             $journey = [
                 'plan_id' => $activePlan->id,
