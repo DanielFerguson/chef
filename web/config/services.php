@@ -73,7 +73,7 @@ return [
         'open_cart_url' => env('WOOLWORTHS_OPEN_CART_URL', 'https://www.woolworths.com.au/shop/checkout/cart'),
         'catalogue_search_url' => env('WOOLWORTHS_CATALOGUE_SEARCH_URL', 'https://www.woolworths.com.au/apis/ui/Search/products'),
         'discovery_concurrency' => (int) env('WOOLWORTHS_DISCOVERY_CONCURRENCY', 4),
-        'discovery_max_candidates' => (int) env('WOOLWORTHS_DISCOVERY_MAX_CANDIDATES', 5),
+        'discovery_max_candidates' => (int) env('WOOLWORTHS_DISCOVERY_MAX_CANDIDATES', 8),
         'discovery_timeout' => (int) env('WOOLWORTHS_DISCOVERY_TIMEOUT', 12),
     ],
 

@@ -49,6 +49,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'recentMealPlans' => function () use ($user) {
                 $plans = $user?->currentTeam?->mealPlans()
+                    ->withExists(['shoppingList as has_shopping_list'])
                     ->latest('updated_at')
                     ->orderByDesc('id')
                     ->limit(8)
@@ -77,6 +78,7 @@ class HandleInertiaRequests extends Middleware
                             : ($mealPlan->shopping_approved_at !== null
                             ? 'Preparing'
                             : ($mealPlan->planning_confirmed_at !== null ? 'Confirmed' : 'Draft')),
+                        'has_shopping_list' => (bool) $mealPlan->has_shopping_list,
                         'can' => [
                             'update' => $user->can('update', $mealPlan),
                             'delete' => $user->can('delete', $mealPlan),

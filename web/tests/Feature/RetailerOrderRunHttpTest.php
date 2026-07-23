@@ -1,10 +1,12 @@
 <?php
 
+use App\Actions\MealPlans\MealPlanSafetyContext;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Retailer\ConfirmRetailerOrder;
 use App\Actions\Teams\AddUserToTeam;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Enums\ExistingCartDecision;
+use App\Enums\RetailerConnectionStatus;
 use App\Enums\RetailerOrderRunItemStatus;
 use App\Enums\RetailerOrderRunStatus;
 use App\Jobs\AdvanceRetailerOrderRunJob;
@@ -46,6 +48,14 @@ function retailerOrderRunHttpFixture(array $runOverrides = []): array
     app(CreateTeamForUser::class)->handle($outsider, 'Other family');
 
     $plan = app(StartMealPlan::class)->handle($team, $owner, today(), today()->addDays(2), 'Order plan');
+    $safetyHash = app(MealPlanSafetyContext::class)->fingerprint($plan);
+    $plan->forceFill([
+        'planning_confirmed_at' => now(),
+        'confirmed_safety_context_hash' => $safetyHash,
+        'safety_reviewed_at' => now(),
+        'safety_reviewed_by_user_id' => $owner->id,
+        'safety_reviewed_context_hash' => $safetyHash,
+    ])->save();
     $list = ShoppingList::factory()->create([
         'team_id' => $team->id,
         'meal_plan_id' => $plan->id,
@@ -125,7 +135,7 @@ it('selects a fulfilment slot over HTTP and redirects back to shopping', functio
             'slot_id' => 'slot-1',
             'fulfilment_type' => 'delivery',
         ])
-        ->assertRedirect(route('meal-plans.shopping.show', $fixture['plan']));
+        ->assertRedirect(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']));
 
     expect($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::AwaitingOrderConfirmation)
         ->and($fixture['run']->selected_slot)->toMatchArray($fixture['slot']);
@@ -148,7 +158,7 @@ it('confirms a retailer order over HTTP and dispatches advance', function () {
 
     $this->actingAs($fixture['member'])
         ->post(route('retailer-order-runs.confirm', $fixture['run']))
-        ->assertRedirect(route('meal-plans.shopping.show', $fixture['plan']));
+        ->assertRedirect(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']));
 
     expect($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::SubmittingOrder)
         ->and($fixture['run']->confirmation_fingerprint)->not->toBeNull();
@@ -177,7 +187,7 @@ it('verifies placement over HTTP with a retailer order reference', function () {
         ->post(route('retailer-order-runs.verify', $fixture['run']), [
             'retailer_order_reference' => 'WW-HTTP-1',
         ])
-        ->assertRedirect(route('meal-plans.shopping.show', $fixture['plan']));
+        ->assertRedirect(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']));
 
     expect($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::Placed)
         ->and($fixture['run']->retailer_order_reference)->toBe('WW-HTTP-1');
@@ -193,7 +203,7 @@ it('cancels a retailer order run over HTTP', function () {
 
     $this->actingAs($fixture['member'])
         ->delete(route('retailer-order-runs.destroy', $fixture['run']))
-        ->assertRedirect(route('meal-plans.shopping.show', $fixture['plan']));
+        ->assertRedirect(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']));
 
     expect($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::Cancelled);
 });
@@ -211,7 +221,7 @@ it('resolves an existing cart decision over HTTP', function () {
         ->put(route('retailer-order-runs.cart-decision.update', $fixture['run']), [
             'choice' => ExistingCartDecision::Merge->value,
         ])
-        ->assertRedirect(route('meal-plans.shopping.show', $fixture['plan']));
+        ->assertRedirect(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']));
 
     expect($fixture['run']->refresh()->status)->toBe(RetailerOrderRunStatus::PreparingCart)
         ->and($fixture['run']->existing_cart_decision)->toBe(ExistingCartDecision::Merge);
@@ -250,7 +260,7 @@ it('isolates retailer order run routes from other households', function () {
         ->assertNotFound();
 });
 
-it('exposes an active retailer order run on the shopping show Inertia payload', function () {
+it('exposes an active retailer order run on the meal-plan shopping phase payload', function () {
     $fixture = retailerOrderRunHttpFixture([
         'status' => RetailerOrderRunStatus::AwaitingOrderConfirmation,
         'selected_slot' => [
@@ -264,20 +274,21 @@ it('exposes an active retailer order run on the shopping show Inertia payload', 
 
     $this->withoutVite();
     $this->actingAs($fixture['member'])
-        ->get(route('meal-plans.shopping.show', $fixture['plan']))
+        ->get(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
-            ->component('shopping/show')
-            ->where('workspace.retailer_order_run.id', $fixture['run']->id)
-            ->where('workspace.retailer_order_run.status', RetailerOrderRunStatus::AwaitingOrderConfirmation->value)
-            ->where('workspace.retailer_order_run.cart_decision_needed', false)
-            ->where('workspace.retailer_order_run.placement_verification_needed', false)
-            ->where('workspace.retailer_order_run.can_open_woolworths_cart', false)
-            ->where('workspace.retailer_order_run.open_woolworths_cart_url', null)
-            ->where('workspace.retailer_order_run.confirmation.consequence', fn ($value) => is_string($value)
+            ->component('meal-plans/show')
+            ->where('workspace.phase', 'shopping')
+            ->where('workspace.shopping.retailer_order_run.id', $fixture['run']->id)
+            ->where('workspace.shopping.retailer_order_run.status', RetailerOrderRunStatus::AwaitingOrderConfirmation->value)
+            ->where('workspace.shopping.retailer_order_run.cart_decision_needed', false)
+            ->where('workspace.shopping.retailer_order_run.placement_verification_needed', false)
+            ->where('workspace.shopping.retailer_order_run.can_open_woolworths_cart', false)
+            ->where('workspace.shopping.retailer_order_run.open_woolworths_cart_url', null)
+            ->where('workspace.shopping.retailer_order_run.confirmation.consequence', fn ($value) => is_string($value)
                 && str_contains(mb_strtolower($value), 'default card on file'))
-            ->has('workspace.retailer_order_run.items', 1)
-            ->where('workspace.retailer_order_run.selected_slot.id', 'slot-1'));
+            ->has('workspace.shopping.retailer_order_run.items', 1)
+            ->where('workspace.shopping.retailer_order_run.selected_slot.id', 'slot-1'));
 });
 
 it('builds a retailer order run view without a primary self-checkout CTA while confirm is available', function () {
@@ -300,4 +311,31 @@ it('builds a retailer order run view without a primary self-checkout CTA while c
         ->and($payload['cart_decision_needed'])->toBeFalse()
         ->and($payload['items'])->toHaveCount(1)
         ->and($payload['items'][0]['name'])->toBe('Full Cream Milk 2L');
+});
+
+it('redirects disconnect to the meal-plan shopping phase when a shopping list exists without an order run', function () {
+    $owner = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($owner, 'Disconnect family');
+    $plan = app(StartMealPlan::class)->handle($team, $owner, today(), today()->addDays(2), 'Shop plan');
+    $list = ShoppingList::factory()->create([
+        'team_id' => $team->id,
+        'meal_plan_id' => $plan->id,
+        'created_by_user_id' => $owner->id,
+        'generation_status' => 'ready',
+    ]);
+    $connection = RetailerConnection::factory()->create([
+        'team_id' => $team->id,
+        'owner_user_id' => $owner->id,
+    ]);
+
+    $this->actingAs($owner)
+        ->from(route('meal-plans.show', ['mealPlan' => $plan, 'phase' => 'shopping']))
+        ->delete(route('retailer-connections.destroy', $connection))
+        ->assertRedirect(route('meal-plans.show', [
+            'mealPlan' => $plan,
+            'phase' => 'shopping',
+        ]));
+
+    expect($list->refresh()->exists)->toBeTrue()
+        ->and($connection->refresh()->status)->toBe(RetailerConnectionStatus::Disconnected);
 });

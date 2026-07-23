@@ -2,7 +2,6 @@ import { router } from '@inertiajs/react';
 import {
     ArrowDown,
     ArrowRight,
-    ArrowUp,
     Check,
     Clock3,
     LoaderCircle,
@@ -13,7 +12,7 @@ import {
     X,
 } from 'lucide-react';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import type { FormEvent, RefObject } from 'react';
 import { toast } from 'sonner';
 import {
     accept,
@@ -32,6 +31,7 @@ import {
     useMessageScrollerVisibility,
 } from '@/components/ui/message-scroller';
 import { cn } from '@/lib/utils';
+import { ConversationComposer } from './conversation-composer';
 import { PlanningCheckpointFeedback } from './conversation-feedback';
 import { ConversationMessageRow } from './conversation-message';
 import { formatDay } from './format-day';
@@ -357,10 +357,22 @@ function ProposalCards({ workspace }: { workspace: MealPlanWorkspace }) {
 function PlanNextStep({
     workspace,
     onOpenPlanDetails,
+    onOpenShopping,
 }: {
     workspace: MealPlanWorkspace;
     onOpenPlanDetails: () => void;
+    onOpenShopping: () => void;
 }) {
+    const shoppingList = workspace.plan.shopping_list;
+    const shoppingPreparing =
+        shoppingList !== null &&
+        shoppingList.generation_status !== 'ready' &&
+        shoppingList.generation_status !== 'failed';
+    const shoppingFailed =
+        shoppingList !== null &&
+        (shoppingList.generation_status === 'failed' ||
+            shoppingList.generation_failure_code === 'context_changed');
+
     if (
         workspace.readiness.confirmed &&
         workspace.readiness.recipes_failed > 0
@@ -395,21 +407,52 @@ function PlanNextStep({
 
     if (
         workspace.readiness.confirmed &&
-        workspace.readiness.recipes_preparing > 0
+        (workspace.readiness.recipes_preparing > 0 || shoppingPreparing)
     ) {
+        const recipesUnresolved = workspace.readiness.recipes_unresolved;
+
         return (
             <section className="mx-auto w-full max-w-xl rounded-xl bg-primary/5 px-4 py-3">
-                <p className="text-sm font-medium">
-                    Preparing the completed plan
+                <p className="flex items-center gap-2 text-sm font-medium">
+                    <LoaderCircle className="size-4 animate-spin" />
+                    {workspace.readiness.recipes_preparing > 0
+                        ? 'Preparing the completed plan'
+                        : 'Preparing your shopping list'}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                    Chef is generating {workspace.readiness.recipes_unresolved}{' '}
-                    {workspace.readiness.recipes_unresolved === 1
-                        ? 'remaining recipe'
-                        : 'remaining recipes'}{' '}
-                    together from the completed plan. You can keep chatting
-                    while the batch finishes.
+                    {workspace.readiness.recipes_preparing > 0
+                        ? `Chef is generating ${recipesUnresolved} ${recipesUnresolved === 1 ? 'remaining recipe' : 'remaining recipes'} together from the completed plan. You can keep chatting while the batch finishes.`
+                        : 'Chef is combining the confirmed recipes into one traceable list. You can keep chatting while it finishes.'}
                 </p>
+            </section>
+        );
+    }
+
+    if (workspace.readiness.confirmed && shoppingFailed) {
+        return (
+            <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-destructive/5 px-4 py-3">
+                <div>
+                    <p className="text-sm font-medium">
+                        Shopping list needs another try
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                        {shoppingList.generation_failure_message ??
+                            'Chef could not finish this shopping list. Retry when you are ready.'}
+                    </p>
+                </div>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                        router.post(
+                            `/meal-plans/${workspace.plan.id}/shopping-list`,
+                            {},
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    <RefreshCw /> Retry shopping list
+                </Button>
             </section>
         );
     }
@@ -439,8 +482,6 @@ function PlanNextStep({
     }
 
     if (workspace.readiness.confirmed) {
-        const shoppingList = workspace.plan.shopping_list;
-        const shoppingStarted = shoppingList !== null;
         const shoppingReady =
             shoppingList !== null && shoppingList.generation_status === 'ready';
 
@@ -451,33 +492,34 @@ function PlanNextStep({
                     <p className="mt-0.5 text-xs text-muted-foreground">
                         {shoppingReady
                             ? 'Your traceable shopping list is ready to review and edit with Chef.'
-                            : shoppingStarted
-                              ? 'Chef is preparing one traceable list from your confirmed recipes.'
-                              : 'Shopping is next. Chef will turn the confirmed recipes into one traceable list.'}
+                            : 'Shopping is next. Chef will turn the confirmed recipes into one traceable list.'}
                     </p>
                 </div>
                 <Button
                     size="sm"
                     onClick={() => {
-                        if (shoppingStarted) {
-                            router.visit(
-                                `/meal-plans/${workspace.plan.id}/shopping`,
-                            );
+                        if (shoppingReady) {
+                            onOpenShopping();
 
                             return;
                         }
 
                         router.post(
                             `/meal-plans/${workspace.plan.id}/shopping-list`,
+                            {},
+                            { preserveScroll: true },
                         );
                     }}
                 >
-                    {shoppingReady
-                        ? 'Review shopping list'
-                        : shoppingStarted
-                          ? 'View shopping progress'
-                          : 'Start shopping list'}{' '}
-                    <ArrowRight />
+                    {shoppingReady ? (
+                        <>
+                            Review shopping list <ArrowRight />
+                        </>
+                    ) : (
+                        <>
+                            <ShoppingBasket /> Start shopping list
+                        </>
+                    )}
                 </Button>
             </section>
         );
@@ -493,7 +535,13 @@ function PlanNextStep({
     >();
 
     for (const proposal of workspace.plan.proposals) {
-        if (proposal.status === 'pending') {
+        if (proposal.status !== 'pending') {
+            continue;
+        }
+
+        const current = pendingBySlot.get(proposal.meal_slot_id);
+
+        if (current === undefined || proposal.id > current.id) {
             pendingBySlot.set(proposal.meal_slot_id, proposal);
         }
     }
@@ -575,22 +623,28 @@ function PlanNextStep({
                     })
                 }
             >
-                <ShoppingBasket /> Approve plan &amp; prepare cart
+                <ShoppingBasket /> Approve plan &amp; prepare shopping
             </Button>
         </section>
     );
 }
+
+export type ChefConversationControls = ReturnType<typeof useChefConversation>;
 
 export function ConversationPanel({
     workspace,
     sourceMessageId,
     onSourceMessageShown,
     onOpenPlanDetails,
+    onOpenShopping,
+    conversation,
 }: {
     workspace: MealPlanWorkspace;
     sourceMessageId: number | null;
     onSourceMessageShown: () => void;
     onOpenPlanDetails: () => void;
+    onOpenShopping: () => void;
+    conversation: ChefConversationControls;
 }) {
     const {
         activeClientMessageId,
@@ -601,22 +655,7 @@ export function ConversationPanel({
         sending,
         sendMessage,
         setInput,
-    } = useChefConversation(workspace.conversation);
-    useEffect(() => {
-        if (workspace.readiness.recipes_preparing === 0) {
-            return;
-        }
-
-        const interval = window.setInterval(
-            () =>
-                router.reload({
-                    only: ['workspace'],
-                }),
-            2000,
-        );
-
-        return () => window.clearInterval(interval);
-    }, [workspace.readiness.recipes_preparing]);
+    } = conversation;
     const hasPendingProposals =
         !workspace.readiness.ready_for_approval &&
         workspace.plan.proposals.some(
@@ -730,9 +769,7 @@ export function ConversationPanel({
         workspace.conversation.id,
     ]);
 
-    const sendConversationMessage = (
-        event: React.FormEvent<HTMLFormElement>,
-    ) => {
+    const sendConversationMessage = (event: FormEvent<HTMLFormElement>) => {
         scrollToEnd({ behavior: 'auto' });
         void sendMessage(event);
     };
@@ -742,6 +779,16 @@ export function ConversationPanel({
 
         return retryMessage(message);
     };
+
+    const composer = (
+        <ConversationComposer
+            error={error}
+            input={input}
+            onSubmit={sendConversationMessage}
+            sending={sending}
+            setInput={setInput}
+        />
+    );
 
     return (
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -846,6 +893,7 @@ export function ConversationPanel({
                                 <PlanNextStep
                                     workspace={workspace}
                                     onOpenPlanDetails={onOpenPlanDetails}
+                                    onOpenShopping={onOpenShopping}
                                 />
                             </MessageScrollerItem>
                             {workspace.plan.planning_confirmed_at && (
@@ -882,50 +930,7 @@ export function ConversationPanel({
                         viewportRef={viewportRef}
                     />
                 </MessageScroller>
-                <form
-                    onSubmit={sendConversationMessage}
-                    className="relative z-10 mx-5 mb-4 shrink-0 rounded-2xl border bg-card p-3 shadow-lg sm:mx-8"
-                >
-                    <textarea
-                        value={input}
-                        onChange={(event) => setInput(event.target.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Enter' && !event.shiftKey) {
-                                event.preventDefault();
-                                event.currentTarget.form?.requestSubmit();
-                            }
-                        }}
-                        aria-label="Message Chef"
-                        placeholder="Tell Chef what the plan should account for…"
-                        className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
-                    />
-                    {error && (
-                        <p
-                            role="alert"
-                            className="px-2 pb-2 text-xs text-destructive"
-                        >
-                            {error}
-                        </p>
-                    )}
-                    <div className="flex items-center justify-between">
-                        <p className="px-2 text-xs text-muted-foreground">
-                            Shift + Enter for a new line
-                        </p>
-                        <Button
-                            size="icon"
-                            type="submit"
-                            data-testid="send-message"
-                            disabled={sending || input.trim() === ''}
-                        >
-                            {sending ? (
-                                <ArrowRight className="animate-pulse" />
-                            ) : (
-                                <ArrowUp />
-                            )}
-                            <span className="sr-only">Send message</span>
-                        </Button>
-                    </div>
-                </form>
+                {composer}
             </div>
         </main>
     );

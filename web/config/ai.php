@@ -16,6 +16,9 @@ return [
     ],
 
     'workloads' => [
+        'conversation' => [
+            'model' => env('OPENAI_CONVERSATION_MODEL', 'gpt-5.6-luna'),
+        ],
         'recipe_batch' => [
             'model' => env('OPENAI_RECIPE_BATCH_MODEL', 'gpt-5.6-sol'),
             'reasoning_effort' => env('OPENAI_RECIPE_BATCH_REASONING_EFFORT', 'high'),
@@ -23,6 +26,10 @@ return [
         'shopping_list' => [
             'model' => env('OPENAI_SHOPPING_LIST_MODEL', 'gpt-5.6-sol'),
             'reasoning_effort' => env('OPENAI_SHOPPING_LIST_REASONING_EFFORT', 'high'),
+        ],
+        'product_match' => [
+            'model' => env('OPENAI_PRODUCT_MATCH_MODEL', 'gpt-5.6-luna'),
+            'reasoning_effort' => env('OPENAI_PRODUCT_MATCH_REASONING_EFFORT', 'low'),
         ],
     ],
 

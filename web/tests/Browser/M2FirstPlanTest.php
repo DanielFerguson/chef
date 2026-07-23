@@ -91,15 +91,18 @@ it('creates a first plan and continues its conversation in a real browser', func
         ->pressAndWaitFor('Start shopping list')
         ->assertSee('Shopping list')
         ->assertNotPresent('textarea[aria-label="Ingredients for Satay chicken"]')
+        ->assertNotPresent('summary[aria-label="Plan recap"]')
         ->click('button[aria-label="List view"]')
         ->assertSee('For Satay chicken')
-        ->click('summary[aria-label="Plan recap"]')
+        ->click('button[aria-label="Conversation"]')
+        ->assertSee('Satay chicken')
         ->type(
-            'textarea[aria-label="Message Chef about shopping"]',
+            'textarea[aria-label="Message Chef"]',
             'We already have the satay ingredients. Add three litres of milk and paper towels, and keep the shop below $180.',
         )
-        ->pressAndWaitFor('Send shopping message')
+        ->click('[data-testid="send-message"]')
         ->assertSee('Done — I added three litres of milk')
+        ->visit(route('meal-plans.show', ['mealPlan' => $plan, 'phase' => 'shopping']))
         ->click('button[aria-label="Edit Milk"]')
         ->assertPresent('input[aria-label="Milk name"]')
         ->click('button[aria-label="Edit Paper towels"]')

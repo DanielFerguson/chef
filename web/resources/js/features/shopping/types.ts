@@ -1,15 +1,10 @@
-import type {
-    ConversationFeedback,
-    Message,
-} from '@/features/meal-plans/types';
-
 export type ShoppingPlan = {
     id: number;
     title: string;
     starts_on: string;
     ends_on: string;
     revision: number;
-    planning_confirmed_at: string;
+    planning_confirmed_at: string | null;
     shopping_approved_at: string | null;
     safety_review_required: boolean;
 };
@@ -127,18 +122,6 @@ export type MissingMeal = {
     preparation_id: number | null;
     preparation_status: 'not_started' | 'pending' | 'processing' | 'failed';
     failure_message: string | null;
-};
-
-export type ProductPreference = {
-    id: number;
-    retailer_id: number | null;
-    normalized_item_name: string | null;
-    preferred_brand: string | null;
-    preferred_pack: string | null;
-    accept_substitutes: boolean;
-    maximum_price: number | null;
-    note: string | null;
-    retailer: { id: number; name: string; slug: string } | null;
 };
 
 export type CartAutomation = {
@@ -287,17 +270,11 @@ export type ShoppingWorkspace = {
         failed: number;
         unresolved: number;
     };
-    conversation: {
-        id: number;
-        messages: Message[];
-        feedback: ConversationFeedback[];
-    };
     shopping_categories: {
         value: ShoppingListItemCategory;
         label: string;
     }[];
     retailers: { id: number; name: string; slug: string }[];
-    product_preferences: ProductPreference[];
     budget: {
         household_default: number | null;
         plan_override: number | null;

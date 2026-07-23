@@ -38,10 +38,27 @@ class RetailerConnectionController extends Controller
 
     private function shoppingUrl(RetailerConnection $connection): string
     {
-        $run = $connection->runs()->latest()->first();
+        $run = $connection->orderRuns()->latest('id')->first();
 
-        return $run === null
-            ? route('shopping.index')
-            : route('meal-plans.shopping.show', $run->shoppingList->meal_plan_id);
+        if ($run !== null) {
+            return route('meal-plans.show', [
+                'mealPlan' => $run->shoppingList->meal_plan_id,
+                'phase' => 'shopping',
+            ]);
+        }
+
+        $shoppingList = ShoppingList::query()
+            ->where('team_id', $connection->team_id)
+            ->latest('id')
+            ->first();
+
+        if ($shoppingList !== null) {
+            return route('meal-plans.show', [
+                'mealPlan' => $shoppingList->meal_plan_id,
+                'phase' => 'shopping',
+            ]);
+        }
+
+        return route('shopping.index');
     }
 }

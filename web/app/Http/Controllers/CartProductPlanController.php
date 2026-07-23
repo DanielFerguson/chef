@@ -35,7 +35,7 @@ class CartProductPlanController extends Controller
             ->firstOrFail();
         $plan = $build->handle($shoppingList, $revision, $connection, $request->user(), force: true);
 
-        return to_route('meal-plans.shopping.show', $shoppingList->meal_plan_id)
+        return to_route('meal-plans.show', ['mealPlan' => $shoppingList->meal_plan_id, 'phase' => 'shopping'])
             ->with(
                 $plan->status === CartProductPlanStatus::Ready ? 'success' : 'warning',
                 $plan->status === CartProductPlanStatus::Ready
@@ -57,9 +57,11 @@ class CartProductPlanController extends Controller
             $continueApprovedShopping->handle($plan->shoppingList->mealPlan, $request->user());
         }
 
-        return to_route('meal-plans.shopping.show', $plan->shoppingList->meal_plan_id)
-            ->with('success', $plan->status === CartProductPlanStatus::Ready
-                ? 'The exact Woolworths product plan is ready to review.'
-                : 'The Woolworths product choice was saved.');
+        return to_route('meal-plans.show', [
+            'mealPlan' => $plan->shoppingList->meal_plan_id,
+            'phase' => 'shopping',
+        ])->with('success', $plan->status === CartProductPlanStatus::Ready
+            ? 'The exact Woolworths product plan is ready to review.'
+            : 'The Woolworths product choice was saved.');
     }
 }

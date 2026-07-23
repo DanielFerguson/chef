@@ -142,6 +142,8 @@ export type MealPlanWorkspace = {
             id: number;
             status: 'draft' | 'completed';
             generation_status: 'pending' | 'processing' | 'ready' | 'failed';
+            generation_failure_code: string | null;
+            generation_failure_message: string | null;
             revision: number;
             stale_at: string | null;
         } | null;
@@ -202,7 +204,11 @@ export type MealPlanWorkspace = {
             | 'begin_shopping'
             | 'continue_planning';
     };
+    shopping: import('@/features/shopping/types').ShoppingWorkspace | null;
+    phase: 'conversation' | 'shopping';
 };
+
+export type PlanView = 'conversation' | 'calendar' | 'list' | 'shopping';
 
 export type StreamEvent = {
     type: 'delta' | 'complete' | 'persisted' | 'error';

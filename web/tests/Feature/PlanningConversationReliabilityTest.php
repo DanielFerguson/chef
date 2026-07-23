@@ -14,6 +14,7 @@ use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Ai\Contracts\ChefConversationEngine;
 use App\Ai\Data\AssistantStreamChunk;
+use App\Enums\MealProposalStatus;
 use App\Enums\MealSlotKind;
 use App\Enums\MessageResponseStatus;
 use App\Enums\PlannedMealType;
@@ -102,6 +103,48 @@ it('derives the next planning action from structured state and guards confirmati
             'confirmed' => true,
             'ready_for_confirmation' => false,
             'next_action' => 'begin_shopping',
+        ]);
+});
+
+it('supersedes a prior pending proposal when a new draft is proposed for the same slot', function () {
+    $workspace = planningReliabilityWorkspace(1);
+    $firstMessage = app(CreateUserMessage::class)->handle(
+        $workspace['conversation'],
+        $workspace['user'],
+        'Suggest creamy garlic chicken pasta for Friday.',
+        (string) Str::uuid(),
+    );
+    $secondMessage = app(CreateUserMessage::class)->handle(
+        $workspace['conversation'],
+        $workspace['user'],
+        'Swap Friday with chicken parmas.',
+        (string) Str::uuid(),
+    );
+
+    $pasta = app(ProposeMeal::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        'Creamy garlic chicken pasta',
+        $workspace['slots'][0],
+        message: $firstMessage,
+    );
+    $parma = app(ProposeMeal::class)->handle(
+        $workspace['plan'],
+        $workspace['user'],
+        'Chicken parmigiana',
+        $workspace['slots'][0],
+        message: $secondMessage,
+    );
+
+    expect($pasta->refresh()->status)->toBe(MealProposalStatus::Replaced)
+        ->and($pasta->decided_by_user_id)->toBe($workspace['user']->id)
+        ->and($pasta->decided_at)->not->toBeNull()
+        ->and($parma->refresh()->status)->toBe(MealProposalStatus::Pending)
+        ->and($workspace['plan']->proposals()->where('status', MealProposalStatus::Pending)->count())->toBe(1)
+        ->and(app(AssessMealPlanReadiness::class)->handle($workspace['plan']->refresh()))->toMatchArray([
+            'pending_proposals' => 1,
+            'uncovered_slots' => 0,
+            'ready_for_approval' => true,
         ]);
 });
 

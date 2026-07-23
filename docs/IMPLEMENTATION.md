@@ -8,7 +8,20 @@ Chef separates household approval from internal preparation. One
 `ApproveMealPlanForShopping` action owns the default transition from a complete
 whole-plan draft into approved preparation. It accepts the current draft meals,
 records the explicit current safety review, confirms the plan, freezes an
-approval fingerprint, and starts recipe and shopping preparation.
+approval fingerprint, and starts recipe and shopping preparation. The household
+stays on `meal-plans.show` through preparation, shopping review, cart
+automation, fulfilment, and order confirmation. Shopping is a phase on that
+page (`?phase=shopping`), backed by `BuildShoppingWorkspace` (list, budget,
+automation, and order-run state—not a duplicate conversation payload). The full
+shopping workspace is built when the shopping phase is active, list generation
+is in progress, or an order run is active; otherwise the plan page uses the
+light `plan.shopping_list` summary. The legacy `/meal-plans/{id}/shopping` URL
+redirects into that phase; the sidebar Shopping item deep-links the latest
+confirmed plan’s shopping phase when a list exists, otherwise the plan
+conversation or the `/shopping` cross-plan picker. Retailer connect and
+disconnect return to the plan shopping phase whenever a shopping list can be
+resolved. Recipes remain a separate page family. Retailer authentication
+remains a short dedicated page that returns to the plan shopping phase.
 
 The approval fingerprint covers the plan revision, participants, explicit
 safety context, retailer intent, and fulfilment intent. Downstream jobs may
@@ -251,8 +264,8 @@ queue job then materialise all missing recipe versions atomically from one
 structured model response. A changed plan invalidates the response before any
 version is attached. Explicit
 takeaway, eating-out, open, and linked-leftover states remain non-recipe meals.
-`ShoppingListMealResolution` remains a traceable recovery path for exceptional
-or failed preparation, not the default household workflow.
+Recipe preparation failures are retried through the same plan-level batch path;
+Shopping does not offer a household manual-ingredient recovery UI.
 
 Production shopping generation uses one structured Laravel AI SDK Responses
 call over Chef's retained, scaled recipe requirements. The
@@ -463,7 +476,9 @@ records the planning milestone, after which shopping is the next product step.
 The Laravel AI engine synthesises a factual acknowledgement from recorded plan
 revisions, household-truth writes, or meal proposals when a tool loop finishes
 without text. Proposal progress distinguishes open slots from uncovered slots:
-a pending proposal is visible and reviewable but does not fill its slot. If
+a pending proposal is visible and reviewable but does not fill its slot. Creating
+a new slot-bound proposal supersedes any prior pending proposal for that same
+slot so a conversational swap leaves one clear draft meal. If
 there is neither visible text nor a verifiable structured mutation, the turn is
 failed, classified, and remains visibly retryable; a blank completed assistant
 message is never persisted.
@@ -554,6 +569,10 @@ Use the Laravel AI SDK for Chef's normal server-side agent experience:
 - queued agent work;
 - agent middleware, events, observability, and tests.
 
+The plan conversation is pinned through `OPENAI_CONVERSATION_MODEL` (default
+`gpt-5.6-luna`) for lower latency during interactive drafting. Recipe-batch and
+shopping-list workloads remain on Sol/high.
+
 The milestone 2 agent tools are deliberately narrow:
 
 - `InspectTeamContext`
@@ -629,17 +648,25 @@ Playwright retailer tools over a Browserbase CDP session — not OpenAI vision
 computer-use. The Laravel AI SDK is not used for retailer browser control.
 
 `BuildCartProductPlan` performs bounded, read-only catalogue discovery before
-an authenticated mutation run exists. Confident matches and all candidates are
-stored against the current revision; ambiguous or unresolved items keep the
-plan in `needs_review`. Any allergy, medical, dietary, or religious constraint
-blocks automatic selection even when discovery has a high-confidence result.
-The owner must resolve every item and review the exact plan and durable safety
-context. `StartRetailerOrderRun` then freezes that plan and the current
-non-stale revision into the run; substitutions are frozen off when strict
-constraints apply. A unique job on the `automation` queue advances a bounded
-chunk via `AdvanceRetailerOrderRun`. The local `composer dev` process listens
-to `default`, `ai`, and `automation`; deployments should operate a dedicated
-`automation` worker so retailer work cannot starve ordinary application jobs.
+an authenticated mutation run exists. Discovery normalises noisy prep terms and
+retries once when the raw name returns no usable candidates. Heuristic
+confident matches are applied first. When safety does not require exact matches
+and remaining items still have discovered candidates, a Chef-owned structured
+`CartProductCandidateSelector` may auto-apply a best-fit then cheapest pick
+among those exact in-stock SKUs (`decision_reason = ai_best_fit_cheapest`). The
+selector cannot invent products or URLs; invalid or abstained picks leave the
+item for household review. Any allergy, medical, dietary, or religious
+constraint blocks automatic selection even when discovery or AI has a strong
+candidate. Ambiguous or unresolved leftovers keep the plan in `needs_review`.
+The owner must resolve every remaining item and review the exact plan and
+durable safety context. `StartRetailerOrderRun` then freezes that plan and the
+current non-stale revision into the run; substitutions are frozen off when
+strict constraints apply. A unique job on the `automation` queue advances a
+bounded chunk via `AdvanceRetailerOrderRun`. The local `composer dev` process runs
+`queue:work` on `default`, `ai`, and `automation` with `--timeout=0` so long
+recipe and retailer jobs are not killed by `queue:listen`'s 60s child-process
+cap; deployments should operate a dedicated `automation` worker so retailer
+work cannot starve ordinary application jobs.
 
 ```php
 interface RetailerBrowser

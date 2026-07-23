@@ -1,5 +1,11 @@
-import { Head } from '@inertiajs/react';
-import { CalendarDays, List, MessagesSquare, PanelRight } from 'lucide-react';
+import { Head, router } from '@inertiajs/react';
+import {
+    CalendarDays,
+    List,
+    MessagesSquare,
+    PanelRight,
+    ShoppingBasket,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { MessageScrollerProvider } from '@/components/ui/message-scroller';
@@ -11,10 +17,13 @@ import {
     SheetTitle,
 } from '@/components/ui/sheet';
 import { useAppHeader } from '@/contexts/app-header-context';
+import { ConversationComposer } from '@/features/meal-plans/conversation-composer';
 import { ConversationPanel } from '@/features/meal-plans/conversation-panel';
 import { PlanInspector } from '@/features/meal-plans/plan-inspector';
 import { PlanWorkspace } from '@/features/meal-plans/plan-workspace';
-import type { MealPlanWorkspace } from '@/features/meal-plans/types';
+import type { MealPlanWorkspace, PlanView } from '@/features/meal-plans/types';
+import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
+import { ShoppingPhase } from '@/features/shopping/shopping-phase';
 
 function ConversationScroller({ children }: { children: React.ReactNode }) {
     const [autoScroll, setAutoScroll] = useState(false);
@@ -37,19 +46,107 @@ function ConversationScroller({ children }: { children: React.ReactNode }) {
 }
 
 function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
-    const [view, setView] = useState<'conversation' | 'calendar' | 'list'>(
-        'conversation',
-    );
+    const conversation = useChefConversation(workspace.conversation);
+    const shoppingAvailable = workspace.plan.shopping_list != null;
+    const initialView: PlanView =
+        workspace.phase === 'shopping' && shoppingAvailable
+            ? 'shopping'
+            : 'conversation';
+    const [view, setView] = useState<PlanView>(initialView);
     const [sourceMessageId, setSourceMessageId] = useState<number | null>(null);
     const [detailsOpen, setDetailsOpen] = useState(false);
+
+    useEffect(() => {
+        if (workspace.phase === 'shopping' && shoppingAvailable) {
+            setView('shopping');
+        } else if (workspace.phase === 'shopping' && !shoppingAvailable) {
+            setView('conversation');
+        }
+    }, [workspace.phase, shoppingAvailable, workspace.plan.id]);
+
+    useEffect(() => {
+        const shoppingList = workspace.plan.shopping_list;
+        const shoppingPreparing =
+            shoppingList !== null &&
+            shoppingList.generation_status !== 'ready' &&
+            shoppingList.generation_status !== 'failed';
+        const orderRunActive = Boolean(
+            workspace.shopping?.retailer_order_run &&
+                [
+                    'preparing_cart',
+                    'fetching_fulfilment_options',
+                    'submitting_order',
+                ].includes(workspace.shopping.retailer_order_run.status),
+        );
+
+        if (
+            workspace.readiness.recipes_preparing === 0 &&
+            !shoppingPreparing &&
+            !orderRunActive
+        ) {
+            return;
+        }
+
+        const interval = window.setInterval(
+            () =>
+                router.reload({
+                    only: ['workspace'],
+                }),
+            2000,
+        );
+
+        return () => window.clearInterval(interval);
+    }, [
+        workspace.plan.shopping_list,
+        workspace.readiness.recipes_preparing,
+        workspace.shopping?.retailer_order_run?.status,
+    ]);
+
+    const openShopping = () => {
+        if (!shoppingAvailable) {
+            return;
+        }
+
+        setView('shopping');
+        router.get(
+            `/meal-plans/${workspace.plan.id}`,
+            { phase: 'shopping' },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
+    const openConversation = () => {
+        setView('conversation');
+        router.get(
+            `/meal-plans/${workspace.plan.id}`,
+            { phase: 'conversation' },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
     const showMessageSource = (messageId: number) => {
         setSourceMessageId(messageId);
-        setView('conversation');
+        openConversation();
         setDetailsOpen(false);
     };
     const clearSourceMessage = () => {
         setSourceMessageId(null);
     };
+
+    const composer = (
+        <div className="mx-auto w-full max-w-3xl shrink-0">
+            <ConversationComposer
+                error={conversation.error}
+                input={conversation.input}
+                onSubmit={(event) => {
+                    void conversation.sendMessage(event);
+                }}
+                sending={conversation.sending}
+                setInput={conversation.setInput}
+            />
+        </div>
+    );
+
     const headerContent = (
         <div className="flex min-w-0 flex-1 items-center gap-2">
             <h1 className="max-w-28 shrink truncate text-sm font-medium sm:max-w-48 lg:max-w-none">
@@ -63,7 +160,7 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                     size="sm"
                     variant={view === 'conversation' ? 'secondary' : 'ghost'}
                     className="px-2 sm:px-3"
-                    onClick={() => setView('conversation')}
+                    onClick={openConversation}
                     aria-label="Conversation"
                 >
                     <MessagesSquare />
@@ -89,6 +186,18 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                     <List />
                     <span className="hidden sm:inline">List</span>
                 </Button>
+                {shoppingAvailable && (
+                    <Button
+                        size="sm"
+                        variant={view === 'shopping' ? 'secondary' : 'ghost'}
+                        className="px-2 sm:px-3"
+                        onClick={openShopping}
+                        aria-label="Shopping"
+                    >
+                        <ShoppingBasket />
+                        <span className="hidden sm:inline">Shopping</span>
+                    </Button>
+                )}
                 <Button
                     size="sm"
                     variant="ghost"
@@ -116,16 +225,42 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                         <ConversationPanel
                             key={workspace.conversation.id}
                             workspace={workspace}
+                            conversation={conversation}
                             sourceMessageId={sourceMessageId}
                             onSourceMessageShown={clearSourceMessage}
                             onOpenPlanDetails={() => setDetailsOpen(true)}
+                            onOpenShopping={openShopping}
                         />
+                    ) : view === 'shopping' && workspace.shopping ? (
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8">
+                                <div className="mx-auto w-full max-w-4xl">
+                                    <ShoppingPhase
+                                        workspace={workspace.shopping}
+                                    />
+                                </div>
+                            </div>
+                            {composer}
+                        </div>
                     ) : (
-                        <PlanWorkspace workspace={workspace} view={view} />
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            <div className="min-h-0 flex-1 overflow-y-auto">
+                                <PlanWorkspace
+                                    workspace={workspace}
+                                    view={
+                                        view === 'calendar'
+                                            ? 'calendar'
+                                            : 'list'
+                                    }
+                                />
+                            </div>
+                            {composer}
+                        </div>
                     )}
                 </div>
                 <PlanInspector
                     workspace={workspace}
+                    view={view}
                     conversationId={workspace.conversation.id}
                     onShowMessageSource={showMessageSource}
                     className="hidden lg:block"
@@ -133,14 +268,20 @@ function MealPlanExperience({ workspace }: { workspace: MealPlanWorkspace }) {
                 <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
                     <SheetContent className="w-[min(92vw,24rem)] gap-0 overflow-y-auto p-0">
                         <SheetHeader className="border-b pr-12">
-                            <SheetTitle>Plan details</SheetTitle>
+                            <SheetTitle>
+                                {view === 'shopping'
+                                    ? 'Shopping details'
+                                    : 'Plan details'}
+                            </SheetTitle>
                             <SheetDescription>
-                                Current plan status, household truth, and
-                                sharing.
+                                {view === 'shopping'
+                                    ? 'Budget, source meals, and automation status for this shop.'
+                                    : 'Current plan status, household truth, and sharing.'}
                             </SheetDescription>
                         </SheetHeader>
                         <PlanInspector
                             workspace={workspace}
+                            view={view}
                             conversationId={workspace.conversation.id}
                             onShowMessageSource={showMessageSource}
                             className="border-0"

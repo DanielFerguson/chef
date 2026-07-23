@@ -32,6 +32,23 @@ const mainNavItems: NavItem[] = [
 
 export function AppSidebar() {
     const { recentMealPlans } = usePage().props;
+    const activeShoppingPlan = recentMealPlans.find(
+        (plan) =>
+            (plan.phase === 'Confirmed' || plan.phase === 'Preparing') &&
+            plan.has_shopping_list,
+    );
+    const shoppingHref = activeShoppingPlan
+        ? `/meal-plans/${activeShoppingPlan.id}?phase=shopping`
+        : (() => {
+              const confirmedPlan = recentMealPlans.find(
+                  (plan) =>
+                      plan.phase === 'Confirmed' || plan.phase === 'Preparing',
+              );
+
+              return confirmedPlan
+                  ? `/meal-plans/${confirmedPlan.id}`
+                  : '/shopping';
+          })();
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -81,7 +98,7 @@ export function AppSidebar() {
                         </SidebarMenuItem>
                         <SidebarMenuItem>
                             <SidebarMenuButton asChild tooltip="Shopping">
-                                <Link href="/shopping">
+                                <Link href={shoppingHref}>
                                     <ShoppingBasket />
                                     <span>Shopping</span>
                                 </Link>

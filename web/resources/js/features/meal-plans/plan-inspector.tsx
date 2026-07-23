@@ -7,6 +7,7 @@ import {
     History,
     MailPlus,
     Plus,
+    ShoppingBasket,
 } from 'lucide-react';
 import { useState } from 'react';
 import { store as storeMealSlot } from '@/actions/App/Http/Controllers/MealSlotController';
@@ -16,7 +17,175 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { HouseholdTruth } from './household-truth';
-import type { MealPlanWorkspace } from './types';
+import type { MealPlanWorkspace, PlanView } from './types';
+
+function money(amount: number | null | undefined, currency = 'AUD') {
+    if (amount === null || amount === undefined) {
+        return 'Not set';
+    }
+
+    return new Intl.NumberFormat('en-AU', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+    }).format(amount);
+}
+
+function ShoppingStatus({ workspace }: { workspace: MealPlanWorkspace }) {
+    const shopping = workspace.shopping;
+    const list = shopping?.shopping_list ?? null;
+    const budget = shopping?.budget;
+    const cart = shopping?.cart_automation;
+    const orderRun = shopping?.retailer_order_run;
+    const sourceMeals = Array.from(
+        new Map(
+            (list?.items ?? [])
+                .flatMap((item) => item.sources)
+                .map((source) => source.planned_meal)
+                .filter((meal): meal is NonNullable<typeof meal> => meal !== null)
+                .map((meal) => [meal.id, meal] as const),
+        ).values(),
+    );
+    const included =
+        list?.items.filter((item) => item.included && !item.in_pantry).length ??
+        0;
+    const matched =
+        list?.items.filter(
+            (item) =>
+                item.included && !item.in_pantry && item.product_match !== null,
+        ).length ?? 0;
+    const remaining =
+        list?.items.filter(
+            (item) =>
+                item.included &&
+                !item.in_pantry &&
+                !item.checked &&
+                !item.ordered_at,
+        ).length ?? 0;
+
+    if (!shopping || !list) {
+        return (
+            <section>
+                <h2 className="flex items-center gap-2 text-sm font-medium">
+                    <ShoppingBasket className="size-4" /> Shopping
+                </h2>
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Start the shopping list from conversation. This inspector
+                    fills once Chef has a list to review.
+                </p>
+            </section>
+        );
+    }
+
+    return (
+        <section className="space-y-5">
+            <div>
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 className="flex items-center gap-2 text-sm font-medium">
+                            <ShoppingBasket className="size-4" /> Shopping
+                        </h2>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {included}{' '}
+                            {included === 1 ? 'item' : 'items'} on the list
+                            {remaining > 0 ? ` · ${remaining} remaining` : ''}
+                        </p>
+                    </div>
+                    <Badge
+                        variant={
+                            list.status === 'completed' ? 'secondary' : 'outline'
+                        }
+                    >
+                        {list.generation_status === 'ready'
+                            ? list.status === 'completed'
+                                ? 'Completed'
+                                : 'Ready'
+                            : list.generation_status === 'failed'
+                              ? 'Needs retry'
+                              : 'Preparing'}
+                    </Badge>
+                </div>
+            </div>
+
+            {budget && (
+                <div>
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                        Budget
+                    </h3>
+                    <p className="mt-1 text-sm">
+                        {money(budget.projected_total, budget.currency)} projected
+                        {budget.effective !== null
+                            ? ` · ${money(budget.effective, budget.currency)} limit`
+                            : ''}
+                    </p>
+                    {budget.unmatched_items > 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {budget.unmatched_items}{' '}
+                            {budget.unmatched_items === 1
+                                ? 'item lacks'
+                                : 'items lack'}{' '}
+                            a price estimate
+                        </p>
+                    )}
+                </div>
+            )}
+
+            <div>
+                <h3 className="text-xs font-medium text-muted-foreground">
+                    Source meals
+                </h3>
+                {sourceMeals.length === 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        No meal sources on this list yet.
+                    </p>
+                ) : (
+                    <ul className="mt-2 space-y-1.5">
+                        {sourceMeals.slice(0, 8).map((meal) => (
+                            <li key={meal.id} className="text-sm">
+                                {meal.title}
+                            </li>
+                        ))}
+                        {sourceMeals.length > 8 && (
+                            <li className="text-xs text-muted-foreground">
+                                +{sourceMeals.length - 8} more
+                            </li>
+                        )}
+                    </ul>
+                )}
+            </div>
+
+            <div>
+                <h3 className="text-xs font-medium text-muted-foreground">
+                    Product matches
+                </h3>
+                <p className="mt-1 text-sm">
+                    {matched} of {included} matched
+                </p>
+            </div>
+
+            {cart && (
+                <div>
+                    <h3 className="text-xs font-medium text-muted-foreground">
+                        Automation
+                    </h3>
+                    <p className="mt-1 text-sm">
+                        {orderRun
+                            ? orderRun.status.replaceAll('_', ' ')
+                            : cart.ready
+                              ? 'Ready to prepare cart'
+                              : cart.readiness_reasons[0] ??
+                                'Not ready for cart'}
+                    </p>
+                    {cart.connection && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Retailer {cart.connection.status.replaceAll('_', ' ')}
+                        </p>
+                    )}
+                </div>
+            )}
+        </section>
+    );
+}
 
 function PlanStatus({ workspace }: { workspace: MealPlanWorkspace }) {
     const { plan, household } = workspace;
@@ -302,11 +471,13 @@ function InvitationForm({ workspace }: { workspace: MealPlanWorkspace }) {
 
 export function PlanInspector({
     workspace,
+    view = 'conversation',
     conversationId,
     onShowMessageSource,
     className,
 }: {
     workspace: MealPlanWorkspace;
+    view?: PlanView;
     conversationId: number;
     onShowMessageSource: (messageId: number) => void;
     className?: string;
@@ -319,17 +490,23 @@ export function PlanInspector({
             )}
         >
             <div className="space-y-7 p-5">
-                <PlanStatus workspace={workspace} />
-                <HouseholdTruth
-                    household={workspace.household}
-                    planId={workspace.plan.id}
-                    safetyReviewRequired={
-                        workspace.readiness.safety_review_required
-                    }
-                    conversationId={conversationId}
-                    onShowMessageSource={onShowMessageSource}
-                />
-                <InvitationForm workspace={workspace} />
+                {view === 'shopping' ? (
+                    <ShoppingStatus workspace={workspace} />
+                ) : (
+                    <>
+                        <PlanStatus workspace={workspace} />
+                        <HouseholdTruth
+                            household={workspace.household}
+                            planId={workspace.plan.id}
+                            safetyReviewRequired={
+                                workspace.readiness.safety_review_required
+                            }
+                            conversationId={conversationId}
+                            onShowMessageSource={onShowMessageSource}
+                        />
+                        <InvitationForm workspace={workspace} />
+                    </>
+                )}
             </div>
         </aside>
     );

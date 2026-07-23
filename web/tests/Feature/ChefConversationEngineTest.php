@@ -127,3 +127,22 @@ it('disables parallel openai tool calls for the mixed read and write agent', fun
     expect($agent->providerOptions(Lab::OpenAI))->toBe(['parallel_tool_calls' => false])
         ->and($agent->providerOptions(Lab::Anthropic))->toBe([]);
 });
+
+it('pins the plan conversation to OpenAI Luna for interactive drafting speed', function () {
+    config()->set('ai.workloads.conversation.model', 'gpt-5.6-luna');
+
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(6));
+    $conversation = $plan->conversations->first();
+    $current = $conversation->messages()->create([
+        'team_id' => $team->id,
+        'user_id' => $user->id,
+        'role' => MessageRole::User,
+        'content' => 'Plan dinners for the week.',
+    ]);
+    $agent = new ChefAgent($conversation, $current->id, $user, $current);
+
+    expect($agent->model())->toBe('gpt-5.6-luna')
+        ->and($agent->provider())->toBe(Lab::OpenAI);
+});

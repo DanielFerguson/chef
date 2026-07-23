@@ -404,7 +404,7 @@ EOF
 ### Task 12: Shopping UI — slot picker, confirm, verification
 
 **Files:**
-- Modify: `web/resources/js/pages/shopping/show.tsx`
+- Modify: `web/resources/js/features/shopping/shopping-phase.tsx` (meal-plan shopping phase; legacy `pages/shopping/show.tsx` removed)
 - Create as needed: `web/resources/js/features/shopping/fulfilment-slot-picker.tsx`
 - Create: `web/resources/js/features/shopping/confirm-order-panel.tsx`
 - Create: `web/resources/js/features/shopping/placement-verification-panel.tsx`

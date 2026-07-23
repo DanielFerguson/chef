@@ -20,30 +20,17 @@ class WoolworthsCatalogueDiscovery implements RetailerProductDiscovery
         }
 
         $concurrency = max(1, min(8, (int) config('services.woolworths.discovery_concurrency', 4)));
-        $maxCandidates = max(1, min(12, (int) config('services.woolworths.discovery_max_candidates', 5)));
+        $maxCandidates = max(1, min(12, (int) config('services.woolworths.discovery_max_candidates', 8)));
         $url = (string) config('services.woolworths.catalogue_search_url', 'https://www.woolworths.com.au/apis/ui/Search/products');
         $timeout = max(5, (int) config('services.woolworths.discovery_timeout', 12));
-        $responses = Http::pool(function (Pool $pool) use ($requirements, $url, $maxCandidates, $timeout): void {
-            foreach ($requirements as $index => $requirement) {
-                // Laravel's pool does not inherit a PendingRequest's
-                // headers or timeouts. Configure every pooled request so
-                // Woolworths receives the same bounded public-search
-                // profile as a direct request.
-                $pool->as((string) $index)
-                    ->acceptJson()
-                    ->withHeaders(['User-Agent' => 'Chef product-plan discovery'])
-                    ->connectTimeout(5)
-                    ->timeout($timeout)
-                    ->get($url, [
-                        'searchTerm' => $requirement['name'],
-                        'pageNumber' => 1,
-                        'pageSize' => $maxCandidates,
-                        'sortType' => 'TraderRelevance',
-                    ]);
-            }
-        }, $concurrency);
+        $searchTerms = array_map(
+            fn (array $requirement): string => (string) $requirement['name'],
+            $requirements,
+        );
+        $responses = $this->searchPool($searchTerms, $url, $maxCandidates, $timeout, $concurrency);
         $discovered = [];
         $failedRequests = 0;
+        $retryIndexes = [];
 
         foreach ($requirements as $index => $requirement) {
             $response = $responses[(string) $index] ?? null;
@@ -55,7 +42,47 @@ class WoolworthsCatalogueDiscovery implements RetailerProductDiscovery
                 continue;
             }
 
-            $discovered[$index] = $this->candidates($response->json(), $requirement, $maxCandidates);
+            $candidates = $this->candidates($response->json(), $requirement, $maxCandidates);
+            $discovered[$index] = $candidates;
+
+            if ($this->usableCandidates($candidates) === []) {
+                $normalized = $this->normalizeSearchTerm((string) $requirement['name']);
+
+                if ($normalized !== '' && strcasecmp($normalized, (string) $requirement['name']) !== 0) {
+                    $retryIndexes[$index] = $normalized;
+                }
+            }
+        }
+
+        if ($retryIndexes !== []) {
+            $retryResponses = $this->searchPool(
+                array_values($retryIndexes),
+                $url,
+                $maxCandidates,
+                $timeout,
+                $concurrency,
+            );
+            $retryPosition = 0;
+
+            foreach ($retryIndexes as $index => $normalized) {
+                $response = $retryResponses[(string) $retryPosition] ?? null;
+                $retryPosition++;
+
+                if (! $response instanceof Response || ! $response->successful()) {
+                    $failedRequests++;
+
+                    continue;
+                }
+
+                $retryCandidates = $this->candidates($response->json(), [
+                    ...$requirements[$index],
+                    'name' => $normalized,
+                ], $maxCandidates);
+
+                if ($this->usableCandidates($retryCandidates) !== []) {
+                    $discovered[$index] = $retryCandidates;
+                }
+            }
         }
 
         if ($failedRequests > 0) {
@@ -63,6 +90,79 @@ class WoolworthsCatalogueDiscovery implements RetailerProductDiscovery
         }
 
         return $discovered;
+    }
+
+    /**
+     * @param  array<int, string>  $searchTerms
+     * @return array<string, Response|Throwable>
+     */
+    private function searchPool(
+        array $searchTerms,
+        string $url,
+        int $maxCandidates,
+        int $timeout,
+        int $concurrency,
+    ): array {
+        return Http::pool(function (Pool $pool) use ($searchTerms, $url, $maxCandidates, $timeout): void {
+            foreach ($searchTerms as $index => $searchTerm) {
+                // Laravel's pool does not inherit a PendingRequest's
+                // headers or timeouts. Configure every pooled request so
+                // Woolworths receives the same bounded public-search
+                // profile as a direct request.
+                $pool->as((string) $index)
+                    ->acceptJson()
+                    ->withHeaders(['User-Agent' => 'Chef product-plan discovery'])
+                    ->connectTimeout(5)
+                    ->timeout($timeout)
+                    ->get($url, [
+                        'searchTerm' => $searchTerm,
+                        'pageNumber' => 1,
+                        'pageSize' => $maxCandidates,
+                        'sortType' => 'TraderRelevance',
+                    ]);
+            }
+        }, $concurrency);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $candidates
+     * @return array<int, array<string, mixed>>
+     */
+    private function usableCandidates(array $candidates): array
+    {
+        return array_values(array_filter(
+            $candidates,
+            fn (array $candidate): bool => (bool) ($candidate['in_stock'] ?? true)
+                && filled($candidate['external_id'] ?? null)
+                && filled($candidate['product_url'] ?? null),
+        ));
+    }
+
+    public function normalizeSearchTerm(string $name): string
+    {
+        $value = Str::of($name)->squish()->lower()->toString();
+        $noise = [
+            'finely',
+            'freshly',
+            'fresh',
+            'roughly',
+            'thinly',
+            'thickly',
+            'diced',
+            'sliced',
+            'chopped',
+            'minced',
+            'crushed',
+            'large',
+            'medium',
+            'small',
+        ];
+
+        foreach ($noise as $token) {
+            $value = (string) preg_replace('/\b'.preg_quote($token, '/').'\b/u', ' ', $value);
+        }
+
+        return Str::of($value)->squish()->toString();
     }
 
     /**
@@ -149,17 +249,27 @@ class WoolworthsCatalogueDiscovery implements RetailerProductDiscovery
     {
         $requiredTokens = array_values(array_diff($this->tokens($requirement), [
             'canned',
+            'chopped',
+            'crushed',
+            'diced',
             'dried',
             'fine',
+            'finely',
             'flat',
             'fresh',
+            'freshly',
             'fry',
             'large',
             'leaf',
             'medium',
+            'minced',
             'mix',
+            'roughly',
+            'sliced',
             'small',
             'stir',
+            'thickly',
+            'thinly',
         ]));
         $candidateTokens = $this->tokens($candidate);
 

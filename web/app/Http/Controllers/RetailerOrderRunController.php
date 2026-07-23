@@ -48,7 +48,7 @@ class RetailerOrderRunController extends Controller
             $request->boolean('product_plan_reviewed') || $request->boolean('allow_automatic_product_search'),
         );
 
-        return to_route('meal-plans.shopping.show', $shoppingList->meal_plan_id);
+        return to_route('meal-plans.show', ['mealPlan' => $shoppingList->meal_plan_id, 'phase' => 'shopping']);
     }
 
     public function selectFulfilment(
@@ -68,7 +68,10 @@ class RetailerOrderRunController extends Controller
             $validated['fulfilment_type'],
         );
 
-        return to_route('meal-plans.shopping.show', $retailerOrderRun->shoppingList->meal_plan_id);
+        return to_route('meal-plans.show', [
+            'mealPlan' => $retailerOrderRun->shoppingList->meal_plan_id,
+            'phase' => 'shopping',
+        ]);
     }
 
     public function confirm(
@@ -78,7 +81,10 @@ class RetailerOrderRunController extends Controller
     ): RedirectResponse {
         $confirm->handle($retailerOrderRun, $request->user());
 
-        return to_route('meal-plans.shopping.show', $retailerOrderRun->shoppingList->meal_plan_id);
+        return to_route('meal-plans.show', [
+            'mealPlan' => $retailerOrderRun->shoppingList->meal_plan_id,
+            'phase' => 'shopping',
+        ]);
     }
 
     public function verify(
@@ -98,7 +104,10 @@ class RetailerOrderRunController extends Controller
             acknowledgedPlaced: (bool) ($validated['acknowledged_placed'] ?? false),
         );
 
-        return to_route('meal-plans.shopping.show', $retailerOrderRun->shoppingList->meal_plan_id);
+        return to_route('meal-plans.show', [
+            'mealPlan' => $retailerOrderRun->shoppingList->meal_plan_id,
+            'phase' => 'shopping',
+        ]);
     }
 
     public function destroy(
@@ -108,8 +117,10 @@ class RetailerOrderRunController extends Controller
     ): RedirectResponse {
         $cancel->handle($retailerOrderRun, $request->user());
 
-        return to_route('meal-plans.shopping.show', $retailerOrderRun->shoppingList->meal_plan_id)
-            ->with('success', 'Woolworths order run was cancelled.');
+        return to_route('meal-plans.show', [
+            'mealPlan' => $retailerOrderRun->shoppingList->meal_plan_id,
+            'phase' => 'shopping',
+        ])->with('success', 'Woolworths order run was cancelled.');
     }
 
     public function resolveCartDecision(
@@ -123,6 +134,9 @@ class RetailerOrderRunController extends Controller
 
         $resolve->handle($retailerOrderRun, $request->user(), $validated['choice']);
 
-        return to_route('meal-plans.shopping.show', $retailerOrderRun->shoppingList->meal_plan_id);
+        return to_route('meal-plans.show', [
+            'mealPlan' => $retailerOrderRun->shoppingList->meal_plan_id,
+            'phase' => 'shopping',
+        ]);
     }
 }

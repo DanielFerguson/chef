@@ -959,7 +959,7 @@ better match the product's calm, progressive style.
 | `/` | Express the category, differentiated loop, proof, and offer. | Essential | Join beta or plan first week |
 | `/how-it-works` | Show the Plan → Review → List → Trolley → Cook and learn sequence. | Essential | Plan first week |
 | `/meal-planning` | Explain conversation plus visible, editable household planning. | Essential | Start a plan |
-| `/shopping` | Explain list traceability, pantry decisions, product matching, budget, fulfilment selection, and confirmed order placement. | Essential when M4 is complete | Build the first plan |
+| `/shopping` | Cross-plan shopping picker; primary shop lives on the meal-plan shopping phase. | Useful when several confirmed plans exist | Build the first plan |
 | `/household-memory` | Explain people, participation, explicit preferences, constraints, evidence, and correction. | High | Start a plan |
 | `/cooking` | Explain Today, preparation, steps, substitutions, outcomes, and feedback. | Publish after M5 | Start a plan |
 | `/retailer-order` | Explain Woolworths and Coles scope, account continuity, approval, takeover, reconciliation, fulfilment selection, and confirmed default-card submit. | Publish after M6.2 live evidence | Try with a plan |

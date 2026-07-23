@@ -96,7 +96,7 @@ toolbar beneath it:
 
 - editable plan title;
 - date range;
-- Conversation, Calendar, and List views for a meal plan;
+- Conversation, Calendar, List, and Shopping views for a meal plan;
 - current phase or important milestone;
 - participant summary;
 - share or invite action;
@@ -107,11 +107,11 @@ and retain icon-labelled view controls with accessible names.
 
 ### Main workspace
 
-The central column holds the primary activity:
+The central column holds the primary activity on the meal-plan page:
 
-- conversation during planning and onboarding;
-- shopping list during shopping;
-- recipe steps during cooking;
+- conversation during planning, onboarding, and preparation;
+- shopping list during the shopping phase (same page, `?phase=shopping`);
+- recipe steps during cooking (separate cook surface for now);
 - outcomes during review.
 
 The conversation should have a comfortable readable width rather than stretching across the viewport. Structured artifacts can break wider when comparison benefits from space.
@@ -189,15 +189,18 @@ Avoid gamified progress, excessive recommendation carousels, or a dense project-
 
 The list should feel as fast as a lightweight document while remaining structured.
 
-Shopping uses progressive disclosure and preserves the meal plan's natural
-conversation. Before a useful list exists, show one primary preparation action
-and calm recipe/list progress. Do not lead with budget controls, an empty item
-editor, completion, or expanded manual ingredient forms. Once the generated
-list is ready, make pantry review optional, keep household extras conversational,
-and reveal budget and product detail as optional next decisions. `Order
-everything` is a valid default when the household does not want a pantry pass.
-Manual recipe
-ingredient entry is a recovery path, not the default experience.
+Shopping uses progressive disclosure and lives on the meal-plan page as a
+phase of the same workspace (riff → prep → shop → order), with the composer
+still available. Approval and shopping-list preparation stay in conversation
+view with one calm progress status; switch to the shopping phase once a list
+exists (or open it from the plan header). Recipes remain a separate page
+family. Retailer login is the only intentional leave-and-return. Before a list
+exists, keep preparation in conversation—do not duplicate a second start action
+in the shopping phase. Once the generated list is ready, make pantry review
+optional, keep household extras conversational, and reveal budget and product
+detail as optional next decisions. `Order everything` is a valid default when
+the household does not want a pantry pass. Failed recipe preparation offers
+retry, not manual ingredient reconstruction.
 
 - click or tap to edit;
 - enter to add;
@@ -249,13 +252,15 @@ run after the protected cart check passes. This is a resume of the earlier
 approved work, not a new cart-preparation approval.
 
 Before cart mutation, complete bounded read-only retailer discovery
-automatically and retain the durable product plan. Summarise routine and
-remembered matches, make new confident matches inspectable, and require a
-decision only for ambiguous, constrained, unresolved, or materially expensive
-items. The whole-plan approval carries the current participant and safety
-context; do not ask for a second blanket safety or product attestation when the
-product plan remains inside that approval envelope. Do not hide a blocked state
-behind a disabled button alone.
+automatically and retain the durable product plan. Routine catalogue matches may
+include heuristic confident picks and AI best-fit/cheapest picks among discovered
+products when the household has no strict safety constraint. Summarise those
+routine and remembered matches, make them inspectable, and require a decision
+only for constrained items, AI abstentions, empty candidate sets, or materially
+expensive exceptions. The whole-plan approval carries the current participant
+and safety context; do not ask for a second blanket safety or product
+attestation when the product plan remains inside that approval envelope. Do not
+hide a blocked state behind a disabled button alone.
 
 If a retailer cart is non-empty, show its observed lines and three concrete
 choices: merge, replace the existing cart, or cancel. Replace must name the

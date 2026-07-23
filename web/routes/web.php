@@ -38,7 +38,6 @@ use App\Http\Controllers\ShoppingListCompletionController;
 use App\Http\Controllers\ShoppingListController;
 use App\Http\Controllers\ShoppingListGenerationController;
 use App\Http\Controllers\ShoppingListItemController;
-use App\Http\Controllers\ShoppingMealResolutionController;
 use App\Http\Controllers\SwitchTeamController;
 use App\Http\Controllers\TeamInvitationController;
 use Illuminate\Support\Facades\Route;
@@ -67,7 +66,6 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::delete('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'destroy'])->name('shopping-list-items.destroy');
     Route::post('shopping-lists/{shoppingList}/complete', ShoppingListCompletionController::class)->name('shopping-lists.complete');
     Route::put('shopping-lists/{shoppingList}/fulfilment', ShoppingFulfilmentController::class)->name('shopping-lists.fulfilment.update');
-    Route::post('shopping-lists/{shoppingList}/meals/{plannedMeal}/ingredients', ShoppingMealResolutionController::class)->name('shopping-lists.meals.resolve');
     Route::put('meal-plans/{mealPlan}/shopping-budget', ShoppingBudgetController::class)->name('meal-plans.shopping-budget.update');
     Route::put('shopping-list-items/{shoppingListItem}/product-match', ProductMatchController::class)->name('shopping-list-items.product-match.update');
     Route::post('shopping-lists/{shoppingList}/orders', OrderSnapshotController::class)->name('shopping-lists.orders.store');

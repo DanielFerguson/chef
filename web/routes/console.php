@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Automation\HeartbeatBrowserActors;
+use App\Actions\Debug\ResetMealPlanBeforeShopping;
 use App\Actions\Shopping\GenerateShoppingList;
 use App\Models\MealPlan;
 use App\Models\User;
@@ -28,6 +29,36 @@ Artisan::command('chef:automation-actors:heartbeat', function (HeartbeatBrowserA
 })->purpose('Refresh and fence persistent Browserbase session actors');
 
 Schedule::command('chef:automation-actors:heartbeat')->everyMinute()->withoutOverlapping();
+
+Artisan::command('chef:meal-plan:reset-before-shopping {mealPlan} {--keep-recipes : Keep attached recipe versions on planned meals}', function (ResetMealPlanBeforeShopping $reset): int {
+    try {
+        $summary = $reset->handle(
+            MealPlan::query()->findOrFail((int) $this->argument('mealPlan')),
+            keepRecipes: (bool) $this->option('keep-recipes'),
+        );
+    } catch (RuntimeException $exception) {
+        $this->error($exception->getMessage());
+
+        return Command::FAILURE;
+    }
+
+    $this->info(sprintf(
+        'Meal plan %d reset to finished planning (shopping cleared).',
+        $summary['meal_plan_id'],
+    ));
+    $this->line(sprintf(
+        'Removed %d shopping list(s), %d cart product plan(s), %d retailer order run(s).',
+        $summary['deleted_shopping_lists'],
+        $summary['deleted_cart_product_plans'],
+        $summary['deleted_retailer_order_runs'],
+    ));
+    $this->line($summary['kept_recipes']
+        ? 'Recipe versions were kept on planned meals.'
+        : sprintf('Detached recipes from %d planned meal(s).', $summary['detached_recipes']));
+    $this->line('Plan confirmation and shopping approval were cleared so Approve & prepare can run again.');
+
+    return Command::SUCCESS;
+})->purpose('Local/testing: reset a meal plan to finished planning without shopping preparation');
 
 Artisan::command('chef:shopping-list:regenerate {mealPlan} {--user= : User ID performing the authorised regeneration}', function (GenerateShoppingList $generate): int {
     $mealPlan = MealPlan::query()->findOrFail((int) $this->argument('mealPlan'));

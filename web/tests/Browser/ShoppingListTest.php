@@ -2,7 +2,6 @@
 
 use App\Actions\Automation\StartRetailerConnection;
 use App\Actions\Automation\VerifyRetailerConnection;
-use App\Actions\Conversations\CreateUserMessage;
 use App\Actions\MealPlans\ConfirmMealPlan;
 use App\Actions\MealPlans\ReviewMealPlanSafety;
 use App\Actions\MealPlans\StartMealPlan;
@@ -11,13 +10,11 @@ use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Recipes\CreateRecipe;
 use App\Actions\Shopping\GenerateShoppingList;
 use App\Actions\Teams\CreateTeamForUser;
-use App\Ai\Agents\ChefAgent;
 use App\Automation\Contracts\ComputerExecutor;
 use App\Automation\Contracts\RetailerProductDiscovery;
 use App\Automation\Testing\FakeComputerExecutor;
 use App\Automation\Testing\FakeRetailerProductDiscovery;
 use App\Enums\MealSlotKind;
-use App\Enums\MessageResponseStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\RetailerOrderRunItemStatus;
 use App\Enums\RetailerOrderRunStatus;
@@ -31,7 +28,6 @@ use App\Models\RetailerOrderRunItem;
 use App\Models\ShoppingList;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -69,9 +65,7 @@ it('takes a confirmed plan through an editable traceable shopping list', functio
     visit(route('meal-plans.show', $workspace['plan']))->on()->desktop()
         ->pressAndWaitFor('Start shopping list')
         ->assertSee('Shopping list')
-        ->assertScript(
-            '() => Array.from(document.querySelector(\'[data-sidebar="trigger"]\')?.closest(\'header\')?.querySelectorAll(\'a\') ?? []).some((link) => link.textContent?.trim() === \'Back to plan\')',
-        )
+        ->assertPresent('button[aria-label="Shopping"]')
         ->assertSee('Full shopping list')
         ->assertSee('2 items · Review pantry, quantities or add an item')
         ->assertScript('() => document.querySelector(\'summary[aria-label="Shopping list items"]\')?.parentElement?.open === false')
@@ -94,7 +88,7 @@ it('takes a confirmed plan through an editable traceable shopping list', functio
         ->click('button[aria-label="List view"]')
         ->assertPresent('button[aria-label="Edit Chicken breast"]')
         ->assertPresent('button[aria-label="Edit Coconut milk"]')
-        ->pressAndWaitFor('Back to plan')
+        ->click('button[aria-label="Conversation"]')
         ->assertSee('Review shopping list')
         ->pressAndWaitFor('Review shopping list')
         ->click('summary[aria-label="Shopping list items"]')
@@ -141,7 +135,7 @@ it('automatically prepares ingredients for a custom meal without manual reconstr
     app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertDontSee('needs structured ingredients')
         ->assertNotPresent('textarea[aria-label="Ingredients for Pulled pork rolls"]')
         ->click('summary[aria-label="Shopping list items"]')
@@ -157,12 +151,10 @@ it('keeps the shopping editor usable at a narrow viewport', function () {
     app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->resize(390, 844)
         ->assertSee('Shopping list')
-        ->assertScript(
-            '() => Array.from(document.querySelector(\'[data-sidebar="trigger"]\')?.closest(\'header\')?.querySelectorAll(\'a\') ?? []).some((link) => link.textContent?.trim() === \'Back to plan\')',
-        )
+        ->assertPresent('button[aria-label="Shopping"]')
         ->assertSee('Full shopping list')
         ->assertScript('() => document.querySelector(\'summary[aria-label="Shopping list items"]\')?.parentElement?.open === false')
         ->click('summary[aria-label="Shopping list items"]')
@@ -184,19 +176,6 @@ it('keeps the shopping editor usable at a narrow viewport', function () {
         ->assertNoJavaScriptErrors();
 });
 
-it('shows a structured current shopping recap instead of a stale planning message', function () {
-    $workspace = browserShoppingWorkspace();
-    app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    $this->actingAs($workspace['user']);
-
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
-        ->click('summary[aria-label="Plan recap"]')
-        ->assertSee('2 items are on the current list')
-        ->assertSee('2 remain to buy')
-        ->assertDontSee('recipes are still preparing')
-        ->assertNoJavaScriptErrors();
-});
-
 it('shows shopping-list progress once every recipe is ready', function () {
     $workspace = browserShoppingWorkspace();
     $list = app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
@@ -206,10 +185,9 @@ it('shows shopping-list progress once every recipe is ready', function () {
     ]);
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->resize(390, 844)
         ->assertSee('Building your shopping list')
-        ->assertSee('All recipes are ready. Chef is combining ingredients and quantities now.')
         ->assertDontSee('Preparing your recipes')
         ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
@@ -221,7 +199,7 @@ it('renders recipe-provenanced plan-generated rows on desktop', function () {
     $list->items()->update(['source_kind' => ShoppingListItemSourceKind::PlanGenerated]);
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Shopping list')
         ->click('summary[aria-label="Shopping list items"]')
         ->click('button[aria-label="List view"]')
@@ -240,7 +218,7 @@ it('shows a safe shopping-generation failure and retries it', function () {
     ]);
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Chef could not finish this shopping list')
         ->assertSee('Chef could not prepare this shopping list. Try again.')
         ->pressAndWaitFor('Retry')
@@ -256,45 +234,16 @@ it('directs stale safety context back to plan review on desktop and narrow scree
     $workspace['plan']->refresh()->update(['confirmed_safety_context_hash' => null]);
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Review the plan’s safety details')
         ->assertSee('Review plan safety')
         ->assertNoJavaScriptErrors();
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->resize(390, 844)
         ->assertSee('Review the plan’s safety details')
         ->assertSee('Review plan safety')
         ->assertNoJavaScriptErrors();
-});
-
-it('retries the shared plan conversation from shopping', function () {
-    $workspace = browserShoppingWorkspace();
-    app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    $message = app(CreateUserMessage::class)->handle(
-        $workspace['plan']->conversations()->firstOrFail(),
-        $workspace['user'],
-        'Please retry the shopping update.',
-        (string) Str::uuid(),
-        true,
-        true,
-    );
-    $message->update([
-        'response_status' => MessageResponseStatus::Failed,
-        'response_error' => 'Chef could not finish that response.',
-    ]);
-    ChefAgent::fake(['Recovered the shopping conversation.'])->preventStrayPrompts();
-    $this->actingAs($workspace['user']);
-
-    visit(route('meal-plans.shopping.show', $workspace['plan']))->on()->desktop()
-        ->click('summary[aria-label="Plan recap"]')
-        ->assertPresent('button[aria-label="Retry failed shopping message"]')
-        ->click('button[aria-label="Retry failed shopping message"]')
-        ->assertSee('Recovered the shopping conversation.')
-        ->assertNoJavaScriptErrors();
-
-    expect($message->refresh()->response_status)->toBe(MessageResponseStatus::Completed)
-        ->and($message->response()->count())->toBe(1);
 });
 
 it('offers just-in-time Woolworths connection without overflowing a narrow screen', function () {
@@ -304,7 +253,7 @@ it('offers just-in-time Woolworths connection without overflowing a narrow scree
     putenv('WOOLWORTHS_CONNECTION_ENABLED=true');
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->resize(390, 844)
         ->assertSee('Woolworths cart')
         ->assertSee('Connect Woolworths when the list is ready')
@@ -355,7 +304,7 @@ it('requires explicit product and safety review before preparing a cart', functi
     $discovery->returnAmbiguousCandidates = true;
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->resize(390, 844)
         ->assertSee('Next step')
         ->assertSee('Find products for your list')
@@ -401,7 +350,7 @@ it('turns a catalogue outage into one compact retry instead of a manual item lis
     $discovery->fail = true;
     $this->actingAs($workspace['user']);
 
-    visit(route('meal-plans.shopping.show', $workspace['plan']))
+    visit(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->resize(390, 844)
         ->click('Find Woolworths products')
         ->assertSee('Retry Woolworths product matching')
@@ -559,7 +508,7 @@ it('lists fulfilment slots when a retailer order run awaits selection', function
     $fixture = browserRetailerOrderRun();
     $this->actingAs($fixture['user']);
 
-    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Choose a delivery time')
         ->assertSee('Tomorrow 6–8pm')
         ->assertSee('Use this delivery time')
@@ -581,7 +530,7 @@ it('names delivery, slot, and default card before order confirmation', function 
     ]);
     $this->actingAs($fixture['user']);
 
-    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Confirm Woolworths order')
         ->assertSee('Delivery')
         ->assertSee('Tomorrow 6–8pm')
@@ -608,7 +557,7 @@ it('shows placement verification when Chef needs an order number or ack', functi
     ]);
     $this->actingAs($fixture['user']);
 
-    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Verify Woolworths placement')
         ->assertPresent('input#retailer-order-reference-'.$fixture['run']->id)
         ->assertSee('I confirm the Woolworths order was placed')
@@ -626,7 +575,7 @@ it('offers merge, replace, and cancel for a retailer cart decision', function ()
     ]);
     $this->actingAs($fixture['user']);
 
-    visit(route('meal-plans.shopping.show', $fixture['plan']))->on()->desktop()
+    visit(route('meal-plans.show', ['mealPlan' => $fixture['plan'], 'phase' => 'shopping']))->on()->desktop()
         ->assertSee('Woolworths already has a cart')
         ->assertSee('Merge carts')
         ->assertSee('Replace existing cart')

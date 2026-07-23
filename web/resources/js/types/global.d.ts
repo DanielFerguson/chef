@@ -7,6 +7,7 @@ export type RecentMealPlan = {
     ends_on: string;
     revision: number;
     phase: 'Draft' | 'Confirmed' | 'Preparing' | 'Superseded';
+    has_shopping_list: boolean;
     can: {
         update: boolean;
         delete: boolean;

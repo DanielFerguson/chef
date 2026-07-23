@@ -18,6 +18,9 @@ class MealPlanApprovalController extends Controller
 
         $approve->handle($mealPlan, $request->user(), $validated['fulfilment_method'] ?? null);
 
-        return to_route('meal-plans.shopping.show', $mealPlan);
+        return to_route('meal-plans.show', [
+            'mealPlan' => $mealPlan,
+            'phase' => 'shopping',
+        ]);
     }
 }

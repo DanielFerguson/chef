@@ -6,6 +6,9 @@ use App\Actions\MealPlans\DeleteMealPlan;
 use App\Actions\MealPlans\RenameMealPlan;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\AssessMealPlanReadiness;
+use App\Actions\Shopping\BuildShoppingWorkspace;
+use App\Enums\RetailerOrderRunStatus;
+use App\Enums\ShoppingListGenerationStatus;
 use App\Models\MealPlan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,8 +41,12 @@ class MealPlanController extends Controller
         return to_route('meal-plans.show', $mealPlan);
     }
 
-    public function show(Request $request, MealPlan $mealPlan, AssessMealPlanReadiness $assessReadiness): Response
-    {
+    public function show(
+        Request $request,
+        MealPlan $mealPlan,
+        AssessMealPlanReadiness $assessReadiness,
+        BuildShoppingWorkspace $buildShoppingWorkspace,
+    ): Response {
         $this->authorize('view', $mealPlan);
 
         $mealPlan->load([
@@ -55,7 +62,7 @@ class MealPlanController extends Controller
             'proposals' => fn ($query) => $query->latest(),
             'revisions' => fn ($query) => $query->limit(20),
             'milestones',
-            'shoppingList:id,meal_plan_id,status,generation_status,revision,stale_at',
+            'shoppingList:id,meal_plan_id,status,generation_status,generation_failure_code,generation_failure_message,revision,stale_at',
             'team.people.userLink',
             'team.people.preferences.sourceMessage:id,conversation_id',
             'team.people.constraints.confirmationMessage.author:id,name',
@@ -69,6 +76,40 @@ class MealPlanController extends Controller
         ]);
 
         $conversation = $mealPlan->conversations->firstOrFail();
+        $readiness = $assessReadiness->handle($mealPlan);
+        $shoppingEligible = $buildShoppingWorkspace->isEligible($mealPlan);
+        $shoppingList = $mealPlan->shoppingList;
+        $requestedPhase = $request->query('phase');
+        $generationInProgress = $shoppingList !== null
+            && in_array($shoppingList->generation_status, [
+                ShoppingListGenerationStatus::Pending,
+                ShoppingListGenerationStatus::Processing,
+            ], true);
+        $hasActiveOrderRun = $shoppingList !== null
+            && $shoppingList->retailerOrderRuns()
+                ->whereNotIn('status', [
+                    RetailerOrderRunStatus::Placed->value,
+                    RetailerOrderRunStatus::Failed->value,
+                    RetailerOrderRunStatus::Cancelled->value,
+                ])
+                ->exists();
+        $shoppingListReady = $shoppingList !== null
+            && ($shoppingList->generation_status === ShoppingListGenerationStatus::Ready
+                || $hasActiveOrderRun);
+        $phase = match (true) {
+            $requestedPhase === 'shopping' && $shoppingEligible => 'shopping',
+            $requestedPhase === 'conversation' => 'conversation',
+            $shoppingListReady && $requestedPhase !== 'calendar' && $requestedPhase !== 'list' => 'shopping',
+            default => 'conversation',
+        };
+        $needsShoppingWorkspace = $shoppingEligible && (
+            $phase === 'shopping'
+            || $generationInProgress
+            || $hasActiveOrderRun
+        );
+        $shopping = $needsShoppingWorkspace
+            ? $buildShoppingWorkspace->handle($mealPlan, $request->user())
+            : null;
 
         return Inertia::render('meal-plans/show', [
             'workspace' => [
@@ -76,7 +117,9 @@ class MealPlanController extends Controller
                 'conversation' => $conversation,
                 'household' => $mealPlan->team,
                 'recipes' => $mealPlan->team->recipes,
-                'readiness' => $assessReadiness->handle($mealPlan),
+                'readiness' => $readiness,
+                'shopping' => $shopping,
+                'phase' => $phase,
             ],
         ]);
     }

@@ -2,12 +2,15 @@
 
 namespace App\Providers;
 
+use App\Ai\Contracts\CartProductCandidateSelector;
 use App\Ai\Contracts\ChefConversationEngine;
 use App\Ai\Contracts\MealPlanRecipeDrafter;
 use App\Ai\Contracts\ShoppingListDrafter;
+use App\Ai\LaravelAiCartProductCandidateSelector;
 use App\Ai\LaravelAiConversationEngine;
 use App\Ai\LaravelAiMealPlanRecipeDrafter;
 use App\Ai\LaravelAiShoppingListDrafter;
+use App\Ai\Testing\DeterministicCartProductCandidateSelector;
 use App\Ai\Testing\DeterministicMealPlanRecipeDrafter;
 use App\Ai\Testing\DisabledShoppingListDrafter;
 use App\Automation\Browserbase\BrowserbaseBrowserSessionProvider;
@@ -51,6 +54,12 @@ class AppServiceProvider extends ServiceProvider
                 ? DisabledShoppingListDrafter::class
                 : LaravelAiShoppingListDrafter::class,
         );
+        $this->app->bind(
+            CartProductCandidateSelector::class,
+            $this->app->environment('testing')
+                ? DeterministicCartProductCandidateSelector::class
+                : LaravelAiCartProductCandidateSelector::class,
+        );
         $this->app->singleton(
             BrowserSessionProvider::class,
             $this->app->environment('testing')
@@ -85,8 +94,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
+            // queue:listen's child Process defaults to a 60s kill and aborts long
+            // AI jobs (e.g. MaterializeMealPlanRecipesJob at 180s). Use queue:work.
             DevCommands::artisan(
-                'queue:listen --queue=default,ai,automation --tries=1 --timeout=0',
+                'queue:work --queue=default,ai,automation --tries=1 --timeout=0',
                 'queue',
             )->purple();
         }

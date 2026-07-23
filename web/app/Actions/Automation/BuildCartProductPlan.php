@@ -2,6 +2,8 @@
 
 namespace App\Actions\Automation;
 
+use App\Ai\Contracts\CartProductCandidateSelector;
+use App\Ai\Data\CartProductSelectionRequest;
 use App\Automation\Contracts\RetailerProductDiscovery;
 use App\Enums\CartProductPlanItemStatus;
 use App\Enums\CartProductPlanStatus;
@@ -20,6 +22,7 @@ class BuildCartProductPlan
     public function __construct(
         private readonly BuildCartPreparationPreflight $buildPreflight,
         private readonly RetailerProductDiscovery $discovery,
+        private readonly CartProductCandidateSelector $candidateSelector,
     ) {}
 
     public function handle(
@@ -135,6 +138,10 @@ class BuildCartProductPlan
             ];
         }
 
+        if (! $preflight['requires_exact_matches'] && ! $discoveryFailed) {
+            $plannedItems = $this->applyAiSelections($plannedItems);
+        }
+
         $ready = $plannedItems !== [] && collect($plannedItems)->every(
             fn (array $item): bool => $item['status'] === CartProductPlanItemStatus::Exact,
         );
@@ -168,6 +175,89 @@ class BuildCartProductPlan
 
             return $plan->load('items');
         });
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $plannedItems
+     * @return array<int, array<string, mixed>>
+     */
+    private function applyAiSelections(array $plannedItems): array
+    {
+        $pendingIndexes = [];
+        $requestItems = [];
+
+        foreach ($plannedItems as $index => $item) {
+            if (! in_array($item['status'], [CartProductPlanItemStatus::Ambiguous, CartProductPlanItemStatus::Unresolved], true)) {
+                continue;
+            }
+
+            $candidates = collect($item['candidates'] ?? [])
+                ->filter(fn (array $candidate): bool => $this->isExactProduct($candidate)
+                    && (bool) ($candidate['in_stock'] ?? true))
+                ->map(fn (array $candidate): array => [
+                    'external_id' => (string) $candidate['external_id'],
+                    'product_name' => (string) $candidate['product_name'],
+                    'price' => is_numeric($candidate['price'] ?? null) ? (float) $candidate['price'] : null,
+                    'pack_size' => is_string($candidate['pack_size'] ?? null) ? $candidate['pack_size'] : null,
+                    'confidence' => is_numeric($candidate['confidence'] ?? null) ? (float) $candidate['confidence'] : null,
+                    'in_stock' => (bool) ($candidate['in_stock'] ?? true),
+                ])
+                ->values()
+                ->all();
+
+            if ($candidates === [] || ! is_numeric($item['shopping_list_item_id'] ?? null)) {
+                continue;
+            }
+
+            $requirement = is_array($item['requirement_snapshot'] ?? null) ? $item['requirement_snapshot'] : [];
+            $pendingIndexes[] = $index;
+            $requestItems[] = [
+                'shopping_list_item_id' => (int) $item['shopping_list_item_id'],
+                'name' => (string) ($requirement['name'] ?? ''),
+                'quantity' => is_numeric($requirement['quantity'] ?? null) ? (float) $requirement['quantity'] : null,
+                'unit' => is_string($requirement['unit'] ?? null) ? $requirement['unit'] : null,
+                'candidates' => $candidates,
+            ];
+        }
+
+        if ($requestItems === []) {
+            return $plannedItems;
+        }
+
+        try {
+            $result = $this->candidateSelector->select(new CartProductSelectionRequest($requestItems));
+        } catch (Throwable) {
+            return $plannedItems;
+        }
+
+        $byItemId = collect($result->selections)->keyBy('shopping_list_item_id');
+
+        foreach ($pendingIndexes as $index) {
+            $itemId = (int) $plannedItems[$index]['shopping_list_item_id'];
+            $selection = $byItemId->get($itemId);
+
+            if (! is_array($selection) || ! is_string($selection['external_id'] ?? null)) {
+                continue;
+            }
+
+            $candidate = collect($plannedItems[$index]['candidates'] ?? [])
+                ->first(fn (array $candidate): bool => (string) ($candidate['external_id'] ?? '') === $selection['external_id']
+                    && $this->isExactProduct($candidate)
+                    && (bool) ($candidate['in_stock'] ?? true));
+
+            if (! is_array($candidate)) {
+                continue;
+            }
+
+            $plannedItems[$index]['status'] = CartProductPlanItemStatus::Exact;
+            $plannedItems[$index]['selected_product'] = [
+                ...$candidate,
+                'pack_count' => max(1, (int) ($candidate['pack_count'] ?? 1)),
+            ];
+            $plannedItems[$index]['decision_reason'] = 'ai_best_fit_cheapest';
+        }
+
+        return $plannedItems;
     }
 
     /** @return array<int, array<string, mixed>> */

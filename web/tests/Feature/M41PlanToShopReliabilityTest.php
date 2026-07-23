@@ -138,7 +138,10 @@ it('approves one complete draft and starts safe shopping preparation with one ac
         ->post(route('meal-plans.approve', $workspace['plan']), [
             'explicitly_reviewed_safety' => true,
         ])
-        ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']));
+        ->assertRedirect(route('meal-plans.show', [
+            'mealPlan' => $workspace['plan'],
+            'phase' => 'shopping',
+        ]));
 
     $plan = $workspace['plan']->refresh();
     $list = $plan->shoppingList;
@@ -614,7 +617,10 @@ it('recovers a confirmed legacy plan through the authorised HTTP workflow', func
 
     $this->actingAs($workspace['user'])
         ->post(route('meal-plans.shopping-list.generate', $workspace['plan']))
-        ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']));
+        ->assertRedirect(route('meal-plans.show', [
+            'mealPlan' => $workspace['plan'],
+            'phase' => 'shopping',
+        ]));
 
     expect($workspace['plan']->refresh()->recipe_generation_status)->toBe(MealPlanRecipeGenerationStatus::Pending)
         ->and($workspace['plan']->shoppingList()->sole()->revision)->toBe(0);

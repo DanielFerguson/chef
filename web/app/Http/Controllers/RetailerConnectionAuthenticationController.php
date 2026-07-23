@@ -121,13 +121,33 @@ class RetailerConnectionAuthenticationController extends Controller
             : null;
 
         if ($shoppingList !== null) {
-            return route('meal-plans.shopping.show', $shoppingList->meal_plan_id);
+            return route('meal-plans.show', [
+                'mealPlan' => $shoppingList->meal_plan_id,
+                'phase' => 'shopping',
+            ]);
         }
 
-        $run = $session->retailerConnection->runs()->latest()->first();
+        $run = $session->retailerConnection->orderRuns()->latest('id')->first();
 
-        return $run === null
-            ? route('shopping.index')
-            : route('meal-plans.shopping.show', $run->shoppingList->meal_plan_id);
+        if ($run !== null) {
+            return route('meal-plans.show', [
+                'mealPlan' => $run->shoppingList->meal_plan_id,
+                'phase' => 'shopping',
+            ]);
+        }
+
+        $fallbackList = ShoppingList::query()
+            ->where('team_id', $session->team_id)
+            ->latest('id')
+            ->first();
+
+        if ($fallbackList !== null) {
+            return route('meal-plans.show', [
+                'mealPlan' => $fallbackList->meal_plan_id,
+                'phase' => 'shopping',
+            ]);
+        }
+
+        return route('shopping.index');
     }
 }

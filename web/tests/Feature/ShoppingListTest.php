@@ -3,7 +3,6 @@
 use App\Actions\MealPlans\ConfirmMealPlan;
 use App\Actions\MealPlans\ReviewMealPlanSafety;
 use App\Actions\MealPlans\StartMealPlan;
-use App\Actions\Planning\AssessMealPlanReadiness;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Planning\UpdatePlannedMeal;
@@ -15,7 +14,6 @@ use App\Actions\Shopping\DeleteShoppingListItem;
 use App\Actions\Shopping\GenerateShoppingList;
 use App\Actions\Shopping\MatchRetailProduct;
 use App\Actions\Shopping\RecordOrderSnapshot;
-use App\Actions\Shopping\ResolvePlannedMealIngredients;
 use App\Actions\Shopping\SetShoppingBudget;
 use App\Actions\Shopping\SetShoppingFulfilment;
 use App\Actions\Shopping\UpdateShoppingListItem;
@@ -26,7 +24,6 @@ use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\ShoppingListItemCategory;
 use App\Enums\ShoppingListStatus;
-use App\Models\PlannedMeal;
 use App\Models\Retailer;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -474,73 +471,12 @@ it('enforces shopping invariants inside reusable domain actions', function () {
         ['name' => 'Inactive product', 'price' => 1],
         $list->revision,
     ))->toThrow(ValidationException::class, 'active retailer');
-    expect(fn () => app(ResolvePlannedMealIngredients::class)->handle(
-        $list,
-        $workspace['firstMeal'],
-        $workspace['user'],
-        [['name' => 'Nope']],
-        $list->revision,
-    ))->toThrow(ValidationException::class, 'Only a planned custom meal');
     foreach ($list->items as $shoppingItem) {
         app(UpdateShoppingListItem::class)->handle($shoppingItem, $workspace['user'], ['checked' => true]);
     }
     app(CompleteShoppingList::class)->handle($list->refresh(), $workspace['user'], $list->refresh()->revision);
     expect(fn () => app(RecordOrderSnapshot::class)->handle($list->refresh(), $workspace['user'], -1))
         ->toThrow(ValidationException::class, 'cannot be negative');
-});
-
-it('resolves custom meal ingredients explicitly and keeps their meal traceability', function () {
-    $workspace = shoppingListWorkspace();
-    $list = app(GenerateShoppingList::class)->handle($workspace['plan'], $workspace['user']);
-    $slot = app(CreateMealSlot::class)->handle(
-        $workspace['plan']->refresh(),
-        $workspace['user'],
-        today(),
-        MealSlotKind::Lunch,
-        $workspace['team']->people,
-    );
-    $customMeal = PlannedMeal::query()->create([
-        'team_id' => $workspace['team']->id,
-        'meal_plan_id' => $workspace['plan']->id,
-        'meal_slot_id' => $slot->id,
-        'selected_by_user_id' => $workspace['user']->id,
-        'type' => PlannedMealType::Custom,
-        'status' => PlannedMealStatus::Planned,
-        'servings' => 2,
-        'title' => 'Pulled pork rolls',
-    ]);
-    $list->refresh()->update([
-        'source_plan_revision' => $workspace['plan']->refresh()->revision,
-        'stale_at' => null,
-        'stale_reason' => null,
-        'stale_diff' => null,
-    ]);
-
-    app(ResolvePlannedMealIngredients::class)->handle($list, $customMeal, $workspace['user'], [
-        ['name' => 'Bread rolls', 'quantity' => 4, 'unit' => 'each'],
-        ['name' => 'Coleslaw', 'quantity' => 1, 'unit' => 'bag'],
-    ], $list->revision);
-    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-
-    $rolls = $list->items()->where('normalized_name', 'bread rolls')->sole();
-    $resolution = $list->mealResolutions()->where('planned_meal_id', $customMeal->id)->sole();
-    $readiness = app(AssessMealPlanReadiness::class)->handle($workspace['plan']->refresh());
-    $outsider = User::factory()->create();
-    app(CreateTeamForUser::class)->handle($outsider, 'Resolution outsider');
-    expect($resolution)->not->toBeNull()
-        ->and($workspace['user']->can('view', $resolution))->toBeTrue()
-        ->and($outsider->can('view', $resolution))->toBeFalse()
-        ->and($rolls->getRawOriginal('source_kind'))->toBe('planned_meal')
-        ->and($rolls->sources)->toHaveCount(1)
-        ->and($rolls->sources->first()->planned_meal_id)->toBe($customMeal->id)
-        ->and($list->refresh()->revision)->toBe(2)
-        ->and($readiness['recipes_unresolved'])->toBe(0)
-        ->and($readiness['recipes_failed'])->toBe(0)
-        ->and($readiness['next_action'])->toBe('begin_shopping');
-
-    app(GenerateShoppingList::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-    expect($list->items()->where('normalized_name', 'bread rolls')->exists())->toBeTrue();
 });
 
 it('stores household and plan budgets retailer preferences matches and immutable order snapshots', function () {
@@ -591,11 +527,11 @@ it('stores household and plan budgets retailer preferences matches and immutable
 
     $this->withoutVite();
     $this->actingAs($workspace['user'])
-        ->get(route('meal-plans.shopping.show', $workspace['plan']))
+        ->get(route('meal-plans.show', ['mealPlan' => $workspace['plan'], 'phase' => 'shopping']))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('workspace.product_preferences.0.normalized_item_name', 'chicken breast')
-            ->where('workspace.product_preferences.0.preferred_brand', 'Coles')
-            ->where('workspace.product_preferences.0.accept_substitutes', false));
+            ->component('meal-plans/show')
+            ->where('workspace.shopping.shopping_list.id', $list->id)
+            ->missing('workspace.shopping.product_preferences'));
 
     $revision = $list->refresh()->revision;
     foreach ($list->items as $item) {
@@ -719,7 +655,7 @@ it('keeps shopping lists actions and route bindings inside the family boundary',
         ->toThrow(AuthorizationException::class);
 
     $this->actingAs($outsider)
-        ->get(route('meal-plans.shopping.show', $workspace['plan']->id))
+        ->get(route('meal-plans.show', ['mealPlan' => $workspace['plan']->id, 'phase' => 'shopping']))
         ->assertNotFound();
     $this->put(route('shopping-list-items.update', $item->id), [
         'checked' => true,
@@ -749,21 +685,78 @@ it('serves a structured shopping workspace and generates through the http bounda
 
     $this->actingAs($workspace['user'])
         ->post(route('meal-plans.shopping-list.generate', $workspace['plan']))
-        ->assertRedirect(route('meal-plans.shopping.show', $workspace['plan']));
+        ->assertRedirect(route('meal-plans.show', [
+            'mealPlan' => $workspace['plan'],
+            'phase' => 'shopping',
+        ]));
 
-    $this->get(route('meal-plans.shopping.show', $workspace['plan']))
+    $this->get(route('meal-plans.show', [
+        'mealPlan' => $workspace['plan'],
+        'phase' => 'shopping',
+    ]))
         ->assertInertia(fn (Assert $page) => $page
-            ->component('shopping/show')
+            ->component('meal-plans/show')
             ->where('workspace.plan.id', $workspace['plan']->id)
-            ->where('workspace.shopping_list.revision', 1)
-            ->has('workspace.shopping_list.items', 3)
-            ->where('workspace.shopping_list.items.0.category', 'meat_seafood')
-            ->has('workspace.shopping_categories', 9)
-            ->where('workspace.shopping_categories.0.value', 'fruit_veg')
-            ->where('workspace.shopping_categories.0.label', 'Fruit & Veg')
-            ->where('workspace.shopping_list.items.0.sources.0.planned_meal.title', 'Satay chicken')
-            ->has('workspace.missing_meals', 0)
-            ->has('workspace.retailers', 2)
-            ->where('workspace.budget.projected_total', 0)
-            ->where('workspace.budget.unmatched_items', 3));
+            ->where('workspace.phase', 'shopping')
+            ->where('workspace.shopping.shopping_list.revision', 1)
+            ->has('workspace.shopping.shopping_list.items', 3)
+            ->where('workspace.shopping.shopping_list.items.0.category', 'meat_seafood')
+            ->has('workspace.shopping.shopping_categories', 9)
+            ->where('workspace.shopping.shopping_categories.0.value', 'fruit_veg')
+            ->where('workspace.shopping.shopping_categories.0.label', 'Fruit & Veg')
+            ->where('workspace.shopping.shopping_list.items.0.sources.0.planned_meal.title', 'Satay chicken')
+            ->has('workspace.shopping.missing_meals', 0)
+            ->has('workspace.shopping.retailers', 2)
+            ->where('workspace.shopping.budget.projected_total', 0)
+            ->where('workspace.shopping.budget.unmatched_items', 3));
+
+    $this->get(route('meal-plans.show', [
+        'mealPlan' => $workspace['plan'],
+        'phase' => 'conversation',
+    ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('meal-plans/show')
+            ->where('workspace.phase', 'conversation')
+            ->where('workspace.plan.shopping_list.id', $workspace['plan']->refresh()->shoppingList->id)
+            ->where('workspace.shopping', null));
+});
+
+it('redirects shopping surfaces back to the plan when confirmation is missing or stale', function () {
+    $workspace = shoppingListWorkspace();
+    $this->withoutVite();
+
+    $workspace['plan']->forceFill([
+        'planning_confirmed_at' => null,
+        'confirmed_safety_context_hash' => null,
+        'shopping_approved_at' => null,
+        'shopping_approved_by_user_id' => null,
+        'shopping_approval_fingerprint' => null,
+    ])->save();
+
+    $this->actingAs($workspace['user'])
+        ->get(route('meal-plans.shopping.show', $workspace['plan']))
+        ->assertRedirect(route('meal-plans.show', [
+            'mealPlan' => $workspace['plan'],
+            'phase' => 'shopping',
+        ]));
+
+    $this->actingAs($workspace['user'])
+        ->post(route('meal-plans.shopping-list.generate', $workspace['plan']))
+        ->assertRedirect(route('meal-plans.show', $workspace['plan']));
+
+    app(ConfirmMealPlan::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $workspace['plan']->forceFill([
+        'confirmed_safety_context_hash' => 'stale-safety-hash',
+    ])->save();
+
+    $this->actingAs($workspace['user'])
+        ->get(route('meal-plans.shopping.show', $workspace['plan']))
+        ->assertRedirect(route('meal-plans.show', [
+            'mealPlan' => $workspace['plan'],
+            'phase' => 'shopping',
+        ]));
+
+    $this->actingAs($workspace['user'])
+        ->post(route('meal-plans.shopping-list.generate', $workspace['plan']))
+        ->assertRedirect(route('meal-plans.show', $workspace['plan']));
 });

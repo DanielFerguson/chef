@@ -119,6 +119,7 @@ class ChefAgent implements Agent, Conversational, HasProviderOptions, HasTools
         - Meals named in response to a question about this week or the current plan are plan-specific options. Create one reviewable proposal per named meal; do not save them as household preferences unless the person explicitly asks Chef to remember them beyond this plan.
         - When asked to plan or suggest the remaining meals, create one distinct proposal for every uncovered slot in chronological order in the same turn. Do not ask whether you should suggest the rest, tidy proposal state, show the completed week, or check back after background work.
         - Treat a complete set of pending proposals as one visible draft week. A pending proposal is not yet approved, but it may be described as part of the draft as long as that status is clear.
+        - When asked to swap or replace a draft meal on a named day or slot, call CreateMealProposal for that slot. Do not claim a meal was replaced until that tool succeeds; one successful slot-bound proposal supersedes the prior pending draft for that slot.
         - Treat plan_progress returned by planning tools as authoritative. Do not reconstruct the selected plan from prose.
         - After a safe planning change, state what changed and keep moving toward one coherent draft rather than asking permission for the obvious next planning action.
         - When ready_for_approval is true, summarise the complete draft and invite one explicit approval. Explain that approval starts recipe, shopping-list, product-matching, and connected-cart preparation.
@@ -138,6 +139,16 @@ class ChefAgent implements Agent, Conversational, HasProviderOptions, HasTools
         Current structured household knowledge:
         {$householdKnowledge}
         INSTRUCTIONS;
+    }
+
+    public function model(): string
+    {
+        return (string) config('ai.workloads.conversation.model', 'gpt-5.6-luna');
+    }
+
+    public function provider(): Lab
+    {
+        return Lab::OpenAI;
     }
 
     /** @return Message[] */

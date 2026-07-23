@@ -93,6 +93,48 @@ it('uses catalogue relevance and computes the packs needed for a confident ingre
         ->and($results[0])->toHaveCount(1);
 });
 
+it('retries catalogue discovery with a normalized search term when the raw name returns nothing usable', function () {
+    $retailer = Retailer::query()->firstOrCreate(
+        ['slug' => 'woolworths'],
+        ['name' => 'Woolworths', 'active' => true],
+    );
+    $discovery = app(WoolworthsCatalogueDiscovery::class);
+    expect($discovery->normalizeSearchTerm('finely grated parmesan'))->toBe('grated parmesan');
+
+    Http::fake(function (Request $request) {
+        $term = (string) $request['searchTerm'];
+
+        if ($term === 'finely grated parmesan') {
+            return Http::response(['Products' => []]);
+        }
+
+        if ($term === 'grated parmesan') {
+            return Http::response([
+                'Products' => [[
+                    'Stockcode' => 654321,
+                    'Name' => 'Woolworths Grated Parmesan Cheese 250g',
+                    'Price' => 5.5,
+                    'PackageSize' => '250g',
+                    'IsInStock' => true,
+                ]],
+            ]);
+        }
+
+        return Http::response([], 500);
+    });
+
+    $results = $discovery->discover($retailer, [[
+        'name' => 'finely grated parmesan',
+        'quantity' => 100,
+        'unit' => 'g',
+    ]]);
+
+    expect($results[0])->toHaveCount(1)
+        ->and($results[0][0]['external_id'])->toBe('654321')
+        ->and($results[0][0]['product_name'])->toBe('Woolworths Grated Parmesan Cheese 250g');
+    Http::assertSentCount(2);
+});
+
 it('does not misclassify a rejected Woolworths catalogue request as no candidates', function () {
     $retailer = Retailer::query()->firstOrCreate(
         ['slug' => 'woolworths'],

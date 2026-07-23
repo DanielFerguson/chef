@@ -41,10 +41,10 @@ it('shows one whole-plan approval instead of serial meal decisions on desktop an
         ->assertSee('Your plan is ready to approve')
         ->assertSee('Chicken tacos')
         ->assertSee('Vegetable pasta')
-        ->assertSee('Approve plan & prepare cart')
+        ->assertSee('Approve plan & prepare shopping')
         ->resize(390, 844)
         ->assertPresent('[data-plan-approval]')
-        ->assertSee('Approve plan & prepare cart')
+        ->assertSee('Approve plan & prepare shopping')
         ->assertNoJavaScriptErrors();
 });
 

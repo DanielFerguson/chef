@@ -2,12 +2,14 @@
 
 namespace App\Actions\Planning;
 
+use App\Enums\MealProposalStatus;
 use App\Models\MealPlan;
 use App\Models\MealProposal;
 use App\Models\MealSlot;
 use App\Models\Message;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 
 class ProposeMeal
 {
@@ -54,11 +56,32 @@ class ProposeMeal
             'estimated_cost' => $estimatedCost,
         ];
 
-        return $message === null
-            ? $mealPlan->proposals()->create([...$attributes, ...$values])
-            : $mealPlan->proposals()->firstOrCreate(
-                ['idempotency_key' => $idempotencyKey],
-                [...$attributes, ...$values],
-            );
+        return DB::transaction(function () use ($mealPlan, $user, $mealSlot, $message, $attributes, $idempotencyKey, $values): MealProposal {
+            $proposal = $message === null
+                ? $mealPlan->proposals()->create([...$attributes, ...$values])
+                : $mealPlan->proposals()->firstOrCreate(
+                    ['idempotency_key' => $idempotencyKey],
+                    [...$attributes, ...$values],
+                );
+
+            if ($mealSlot !== null) {
+                MealProposal::query()
+                    ->where('meal_plan_id', $mealPlan->id)
+                    ->where('meal_slot_id', $mealSlot->id)
+                    ->where('status', MealProposalStatus::Pending)
+                    ->whereKeyNot($proposal->id)
+                    ->lockForUpdate()
+                    ->get()
+                    ->each(function (MealProposal $prior) use ($user): void {
+                        $prior->update([
+                            'status' => MealProposalStatus::Replaced,
+                            'decided_by_user_id' => $user->id,
+                            'decided_at' => now(),
+                        ]);
+                    });
+            }
+
+            return $proposal;
+        });
     }
 }

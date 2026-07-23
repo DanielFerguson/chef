@@ -1,7 +1,6 @@
 import type { RequestPayload } from '@inertiajs/core';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import {
-    ArrowUp,
     Check,
     ChevronDown,
     CircleAlert,
@@ -9,19 +8,17 @@ import {
     List as ListIcon,
     LoaderCircle,
     LogIn,
-    MessageCircle,
     PackageCheck,
     Pencil,
     Plus,
     ReceiptText,
     RefreshCw,
     ShoppingBasket,
-    ShieldCheck,
     Table2,
     Trash2,
     Wallet,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -53,8 +50,6 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { AssistantMessage } from '@/features/meal-plans/assistant-message';
-import { useChefConversation } from '@/features/meal-plans/use-chef-conversation';
 import { CartDecisionPanel } from '@/features/shopping/cart-decision-panel';
 import { ConfirmOrderPanel } from '@/features/shopping/confirm-order-panel';
 import { FulfilmentSlotPicker } from '@/features/shopping/fulfilment-slot-picker';
@@ -67,157 +62,13 @@ import type {
     ShoppingWorkspace,
 } from '@/features/shopping/types';
 
-const dateFormatter = new Intl.DateTimeFormat('en-AU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-});
 const moneyFormatter = new Intl.NumberFormat('en-AU', {
     style: 'currency',
     currency: 'AUD',
 });
 
-function formatDate(value: string) {
-    return dateFormatter.format(new Date(`${value.slice(0, 10)}T00:00:00`));
-}
-
 function formatMoney(value: number) {
     return moneyFormatter.format(value);
-}
-
-function ShoppingConversation({
-    conversation,
-    planId,
-    shoppingList,
-}: {
-    conversation: ShoppingWorkspace['conversation'];
-    planId: number;
-    shoppingList: ShoppingWorkspace['shopping_list'];
-}) {
-    const {
-        error,
-        input,
-        messages,
-        retryMessage,
-        sending,
-        sendMessage,
-        setInput,
-    } = useChefConversation(conversation);
-    const latestAssistant = messages.findLast(
-        (message) => message.role === 'assistant' && message.content !== '',
-    );
-    const [initialAssistantId] = useState(latestAssistant?.id ?? null);
-    const showLatestAssistant = Boolean(
-        latestAssistant &&
-        (latestAssistant.id !== initialAssistantId ||
-            (latestAssistant.created_at &&
-                shoppingList?.generation_completed_at &&
-                new Date(latestAssistant.created_at) >
-                    new Date(shoppingList.generation_completed_at))),
-    );
-    const latestFailedMessage = messages.findLast(
-        (message) =>
-            message.role === 'user' &&
-            message.response_status === 'failed' &&
-            message.client_message_id,
-    );
-
-    return (
-        <details className="group border-y py-4">
-            <summary
-                aria-label="Plan recap"
-                className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium [&::-webkit-details-marker]:hidden"
-            >
-                <span className="flex items-center gap-2">
-                    <MessageCircle className="size-4 text-primary" /> Plan recap
-                </span>
-                <ChevronDown className="size-4 text-muted-foreground transition-transform group-open:rotate-180" />
-            </summary>
-            <div className="mt-3 flex justify-end">
-                <Button asChild size="sm" variant="ghost">
-                    <Link href={`/meal-plans/${planId}`}>
-                        View full conversation
-                    </Link>
-                </Button>
-            </div>
-            <p className="mt-3 max-w-[48em] text-sm leading-6 text-muted-foreground">
-                {shoppingList === null
-                    ? 'This plan is confirmed. Prepare the list when you are ready to review ingredients and pantry stock.'
-                    : shoppingList.generation_status !== 'ready'
-                      ? 'Chef is preparing the current plan into one structured shopping list.'
-                      : `${shoppingList.items.filter((item) => item.included && !item.in_pantry).length} items are on the current list, ${shoppingList.items.filter((item) => item.in_pantry).length} are marked as already in the pantry, and ${shoppingList.items.filter((item) => item.included && !item.in_pantry && !item.checked && !item.ordered_at).length} remain to buy or order.`}
-            </p>
-            {showLatestAssistant && latestAssistant && (
-                <div className="mt-3 max-w-[48em] border-l-2 pl-3 text-sm">
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">
-                        Latest shopping update
-                    </p>
-                    <AssistantMessage content={latestAssistant.content} />
-                </div>
-            )}
-            {latestFailedMessage && (
-                <div className="mt-3 flex max-w-[48em] items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-                    <p className="text-xs text-destructive" role="status">
-                        {latestFailedMessage.response_error ??
-                            'Chef could not respond to the last shopping message.'}
-                    </p>
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        aria-label="Retry failed shopping message"
-                        disabled={sending}
-                        onClick={() => void retryMessage(latestFailedMessage)}
-                    >
-                        <RefreshCw /> Retry
-                    </Button>
-                </div>
-            )}
-            <form
-                onSubmit={sendMessage}
-                className="mt-3 rounded-xl border bg-card p-2 shadow-sm"
-            >
-                <textarea
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    onKeyDown={(event) => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
-                            event.preventDefault();
-                            event.currentTarget.form?.requestSubmit();
-                        }
-                    }}
-                    aria-label="Message Chef about shopping"
-                    placeholder="Tell Chef what to add, what you already have, or what to change…"
-                    className="min-h-16 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none placeholder:text-muted-foreground"
-                />
-                {error && (
-                    <p
-                        role="alert"
-                        className="px-2 pb-2 text-xs text-destructive"
-                    >
-                        {error}
-                    </p>
-                )}
-                <div className="flex items-center justify-between">
-                    <p className="px-2 text-xs text-muted-foreground">
-                        This continues the same plan conversation
-                    </p>
-                    <Button
-                        size="icon"
-                        type="submit"
-                        disabled={sending || input.trim() === ''}
-                    >
-                        {sending ? (
-                            <LoaderCircle className="animate-spin" />
-                        ) : (
-                            <ArrowUp />
-                        )}
-                        <span className="sr-only">Send shopping message</span>
-                    </Button>
-                </div>
-            </form>
-        </details>
-    );
 }
 
 function updateShoppingItemState(
@@ -957,74 +808,6 @@ function ShoppingItemsSection({
                 )}
             </section>
         </details>
-    );
-}
-
-function MissingMealIngredients({
-    meal,
-    listId,
-    revision,
-}: {
-    meal: { id: number; title: string; date: string };
-    listId: number;
-    revision: number;
-}) {
-    const form = useForm({ ingredients_text: '', expected_revision: revision });
-
-    return (
-        <form
-            className="border-t py-3 first:border-t-0"
-            onSubmit={(event) => {
-                event.preventDefault();
-                const ingredients = form.data.ingredients_text
-                    .split('\n')
-                    .map((line) => line.trim())
-                    .filter(Boolean)
-                    .map((line) => {
-                        const [name, quantity, unit] = line
-                            .split('|')
-                            .map((part) => part.trim());
-
-                        return {
-                            name,
-                            quantity: quantity ? Number(quantity) : null,
-                            unit: unit || null,
-                        };
-                    });
-                form.transform(() => ({
-                    ingredients,
-                    expected_revision: revision,
-                }));
-                form.post(
-                    `/shopping-lists/${listId}/meals/${meal.id}/ingredients`,
-                    { preserveScroll: true },
-                );
-            }}
-        >
-            <p className="text-xs font-medium">
-                {formatDate(meal.date)} · {meal.title}
-            </p>
-            <textarea
-                aria-label={`Ingredients for ${meal.title}`}
-                className="mt-2 min-h-20 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder={
-                    'Ingredient | quantity | unit\nChicken breast | 500 | g'
-                }
-                required
-                value={form.data.ingredients_text}
-                onChange={(event) =>
-                    form.setData('ingredients_text', event.target.value)
-                }
-            />
-            <Button
-                size="sm"
-                variant="outline"
-                className="mt-2"
-                disabled={form.processing}
-            >
-                Add meal ingredients
-            </Button>
-        </form>
     );
 }
 
@@ -1950,87 +1733,12 @@ function shoppingCompletionDisabledReason(
     return null;
 }
 
-function StartShoppingList({ onPrepare }: { onPrepare: () => void }) {
-    return (
-        <section className="py-12">
-            <div className="mx-auto max-w-lg text-center">
-                <p className="text-sm font-medium">
-                    Prepare this plan&rsquo;s shopping list
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    Chef will prepare any missing recipes, scale them for your
-                    servings, and combine their ingredients. You&rsquo;ll review
-                    the result before shopping.
-                </p>
-                <Button className="mt-5" onClick={onPrepare}>
-                    <ShoppingBasket /> Prepare shopping list
-                </Button>
-            </div>
-        </section>
-    );
-}
-
-function SafetyReviewRequired({ planId }: { planId: number }) {
-    return (
-        <section className="py-12">
-            <div className="mx-auto max-w-lg rounded-xl bg-amber-500/5 px-5 py-4 text-center">
-                <ShieldCheck className="mx-auto size-6 text-amber-700 dark:text-amber-300" />
-                <p className="mt-3 text-sm font-medium">
-                    Review the plan&rsquo;s safety details
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                    Participants or household safety constraints changed after
-                    this plan was confirmed. Review them and explicitly
-                    reconfirm the plan before preparing this list.
-                </p>
-                <Button asChild className="mt-4" size="sm">
-                    <Link href={`/meal-plans/${planId}`}>
-                        <ShieldCheck /> Review plan safety
-                    </Link>
-                </Button>
-            </div>
-        </section>
-    );
-}
-
-function FailedMealRecovery({
-    failedMeals,
-    shoppingList,
-}: {
-    failedMeals: MissingMeal[];
-    shoppingList: PreparedShoppingList;
-}) {
-    return (
-        <details className="mt-4 border-t pt-3 text-left text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">
-                Advanced manual recovery
-            </summary>
-            <p className="mt-2">
-                Retry is recommended. If a meal is deliberately unusual, you can
-                record its ingredients manually instead.
-            </p>
-            <div className="mt-2">
-                {failedMeals.map((meal) => (
-                    <MissingMealIngredients
-                        key={meal.id}
-                        meal={meal}
-                        listId={shoppingList.id}
-                        revision={shoppingList.revision}
-                    />
-                ))}
-            </div>
-        </details>
-    );
-}
-
 function PreparingShoppingList({
-    failedMeals,
     onPrepare,
     recipesPreparing,
     recipePreparation,
     shoppingList,
 }: {
-    failedMeals: MissingMeal[];
     onPrepare: () => void;
     recipesPreparing: boolean;
     recipePreparation: ShoppingWorkspace['recipe_preparation'];
@@ -2064,16 +1772,11 @@ function PreparingShoppingList({
                         {recipePreparation.failed === 1 ? 'recipe' : 'recipes'}
                     </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                        Retry the preparation. Manual ingredient entry remains
-                        available as an advanced recovery option.
+                        Retry the preparation to continue.
                     </p>
                     <Button className="mt-4" size="sm" onClick={onPrepare}>
                         <RefreshCw /> Retry preparation
                     </Button>
-                    <FailedMealRecovery
-                        failedMeals={failedMeals}
-                        shoppingList={shoppingList}
-                    />
                 </div>
             ) : (
                 <div className="mx-auto max-w-lg text-center">
@@ -2085,12 +1788,6 @@ function PreparingShoppingList({
                               ? 'Shopping list queued'
                               : 'Building your shopping list'}
                     </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        {recipesPreparing
-                            ? `${recipePreparation.ready} of ${recipePreparation.required} recipes are ready.`
-                            : `${recipePreparation.required > 0 ? 'All recipes are ready.' : 'The plan is ready.'} Chef is combining ingredients and quantities now.`}{' '}
-                        This page will update automatically.
-                    </p>
                 </div>
             )}
         </section>
@@ -2100,7 +1797,6 @@ function PreparingShoppingList({
 function ReadyShoppingList({
     budget,
     cartAutomation,
-    failedMeals,
     included,
     missingMeals,
     onPrepare,
@@ -2113,7 +1809,6 @@ function ReadyShoppingList({
 }: {
     budget: ShoppingWorkspace['budget'];
     cartAutomation: ShoppingWorkspace['cart_automation'];
-    failedMeals: MissingMeal[];
     included: number;
     missingMeals: ShoppingWorkspace['missing_meals'];
     onPrepare: () => void;
@@ -2184,12 +1879,6 @@ function ReadyShoppingList({
                             {active ? 'Preparing' : 'Retry'}
                         </Button>
                     </div>
-                    {recipePreparation.failed > 0 && (
-                        <FailedMealRecovery
-                            failedMeals={failedMeals}
-                            shoppingList={shoppingList}
-                        />
-                    )}
                 </section>
             )}
 
@@ -2229,17 +1918,16 @@ function ReadyShoppingList({
     );
 }
 
-export default function ShoppingShow({
-    workspace,
-}: {
+export type ShoppingPhaseProps = {
     workspace: ShoppingWorkspace;
-}) {
+};
+
+export function ShoppingPhase({ workspace }: ShoppingPhaseProps) {
     const {
         plan,
         shopping_list: shoppingList,
         missing_meals: missingMeals,
         recipe_preparation: recipePreparation,
-        conversation,
         shopping_categories: shoppingCategories,
         retailers,
         budget,
@@ -2257,13 +1945,6 @@ export default function ShoppingShow({
     const included =
         shoppingList?.items.filter((item) => item.included && !item.in_pantry)
             .length ?? 0;
-    const failedMeals = missingMeals.reduce<MissingMeal[]>((meals, meal) => {
-        if (meal.preparation_status === 'failed') {
-            meals.push(meal);
-        }
-
-        return meals;
-    }, []);
     const completionForm = useForm({
         expected_revision: shoppingList?.revision ?? 0,
     });
@@ -2279,33 +1960,6 @@ export default function ShoppingShow({
     const listPreparing =
         shoppingList !== null && shoppingList.generation_status !== 'ready';
     const recipesPreparing = recipePreparation.preparing > 0;
-    const preparationActive =
-        recipesPreparing || shoppingList?.generation_status === 'processing';
-    const retailerOrderPolling = Boolean(
-        retailerOrderRun &&
-        activeRetailerOrderStatuses.has(retailerOrderRun.status),
-    );
-    const generationQueued =
-        shoppingList?.generation_status === 'pending' &&
-        shoppingList.generation_failure_code === null;
-    const shouldPoll =
-        preparationActive || generationQueued || retailerOrderPolling;
-
-    useEffect(() => {
-        if (!shouldPoll) {
-            return;
-        }
-
-        const interval = window.setInterval(
-            () =>
-                router.reload({
-                    only: ['workspace'],
-                }),
-            2000,
-        );
-
-        return () => window.clearInterval(interval);
-    }, [shouldPoll]);
 
     const prepareShopping = () =>
         router.post(
@@ -2314,121 +1968,81 @@ export default function ShoppingShow({
             { preserveScroll: true },
         );
 
-    return (
-        <>
-            <Head title={`Shopping — ${plan.title}`} />
-            <main className="min-h-0 flex-1 overflow-y-auto bg-background">
-                <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-8 lg:py-10">
-                    <header className="flex flex-col items-start gap-5 border-b pb-6 sm:flex-row sm:justify-between">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <ShoppingBasket className="size-5 text-primary" />
-                                <h1 className="text-xl font-semibold">
-                                    Shopping list
-                                </h1>
-                                {shoppingList && (
-                                    <Badge
-                                        variant="secondary"
-                                        className="font-normal"
-                                    >
-                                        {shoppingList.status === 'completed'
-                                            ? 'Completed'
-                                            : shoppingList.generation_status ===
-                                                'failed'
-                                              ? 'Needs attention'
-                                              : shoppingList.generation_status !==
-                                                  'ready'
-                                                ? 'Preparing'
-                                                : `${remaining} remaining`}
-                                    </Badge>
-                                )}
-                                {!shoppingList && (
-                                    <Badge
-                                        variant="secondary"
-                                        className="font-normal"
-                                    >
-                                        {recipePreparation.ready} of{' '}
-                                        {recipePreparation.required} recipes
-                                        ready
-                                    </Badge>
-                                )}
-                            </div>
-                            <p className="mt-2 text-sm text-muted-foreground">
-                                {plan.title} · {formatDate(plan.starts_on)} –{' '}
-                                {formatDate(plan.ends_on)}
-                            </p>
-                        </div>
-                        {shoppingList &&
-                            !listPreparing &&
-                            shoppingList.status !== 'completed' &&
-                            completionDisabledReason === null && (
-                                <Button
-                                    onClick={() => {
-                                        completionForm.transform(() => ({
-                                            expected_revision:
-                                                shoppingList.revision,
-                                        }));
-                                        completionForm.post(
-                                            `/shopping-lists/${shoppingList.id}/complete`,
-                                            { preserveScroll: true },
-                                        );
-                                    }}
-                                >
-                                    <Check /> Complete shop
-                                </Button>
-                            )}
-                    </header>
-                    {completionError && (
-                        <p
-                            className="mt-3 text-sm text-destructive"
-                            role="alert"
-                        >
-                            {completionError}
-                        </p>
-                    )}
+    const statusBadge = shoppingList ? (
+        <Badge variant="secondary" className="font-normal">
+            {shoppingList.status === 'completed'
+                ? 'Completed'
+                : shoppingList.generation_status === 'failed'
+                  ? 'Needs attention'
+                  : shoppingList.generation_status !== 'ready'
+                    ? 'Preparing'
+                    : `${remaining} remaining`}
+        </Badge>
+    ) : (
+        <Badge variant="secondary" className="font-normal">
+            {recipePreparation.ready} of {recipePreparation.required} recipes
+            ready
+        </Badge>
+    );
 
-                    {plan.safety_review_required ? (
-                        <SafetyReviewRequired planId={plan.id} />
-                    ) : !shoppingList ? (
-                        <StartShoppingList onPrepare={prepareShopping} />
-                    ) : listPreparing ? (
-                        <PreparingShoppingList
-                            failedMeals={failedMeals}
-                            onPrepare={prepareShopping}
-                            recipesPreparing={recipesPreparing}
-                            recipePreparation={recipePreparation}
-                            shoppingList={shoppingList}
-                        />
-                    ) : (
-                        <ReadyShoppingList
-                            budget={budget}
-                            cartAutomation={cartAutomation}
-                            failedMeals={failedMeals}
-                            included={included}
-                            missingMeals={missingMeals}
-                            onPrepare={prepareShopping}
-                            planId={plan.id}
-                            recipePreparation={recipePreparation}
-                            retailers={retailers}
-                            retailerOrderRun={retailerOrderRun}
-                            shoppingCategories={shoppingCategories}
-                            shoppingList={shoppingList}
-                        />
-                    )}
-                    <ShoppingConversation
-                        conversation={conversation}
-                        planId={plan.id}
+    const completeShopButton =
+        shoppingList &&
+        !listPreparing &&
+        shoppingList.status !== 'completed' &&
+        completionDisabledReason === null ? (
+            <Button
+                onClick={() => {
+                    completionForm.transform(() => ({
+                        expected_revision: shoppingList.revision,
+                    }));
+                    completionForm.post(
+                        `/shopping-lists/${shoppingList.id}/complete`,
+                        { preserveScroll: true },
+                    );
+                }}
+            >
+                <Check /> Complete shop
+            </Button>
+        ) : null;
+
+    return (
+        <section aria-label="Shopping">
+            <header className="flex flex-col items-start gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                    <ShoppingBasket className="size-4 text-primary" />
+                    <h2 className="text-base font-semibold">Shopping list</h2>
+                    {statusBadge}
+                </div>
+                {completeShopButton}
+            </header>
+            {completionError && (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                    {completionError}
+                </p>
+            )}
+            {shoppingList &&
+                (listPreparing ? (
+                    <PreparingShoppingList
+                        onPrepare={prepareShopping}
+                        recipesPreparing={recipesPreparing}
+                        recipePreparation={recipePreparation}
                         shoppingList={shoppingList}
                     />
-                </div>
-            </main>
-        </>
+                ) : (
+                    <ReadyShoppingList
+                        budget={budget}
+                        cartAutomation={cartAutomation}
+                        included={included}
+                        missingMeals={missingMeals}
+                        onPrepare={prepareShopping}
+                        planId={plan.id}
+                        recipePreparation={recipePreparation}
+                        retailers={retailers}
+                        retailerOrderRun={retailerOrderRun}
+                        shoppingCategories={shoppingCategories}
+                        shoppingList={shoppingList}
+                    />
+                ))}
+        </section>
     );
 }
-
-ShoppingShow.layout = ({ workspace }: { workspace: ShoppingWorkspace }) => ({
-    headerBackLink: {
-        title: 'Back to plan',
-        href: `/meal-plans/${workspace.plan.id}`,
-    },
-});

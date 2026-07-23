@@ -101,7 +101,10 @@ class DashboardController extends Controller
 
             $journey = [
                 'plan_id' => $activePlan->id,
-                'shopping_url' => route('meal-plans.shopping.show', $activePlan),
+                'shopping_url' => route('meal-plans.show', [
+                    'mealPlan' => $activePlan,
+                    'phase' => 'shopping',
+                ]),
                 'phase' => $cartReady
                     ? 'cart_ready'
                     : ($activePlan->shopping_approved_at !== null ? 'preparing_shop' : 'plan_confirmed'),

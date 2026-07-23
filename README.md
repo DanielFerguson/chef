@@ -600,7 +600,7 @@ The first useful slice should support one family team, multiple collaborating us
 - How should Chef represent disagreement between household members when ranking meals?
 - Which inferred preferences are useful enough to surface without becoming intrusive?
 - Is pantry stock manually confirmed, inferred from orders, or both?
-- How much product matching should happen before the shopping-review screen?
+- How much product matching should happen before the shopping phase opens for review?
 - Which actions can an assistant take immediately, and which require staged confirmation?
 - Which onboarding questions materially improve the first plan, and which should wait until context makes them relevant?
 - Does an authorised authenticated Woolworths trial prove five-plus-item cart persistence and visibility in the ordinary app/site?

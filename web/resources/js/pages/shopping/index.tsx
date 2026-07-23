@@ -93,32 +93,26 @@ export default function ShoppingIndex({
                                             {formatDate(plan.ends_on)}
                                         </p>
                                     </div>
-                                    {plan.shopping_list ? (
-                                        <Button asChild size="sm">
-                                            <Link
-                                                href={`/meal-plans/${plan.id}/shopping`}
-                                            >
-                                                {plan.shopping_list.stale_at
+                                    <Button asChild size="sm">
+                                        <Link
+                                            href={
+                                                plan.shopping_list
+                                                    ? `/meal-plans/${plan.id}?phase=shopping`
+                                                    : `/meal-plans/${plan.id}`
+                                            }
+                                        >
+                                            {plan.shopping_list
+                                                ? plan.shopping_list.stale_at
                                                     ? 'Review changes'
                                                     : plan.shopping_list
                                                             .status ===
                                                         'completed'
                                                       ? 'Review list'
-                                                      : 'Continue shopping'}{' '}
-                                                <ArrowRight />
-                                            </Link>
-                                        </Button>
-                                    ) : (
-                                        <Button asChild size="sm">
-                                            <Link
-                                                href={`/meal-plans/${plan.id}/shopping-list`}
-                                                method="post"
-                                                as="button"
-                                            >
-                                                Start list <ArrowRight />
-                                            </Link>
-                                        </Button>
-                                    )}
+                                                      : 'Continue shopping'
+                                                : 'Open plan'}{' '}
+                                            <ArrowRight />
+                                        </Link>
+                                    </Button>
                                 </div>
                             ))}
                         </div>
