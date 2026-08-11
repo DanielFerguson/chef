@@ -1,0 +1,68 @@
+name: Chef
+options:
+  bundleIdPrefix: com.danferg
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+packages:
+  ChefAPI:
+    path: Packages/ChefAPI
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+targets:
+  Chef:
+    type: application
+    platform: iOS
+    sources:
+      - Chef
+    dependencies:
+      - package: ChefAPI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.danferg.chef
+        PRODUCT_NAME: Chef
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_CFBundleDisplayName: Chef
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.food-and-drink
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        SUPPORTS_MACCATALYST: false
+        TARGETED_DEVICE_FAMILY: "1"
+  ChefTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ChefTests
+    dependencies:
+      - target: Chef
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.danferg.chef.tests
+        GENERATE_INFOPLIST_FILE: true
+  ChefUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - ChefUITests
+    dependencies:
+      - target: Chef
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.danferg.chef.ui-tests
+        GENERATE_INFOPLIST_FILE: true
+schemes:
+  Chef:
+    build:
+      targets:
+        Chef: all
+        ChefTests: [test]
+        ChefUITests: [test]
+    test:
+      targets:
+        - ChefTests
+        - ChefUITests
