@@ -19,11 +19,14 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, sqlite3
+          extensions: gd, imagick, mbstring, sqlite3
           coverage: pcov
+      - name: Verify HEIC and HEIF image codecs
+        run: php -r 'foreach (["HEIC", "HEIF"] as $format) { if (Imagick::queryFormats($format) === []) { fwrite(STDERR, "Missing ImageMagick $format support.\n"); exit(1); } }'
       - uses: ramsey/composer-install@v3
         with:
           working-directory: web
+      - run: composer audit --locked
       - run: cp .env.example .env
       - run: php artisan key:generate
       - run: composer lint:check
@@ -40,6 +43,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
+          extensions: gd, imagick
           coverage: none
       - uses: ramsey/composer-install@v3
         with:
@@ -53,7 +57,90 @@ jobs:
       - run: npm run lint:check
       - run: npm run format:check
       - run: npm run types:check
+      - run: npm run automation:test
+      - run: npm run automation:audit
       - run: npm run build
+      - name: Verify pruned production worker runtime
+        run: |
+          npm prune --omit=dev --omit=optional --legacy-peer-deps
+          npm run automation:runtime:prepare
+          node --test automation/tests/*.test.mjs
+          npm audit --omit=dev --omit=optional --audit-level=moderate
+
+  retailer-infrastructure:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: chef
+          POSTGRES_USER: chef
+          POSTGRES_PASSWORD: chef
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chef -d chef"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: web
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: chef
+      DB_USERNAME: chef
+      DB_PASSWORD: chef
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: 127.0.0.1
+      CHEF_RETAILER_EXPERIENCE_ENABLED: true
+      CHEF_RETAILER_DISCOVERY_ENABLED: true
+      CHEF_RETAILER_MUTATION_ENABLED: true
+      CHEF_RETAILER_MUTATION_CIRCUIT_BREAKER: false
+      RETAILER_RUNTIME_CIRCUIT_BREAKER_STORE: redis
+      RETAILER_READINESS_CACHE_STORE: redis
+      CHEF_RETAILER_RECORDED_FIXTURE: tests/Fixtures/Retailer/happy-path.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: gd, imagick, mbstring, pdo_pgsql, redis
+          coverage: none
+      - uses: ramsey/composer-install@v3
+        with:
+          working-directory: web
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run automation:build
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - run: php artisan migrate:fresh --force
+      - name: Exercise PostgreSQL, Redis, and the external queue pipeline
+        run: |
+          php artisan queue:work redis --queue=default,ai,retailer --sleep=1 --tries=1 --timeout=300 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          php artisan retailer:circuit-breaker close --reason="CI infrastructure probe"
+          php artisan retailer:readiness --json
+          composer test:integration:ci
 
   browser:
     runs-on: ubuntu-latest
@@ -65,7 +152,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
-          extensions: mbstring, sqlite3
+          extensions: gd, imagick, mbstring, sqlite3
           coverage: none
       - uses: ramsey/composer-install@v3
         with:
@@ -76,8 +163,64 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: cp .env.example .env
       - run: php artisan key:generate
       - run: npm run build
-      - run: composer test:browser
+      - name: Run the full Chrome browser suite
+        run: composer test:browser:ci
+      - name: Run the required happy paths in Safari/WebKit
+        run: composer test:browser:happy:safari
+
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: gd, imagick, mbstring, sqlite3
+          coverage: pcov
+      - uses: ramsey/composer-install@v3
+        with:
+          working-directory: web
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - run: composer test:mutation:critical
+
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - run: git diff --exit-code Chef.xcodeproj
+      - run: swift test
+        working-directory: ios/Packages/ChefAPI
+      - name: Run app unit and simulator interaction tests
+        run: |
+          simulator_id=$(xcrun simctl list devices available -j | ruby -rjson -e 'devices = JSON.parse(STDIN.read).fetch("devices").values.flatten; puts devices.find { |device| device.fetch("name").start_with?("iPhone") }.fetch("udid")')
+          xcodebuild \
+            -project Chef.xcodeproj \
+            -scheme Chef \
+            -destination "platform=iOS Simulator,id=$simulator_id" \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+  required:
+    name: Required test gate
+    if: always()
+    needs: [backend, frontend, retailer-infrastructure, browser, mutation, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every controllable Chef test layer
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+        run: test "$RESULTS" = "success,success,success,success,success,success"
