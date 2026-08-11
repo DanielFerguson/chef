@@ -65,7 +65,8 @@ Chef uses a small neutral ramp derived for interface structure:
 
 These neutrals preserve the clean, content-first spatial grammar described in
 [`STYLE.md`](STYLE.md). Avoid beige page washes: oat stays an accent so meal
-plans, conversations, recipes, and shopping lists remain the visual focus.
+plans, conversations, recipes, and cooking instructions remain the visual
+focus.
 
 ### Accessibility and state
 
@@ -80,7 +81,7 @@ It is a supported interface theme, not a separate identity palette.
 ## Typography
 
 - **Source Sans 3** is the product face. Use it for navigation, conversation,
-  forms, shopping lists, recipe instructions, metadata, and controls.
+  forms, meal plans, recipe instructions, metadata, and controls.
 - **Newsreader** is the brand/editorial face. Reserve it for the Chef wordmark,
   selected landing-page headings, and occasional recipe editorial moments.
 - Use tabular numerals for prices, quantities, servings, dates, timers, and

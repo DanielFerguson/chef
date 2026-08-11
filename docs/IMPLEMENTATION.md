@@ -1,826 +1,642 @@
-# Chef implementation guide
+# Chef implementation architecture
 
-This document translates Chef's product thesis into an implementable architecture. The [README](../README.md) remains the product-level source of truth; this document owns technical boundaries, delivery shape, and implementation conventions.
+Status: active source of truth for the post-reset Coles public-beta build.
 
-## Momentum-first orchestration boundary
+Chef is a Laravel monolith using Inertia and React. The implemented product
+boundary is conversation-led planning, recipe preparation, recipes, cooking,
+outcomes, feedback, retailer-neutral grocery planning, and reversible Coles
+basket preparation. Checkout, payment, fulfilment, restricted products, and
+order placement remain outside Chef.
 
-Chef separates household approval from internal preparation. One
-`ApproveMealPlanForShopping` action owns the default transition from a complete
-whole-plan draft into approved preparation. It accepts the current draft meals,
-records the explicit current safety review, confirms the plan, freezes an
-approval fingerprint, and starts recipe and shopping preparation. The household
-stays on `meal-plans.show` through preparation, shopping review, cart
-automation, fulfilment, and order confirmation. Shopping is a phase on that
-page (`?phase=shopping`), backed by `BuildShoppingWorkspace` (list, budget,
-automation, and order-run state—not a duplicate conversation payload). The full
-shopping workspace is built when the shopping phase is active, list generation
-is in progress, or an order run is active; otherwise the plan page uses the
-light `plan.shopping_list` summary. The legacy `/meal-plans/{id}/shopping` URL
-redirects into that phase; the sidebar Shopping item deep-links the latest
-confirmed plan’s shopping phase when a list exists, otherwise the plan
-conversation or the `/shopping` cross-plan picker. Retailer connect and
-disconnect return to the plan shopping phase whenever a shopping list can be
-resolved. Recipes remain a separate page family. Retailer authentication
-remains a short dedicated page that returns to the plan shopping phase.
+## Plan approval and recipe preparation
 
-The approval fingerprint covers the plan revision, participants, explicit
-safety context, retailer intent, and fulfilment intent. Downstream jobs may
-generate recipes, consolidate the list, perform read-only catalogue discovery,
-and prepare an authenticated cart only while that fingerprint remains current.
-They pause instead of expanding scope when they encounter ambiguity, strict
-safety constraints, material price or substitution differences, an existing
-cart, authentication, missing fulfilment selection, or missing order
-confirmation.
+`ApproveMealPlan` is the sole plan-level approval transition. It:
 
-Routine product matches do not require a second blanket acknowledgement.
-`CartProductPlan` remains the durable source of exact matches and exceptions.
-A reconciled cart marks its covered shopping requirements as ordered while
-unavailable or unresolved lines remain open. Fulfilment day/time selection and
-order submission require structured Chef UI choices and an explicit in-app
-confirmation that names the default card-on-file submit. After that
-confirmation, Chef may place the retailer order.
+1. authorises the current user against the plan;
+2. resolves omitted meal participants through `ResolveMealSlotParticipants`;
+3. requires every slot to have one effective meal and allows exactly one
+   pending proposal on a filled slot as its displayed replacement;
+4. accepts those proposals through `AcceptMealProposal`;
+5. confirms the plan through `ConfirmMealPlan`, which records the current
+   safety context;
+6. invokes `PrepareMealPlanRecipes`;
+7. creates one idempotent `BasketRun` through
+   `StartBasketRunForApprovedPlan`.
 
-## Current status
+`AssessMealPlanReadiness` returns structured blockers for missing meals,
+participants, invalid servings, unresolved safety confirmation, conflicting
+proposals, and stale plan state. `ChefAgent` receives these blockers in its
+existing planning context and asks one bundled clarification when required;
+there is no plan-analysis invocation. `BuildMealPlanApprovalBrief` projects the
+effective meals, participants, servings, proposal estimates, explicit
+constraints, provisional sources, basket target, purchase policy, and standing
+grant effect from authoritative state.
 
-Milestones 0 through 5 are complete. The Laravel 13 React/Inertia application
-in `web/` now provides authenticated family tenancy, durable arbitrary-span
-plans and conversations, versioned recipes, streamed Laravel AI SDK responses,
-authorised planning tools, direct calendar and list editing, plan revisions and
-milestones, invitations, and responsive browser coverage without live OpenAI
-calls in the test suite.
+Participant omission never affects allergy or safety truth. Explicit values
+win; otherwise Chef copies the latest earlier approved slot with the same
+weekday and meal kind after removing people no longer in the household, then
+falls back to one serving for every current participant. Each slot records
+`explicit`, `provisional_history`, or `fallback_household` provenance and an
+optional source slot. Editing a suggestion makes it explicit.
 
-M3.1 hardens the real testing loop before cooking and shopping expand the
-surface. Assistant-message and planning-checkpoint feedback remain distinct
-from later person-specific meal feedback. Stated household preferences retain
-exact human evidence; corrections supersede a wrong active record rather than
-silently duplicating or deleting history. Plan readiness and next actions are
-derived from structured state, and a successful tool-only turn must still
-produce a visible acknowledgement.
+`POST /meal-plans/{mealPlan}/approve` keeps its existing empty request body.
+The server consults any standing retailer grant; the client cannot smuggle a
+retailer, fulfilment, or checkout instruction into approval.
+`POST /meal-plans/{mealPlan}/recipes/prepare` remains the explicit recipe retry
+and recovery endpoint.
 
-M4 implemented the shopping-list domain. Shopping moved ahead of cooking in the
-delivery order after real first-plan testing reached a confirmed plan and found
-no executable next step. Subsequent testing exposed a missing boundary: Chef
-could select ordinary cookable meals as title-only custom meals, after which
-Shopping asked the household to supply their ingredients manually.
+The same approval card also handles Laravel AI SDK human tool approval when
+`ChefAgent` requests `ConfirmPlan`. `ConfirmPlan` is the only approvable agent
+tool and binds its request to the exact visible `plan_revision`. Calling it
+pauses the SDK run; the request is not consent and cannot mutate plan state.
+The stream then accepts only the projected call ID and an `approve` or `reject`
+decision. Approval resumes the SDK ledger and invokes this same
+`ApproveMealPlan` action; rejection leaves the plan unchanged. If there is no
+pending SDK request, the card continues to use the direct approval endpoint.
+Stale revisions, unknown or resolved call IDs, and cross-conversation decisions
+fail closed.
 
-[M4.1](M4.1-PLAN-TO-SHOP-RELIABILITY.md) closes that boundary. Selection only
-establishes the authoritative meal plan. Once every slot is filled and every
-proposal is resolved, one plan-level queued action sends the entire selected
-week to a Chef-owned Laravel AI SDK structured-output adapter. The workload is
-pinned to OpenAI `gpt-5.6-sol` with high reasoning and returns every recipe,
-including titles, ingredients, steps, equipment, notices, and storage guidance,
-in one response. The input includes structured household and participant truth
-plus a bounded snapshot of the durable plan conversation, so plan-level timing,
-nutrition, ingredient, and variety requests remain available even when they are
-not household preferences. Later chat is excluded from the structural
-fingerprint and cannot invalidate a running batch. Chef validates exact-once planned-meal coverage before saving
-any immutable recipe version. Plan readiness and shopping generation refuse
-unresolved cookable meals, while the same plan conversation continues through
-shopping preparation and list editing. The M4 list, revision, budget, catalogue, preference, and
-historical-order capabilities remain the structured foundation. M5 builds on
-the recipe and shopping contracts without weakening them.
+`PrepareMealPlanRecipes` builds one structural request for every custom planned
+meal without a recipe version. The authoritative input contains the accepted
+meal, date, participants and servings, household/person preferences, explicit
+constraints, other meals, and plan state. It also carries bounded,
+source-linked conversation excerpts: selected-proposal sources, applicable
+preference and constraint sources, and recent instructions about timing,
+budget, variety, leftovers, nutrition, or ingredients. Chef does not run a
+separate summarisation invocation.
 
-M5 adds the Cook and learn boundary. Today resolves the family timezone and
-shows the current day's planned meals, falling forward to the next planned meal
-when today is empty. Recipe-backed meals open a focused cooking surface with
-durable step progress, preparation notices, equipment, ingredients, ordered
-products and substitutions, storage guidance, session-persistent timers,
-screen-wake support, and an optional fullscreen mode. Non-recipe meals retain a
-direct outcome path without invented cooking instructions.
+The request, fingerprint, requester, and generation status are stored before
+one `MaterializeMealPlanRecipesJob` is dispatched to the `ai` queue. The same
+active fingerprint does not dispatch twice.
 
-`MealOutcome` records one durable result per planned meal: cooked, cooked with
-leftovers, skipped, postponed, replaced, or ate out. `MealFeedback` belongs to
-one participant and one completed cooked outcome; portion, effort, cost,
-leftovers, notes, and recipe adjustments remain attributed rather than becoming
-household consensus. Two consistent ratings for the same recipe may create an
-inspectable `PreferenceCandidate`. Candidates remain separate from preferences
-until a household member accepts them, dismissed candidates do not affect later
-recommendations, and accepting a candidate can create only an ordinary feedback
-preference. The constraint write path is unavailable to this workflow, so meal
-feedback can never infer an allergy or other safety rule.
+`MaterializeMealPlanRecipes` claims only pending work, validates exact-once
+coverage for the whole request, rechecks the fingerprint under a transaction,
+and creates all recipe versions atomically. It records one safe failure state
+instead of exposing provider details. Retrying clears the failure and starts a
+new pending attempt.
 
-M6 established Browserbase-first Woolworths cart preparation behind disabled
-connection and cart-mutation flags: team-scoped retailer connections, frozen
-revision plans, exact product matches, browser sessions, immutable cart
-snapshots, and owner-only Live View login. M6.2 replaces the cart-handoff finish
-line with a Laravel-owned `RetailerOrderRun`: Stagehand/Playwright retailer
-tools prepare the cart, scrape fulfilment options into Chef, and after an
-explicit in-app confirmation that names default card-on-file submit, apply the
-selected slot and place the Woolworths order. Domain, shopping UI, worker tools,
-and the removal of the OpenAI vision computer-use path have landed behind the
-same disabled flags; see
-[`plans/2026-07-22-retailer-order-placement-design.md`](plans/2026-07-22-retailer-order-placement-design.md).
-Normal tests fake `RetailerBrowser`, Browserbase, and the Stagehand worker.
-Authenticated live Woolworths evidence for cart prep, fulfilment scrape,
-confirmed submit, and ordinary-app order visibility remains open, so M6 and
-M6.2 stay incomplete until that pilot gate is satisfied.
+The readiness contract exposes:
 
-## Technical stack
+- `prepare_recipes` when an approved plan has unresolved recipes but no active
+  batch;
+- `wait_for_recipes` while the batch is pending or processing;
+- `retry_recipes` after failure;
+- `recipes_ready` once every required recipe exists.
 
-- Laravel 13
-- PHP supported by Laravel 13
-- SQLite for initial development and the first deployable slice
-- Inertia
-- React and TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Pest
-- Laravel AI SDK using the OpenAI provider
-- OpenAI Realtime API over WebRTC for voice
-- Laravel queues for asynchronous agent and automation work
-- Laravel broadcasting or server-sent events for streamed progress
-- Laravel MCP for exposing reviewed Chef domain capabilities
-- Browserbase Contexts with recording-disabled human sessions and opt-in local-only agent-session recording for the first Woolworths execution surface
-- A TypeScript Stagehand/Playwright retailer worker behind `chef.retailer.stagehand.v1` for deterministic cart, fulfilment, and submit tools
-- A remaining TypeScript session actor behind `ComputerExecutor` for owner Live View login, reauthentication, and takeover only
-- A future permissioned Manifest V3 Chrome extension behind the same browser-session contracts
+Changing a confirmed plan marks derived data stale. Recipe preparation resumes
+only through explicit reapproval or the recovery endpoint; ordinary selection
+actions do not start background work before approval.
 
-SQLite must remain supported for personal and local installations. Before public launch, verify the expected concurrency and operational model; a hosted multi-team service will likely use PostgreSQL in production without changing the Eloquent domain model.
+`MealPlanRecipesReady` is dispatched after the recipe transaction commits.
+`QueueGroceryPlanBuild` then starts the grocery pipeline; it cannot observe
+half-materialised recipe data.
 
-## Product language and tenancy
-
-### Team is the tenancy boundary
-
-The implementation model is `Team`. In the interface, a team is normally called a **family** or **household**.
-
-A team owns:
-
-- people and their household-scoped profiles;
-- preferences and safety constraints;
-- meal plans and conversations;
-- recipes and recipe versions;
-- pantry and shopping data;
-- retailer preferences and product matches;
-- orders, budgets, feedback, and automation runs.
-
-A user may belong to multiple teams. Every team-owned query must be scoped by the active team, and every write must be authorised against a current `TeamMembership`.
-
-### Users are not the same as people
-
-`User` represents an authenticated account. `Person` represents someone who may participate in meals and have preferences.
-
-Examples:
-
-- an adult can be both a user and a person;
-- a child can be a person without an account;
-- a guest can be a temporary person on selected meal slots;
-- one user can belong to more than one family team;
-- a person can later be linked to an invited user without losing preference history.
-
-Suggested identity models:
-
-- `User`
-- `Team`
-- `TeamMembership` with `owner`, `admin`, and `member` roles
-- `TeamInvitation`
-- `Person`
-- `UserPersonLink`
-
-The initial permission policy can remain simple:
-
-- owners manage the team, members, integrations, and deletion;
-- admins manage members, preferences, plans, recipes, and shopping;
-- members collaborate on plans, lists, cooking, and feedback.
-
-Fine-grained custom roles are outside the first version unless real usage demonstrates a need.
+When an approved run has a standing grant, `ProbeRetailerConnectionJob` checks
+authentication immediately while recipe preparation proceeds independently.
+The probe, discovery, replacement, restoration, and owner review all share one
+connection-level `WithoutOverlapping` lock. Expired authentication is preserved
+as `reauthentication_required` through grocery-plan construction; transient
+probe failures are retried only by later discovery. Reauthentication retains
+the existing grant and never re-prompts for consent.
 
 ## Domain boundaries
 
+### Tenancy
+
+`Team` is the tenancy boundary and appears as a family or household in product
+language. `User` and `Person` are separate: accounts authenticate, while people
+participate in meals and own preferences or constraints. A user may belong to
+several teams.
+
+Every team-owned route uses current-team binding where applicable, every
+mutation authorises its root record, and policy tests cover cross-team denial.
+
+Household invitation links are temporary signed URLs over the invitation's
+existing opaque token and expiry. A valid guest visit stores only the pending
+invitation identifier and intended destination in the session; shared
+authentication props expose the household name, inviter name, and destination
+URL, never the invited email or participant history. Acceptance still requires
+an authenticated matching email and runs through the same atomic team action.
+
 ### Planning
 
-- `MealPlan` is the durable workspace and thread for any date span.
-- `MealSlot` represents a dated meal occasion.
-- `MealSlotParticipant` records who is eating and optionally their serving requirement.
-- `PlannedMeal` records the selected recipe, servings, status, and notes.
-- `MealPlanRevision` records each meaningful structured change and supports optimistic revision checks.
-- `MealPlanMilestone` records progress without forcing plans through one rigid linear state.
-- A plan stores milestones such as planning confirmed, shopping list generated, shopping completed, cooking started, and review completed rather than relying on one rigid state enum.
-
-Changing a confirmed plan marks its derived data stale with a human-readable reason. M4 attaches that signal to concrete shopping-list revisions and diffs.
-
-### Preferences and safety
-
-Preferences belong to people unless explicitly team-wide. Store:
-
-- subject type and identifier;
-- sentiment and strength;
-- whether it is a hard constraint, explicit preference, or inference;
-- evidence and provenance;
-- confidence for inferred preferences;
-- optional context such as breakfast-only or preparation method.
-
-Allergies and other safety constraints are never inferred. They require an
-explicit user-authored statement and remain visibly distinct from dislikes.
-Conversational constraints retain a `confirmation_message_id`, and the
-inspector shows that human-verifiable source. Direct structured edits record an
-equivalent explicit confirmation event; an agent cannot self-certify safety by
-supplying a boolean tool argument.
-
-Conversational stated preferences retain `source_message_id` and the exact
-supporting quote. Person-scoped writes must identify that person by name or by
-an unambiguous immediate pronoun reference, and the preference subject must be
-present in the quoted text. A correction records its user-authored correction
-message, creates or updates the corrected active preference, and marks the
-erroneous record as superseded. Superseded records remain available for audit
-but are excluded from household truth and recommendation context.
-
-### Recipes
-
-Recipes are versioned. A `PlannedMeal` points to the exact `RecipeVersion` used when the meal was planned so later edits do not rewrite history. A selected version cannot be deleted while a plan retains it.
-
-The implemented recipe records are:
-
-- `Recipe` for the family-owned identity and current display metadata;
-- `RecipeVersion` for an immutable cooking snapshot;
-- `Ingredient` for the family-normalised culinary concept;
-- `RecipeIngredient` for the versioned name, quantity, unit, preparation, optional state, and order;
-- `RecipeStep`, `RecipeEquipment`, and `RecipePreparationNotice` for ordered cooking detail.
-
-Direct forms, deterministic text import, and Chef tools all use `CreateRecipe`, `CreateRecipeVersion`, and `SelectPlannedMeal`. AI-created recipes carry a message-derived idempotency key so a replay cannot create duplicates. Recipe import does not fetch its source URL in M3; the URL is provenance only.
-
-Ingredients and retailer products remain separate:
-
-- `RecipeIngredient` expresses the versioned culinary need in M3; M4 derives normalised shopping requirements from it;
-- `RetailProduct` expresses a retailer-specific product and pack;
-- `ProductMatch` records how a requirement was satisfied for a particular list or order.
-
-### Shopping and orders
-
-`ShoppingListItem` is structured data even when edited through a lightweight document-like interface. It records quantity, unit, source meals, inclusion state, pantry status, preferred product, substitution policy, estimated price, and eventual order line.
-
-M4 uses one `ShoppingList` per confirmed `MealPlan`.
-`ShoppingListItemSource` retains the exact planned meal and recipe ingredient
-behind recipe-derived quantities, while `ShoppingListRevision` stores a durable
-snapshot after each mutation. The deterministic generator normalises compatible
-units and scales quantities from recipe servings to planned servings. Every
-item also retains a grocery category. Chef assigns the category deterministically
-for recipe-derived and manual rows, the household can correct it, category
-changes remain part of the list revision history, and regeneration preserves
-corrections for matching generated requirements. Manual and staple rows have no
-invented recipe source. Under M4.1, ordinary cookable meals selected from Chef
-proposals or named by the household are collected until the plan is structurally
-complete. One plan-owned fingerprint, status, attempt count, safe failure, and
-queue job then materialise all missing recipe versions atomically from one
-structured model response. A changed plan invalidates the response before any
-version is attached. Explicit
-takeaway, eating-out, open, and linked-leftover states remain non-recipe meals.
-Recipe preparation failures are retried through the same plan-level batch path;
-Shopping does not offer a household manual-ingredient recovery UI.
-
-Production shopping generation uses one structured Laravel AI SDK Responses
-call over Chef's retained, scaled recipe requirements. The
-`ShoppingListDrafter` contract receives complete meal metadata, explicit safety
-constraints, and ephemeral requirements containing only a request-local ID,
-name, normalised quantity and unit, optionality, and planned-meal ID. The model
-may group compatible requirement IDs and choose a shopper-friendly name and
-Chef category; it cannot invent quantities, optionality, source meals, or
-ingredients. Chef validates exact-once requirement coverage and reconstructs
-quantity, unit, optionality, ingredient IDs, planned-meal IDs, and exact
-`recipe_ingredient_id` sources server-side. Both `plan_generated` and fallback
-rows therefore retain the recipe provenance used to create them.
-
-`ShoppingItemIdentity` is deliberately conservative. It normalises case,
-spacing, punctuation, singular/plural forms, and a reviewed alias set while
-keeping rice varieties, oils, tomato products, and fresh versus ground spices
-distinct. Chef converts mass to grams, volume and Australian cooking measures
-to millilitres, and count synonyms to `each`. Compatible sources sum;
-incompatible dimensions retain exact source quantities but expose a null total.
-Tap-water requirements are removed before drafting.
-
-The workload is pinned through `OPENAI_SHOPPING_LIST_MODEL` (default
-`gpt-5.6-sol`) and `OPENAI_SHOPPING_LIST_REASONING_EFFORT` (default `high`). Chef
-pins the OpenAI provider explicitly and invokes it once outside the replacement
-transaction. Unknown, duplicate, missing, empty, or unsafely grouped source IDs,
-invalid categories, duplicate canonical identities, invented water, and
-unreferenced meals invalidate the result. Provider and structured-output
-failures are logged with safe identifiers and use the same ingredient-aware
-deterministic consolidation without a second model call. Normal automated tests
-keep that deterministic fallback as their default.
-
-A confirmed plan stores a SHA-256 safety-context hash covering ordered
-recipe-backed meals and versions, participant assignments, and applicable
-explicit constraints. A missing or changed hash requires explicit plan review
-and reconfirmation before shopping preparation. Constraint creation, editing,
-and deletion invalidate affected current or upcoming confirmed plans; a
-person-scoped constraint touches only plans that include that person. Recipe,
-participant, plan revision, safety, and requirement fingerprints are rechecked
-after drafting so a stale response can never replace current rows.
-
-Shopping generation is a durable claimed workflow with pending, processing,
-ready, and failed states, an expiring opaque claim token, attempt count,
-requirement-context hash, safe failure detail, timestamps, and the last method.
-The list is claimed transactionally before the external call, duplicate active
-claims are rejected, and expired claims are recoverable. Only provider or
-structured-output failures enter deterministic fallback; request, safety,
-persistence, and fallback failures become retryable durable failures.
-
-Regeneration replaces both `recipe` and `plan_generated` rows but preserves
-manual, staple, and valid resolved-custom-meal rows. Category corrections are
-restored first by exact source signature and then by canonical identity. A force
-path is available through the authorised
-`chef:shopping-list:regenerate` command; ordinary generation remains idempotent.
-Any later plan revision marks the list stale with the same human-readable
-change summary and a structured revision diff; stale rows are read-only until
-regeneration.
-
-`Retailer` and `RetailProduct` describe the catalogue side of the boundary.
-`ProductMatch` connects a list requirement to a selected pack without changing
-the culinary ingredient, while `ProductPreference` retains household brand,
-pack, maximum-price, and substitution choices for later lists. Matching is
-manual and deterministic in M4; retailer discovery and computer use remain M6.
-An exact Woolworths match retains both its product-detail URL and parsed product
-identifier. The URL host must match the selected retailer, so an arbitrary
-external identifier cannot satisfy the strict-constraint preflight by itself.
-
-`Budget` records a household default or a plan-specific override. The Shopping
-workspace compares the effective budget with the known matched-product subtotal
-and states how many items remain unpriced rather than presenting a partial total
-as complete. `Order` and `OrderLine` freeze the list revision, catalogue product
-description, matched price, and estimated line total, while `Order` retains the
-user-entered actual overall total. M6 reconciliation records actual retailer
-products, line prices, and substitutions when that evidence exists.
-When an order cites a ready-for-review `CartSnapshot`, Chef verifies that its
-frozen item structure still matches the completed list, inherits the cart's
-retailer, and creates lines from the reconciled remote cart rather than
-reconstructing them from catalogue guesses. After fulfilment selection and
-in-Chef confirmation, `RecordPlacedRetailerOrder` writes durable `Order`
-evidence from the retailer confirmation. Uncertain submit results pause in
-`awaiting_placement_verification` until the household confirms placement.
-There are no update or delete routes for historical order snapshots.
-
-`RetailerConnection` is family-owned and has one `owner_user_id`. Only that
-owner may authenticate, reauthenticate, or disconnect it. The Browserbase
-Context ID uses Laravel's encrypted cast and is hidden from serialisation.
-`BrowserSession` retains only the encrypted provider session identifier,
-purpose, safe lifecycle state, region metadata, and whether recording was
-enabled. CDP and Live View URLs are fetched transiently and never written to a
-database, page history, audit step, or log payload. Human login,
-reauthentication, and manual-takeover sessions are always recording-disabled.
-For local diagnosis only, `BROWSERBASE_RECORD_LOCAL_CART_SESSIONS=true` records
-new agent-controlled cart-preparation sessions. The default is false and the
-provider ignores the flag outside the local application environment.
-Browserbase sessions default to a `1024 × 768` viewport to reduce Live View
-rendering and transfer work while retaining Woolworths' desktop layout.
-`BrowserActor` stores the encrypted fencing token, generation, heartbeat,
-ownership state, local socket metadata, and redacted timings for the one actor
-that owns a session. The actor receives the CDP URL only in its launch
-environment, connects once, serialises bounded commands, and never stores the
-URL. Authentication, inspection, clearing, and item preparation reuse that
-connection and an already open protected cart surface instead of reconnecting
-or reloading Woolworths between adjacent commands. Optional empty-cart totals
-use a bounded lookup so the absence of a total-specific selector cannot consume
-the whole actor-command timeout.
-The owner-only authentication Live View grants clipboard read/write permission
-to its iframe so the person can paste credentials or MFA values directly. That
-permission is not granted to manual cart takeover or agent-controlled browser
-surfaces, and Chef never reads, stores, or forwards the clipboard contents.
-
-`RetailerOrderRun` references the exact current `ShoppingListRevision` and
-copies only included, non-pantry requirements into `RetailerOrderRunItem`
-records. A later list edit cannot mutate that frozen state.
-`RetailerOrderStep` stores only a redacted action and verified observation
-summary. Household pauses cover existing-cart merge/replace/cancel,
-reauthentication, item decisions, fulfilment selection, order confirmation,
-and placement verification. `CartSnapshot` and `CartSnapshotLine` are
-immutable reconciliation records; merge-mode baseline lines remain classified
-as pre-existing and do not count as Chef-added quantity.
-
-### Cooking, outcomes, and learning
-
-`MealOutcome` is the durable cooking-session and result boundary for one
-`PlannedMeal`. Starting a recipe-backed meal records the cooking-started plan
-milestone and current recipe step idempotently. Completing or directly resolving
-a meal records one of the supported outcome states plus only the context that
-state needs, such as a replacement title, postponed date, or leftover servings.
-An outcome with person feedback cannot later be changed into a non-cooked result
-because that would orphan the evidence.
-
-`MealFeedback` is unique per outcome and participating `Person`. Reusable domain
-actions validate rating dimensions even when invoked outside HTTP. Recipe
-feedback is accepted only for cooked or cooked-with-leftovers outcomes; skipped,
-postponed, replaced, and ate-out results do not accidentally teach Chef about the
-original recipe.
-
-`PreferenceCandidate` stores repeated same-recipe feedback as a reviewable
-inference with evidence identifiers, count, confidence, and pending, accepted,
-or dismissed state. Editing feedback withdraws a pending candidate when the
-repeated pattern no longer exists. Accepted candidates create or link an
-ordinary `Preference` with feedback provenance, while conflicting explicit
-preferences must be resolved directly. Recommendation explanations may cite
-pending candidates as unconfirmed patterns and accepted candidates as reviewed
-signals; dismissed candidates are excluded. No cooking or feedback action can
-write `Constraint` records.
-
-### Conversations
-
-Chef owns `Conversation` and `Message`. A conversation normally belongs to a `MealPlan`, but onboarding may create both together.
-
-User turns are keyed by `(conversation_id, client_message_id)`. A turn records
-pending, processing, completed, or failed response state, and its assistant
-message points back through a unique `in_reply_to_message_id`. Replaying a
-completed client turn returns the durable response; a stale or failed turn may
-be retried; an active turn cannot be claimed twice.
-
-Each response claim increments a safe attempt counter. A failed attempt retains
-a correlation identifier, classified failure code, retryability, and timestamp
-in message metadata while the server log records the same identifier with the
-exception class and request context. Prompts, credentials, household content,
-and raw provider responses are not added to client-visible diagnostics. The
-interface retries a failed turn with its original content and
-`client_message_id`, so neither the user message nor successful tool writes are
-duplicated. A concurrent retry reloads the durable response state instead of
-inventing another local failure.
-
-Chef wraps SDK tools with its own recoverable boundary. Correctable validation
-and stale-identifier failures become structured tool results that let the agent
-inspect current state and correct its call; authorization, provider, and system
-failures still leave the tool loop. Any escaped tool-input failure is classified
-as `tool_error` for the same safe retry path.
-
-Messages may reference structured artifacts such as:
-
-- a draft meal proposal;
-- a plan change set;
-- a shopping-list revision;
-- an approval request;
-- an automation result;
-- a preference summary.
-
-The planning transcript keeps one message-scroller provider per conversation,
-opens saved work at the last meaningful user turn, and follows streamed output
-only while the reader remains at the live edge. Each durable message is an
-addressable row. Household-truth source controls use those stable message IDs
-to return from structured facts to their human-authored evidence without
-reloading or losing the conversation's scroll state; the target receives a
-brief visual highlight and keyboard focus once it is visible. Conversations
-that span household-local days insert non-anchoring labelled date rows.
-Streaming and failed-response markers remain compact and transient so durable
-messages and structured plan state stay primary.
-
-Do not hide durable application state inside model conversation history.
-
-`ConversationFeedback` records testing feedback separately from household and
-meal feedback. It may refer to one assistant message or to a named workflow
-checkpoint. It retains the responding user, team, conversation, plan and
-revision, current milestone, rating, optional reason tags and comment, and the
-agent invocation identifier when available. Feedback is visible only to its
-author in the household interface and never mutates prompts or preferences
-automatically.
-
-Every planning tool that changes slot state returns a server-derived
-`plan_progress` summary. When all slots have participants and selected meals
-and no proposal remains unresolved, the next action is `review_and_confirm`.
-Selecting the last meal does not itself confirm the plan. Explicit confirmation
-records the planning milestone, after which shopping is the next product step.
-
-The Laravel AI engine synthesises a factual acknowledgement from recorded plan
-revisions, household-truth writes, or meal proposals when a tool loop finishes
-without text. Proposal progress distinguishes open slots from uncovered slots:
-a pending proposal is visible and reviewable but does not fill its slot. Creating
-a new slot-bound proposal supersedes any prior pending proposal for that same
-slot so a conversational swap leaves one clear draft meal. If
-there is neither visible text nor a verifiable structured mutation, the turn is
-failed, classified, and remains visibly retryable; a blank completed assistant
-message is never persisted.
-
-## Application architecture
-
-Chef remains a Laravel monolith with explicit internal boundaries. Do not split out services until a measured operational need appears.
-
-```mermaid
-flowchart LR
-    UI["React and Inertia UI"] --> APP["Laravel application"]
-    UI <--> REALTIME["OpenAI Realtime API"]
-    APP --> DB["SQLite initially"]
-    APP --> QUEUE["Laravel queues"]
-    QUEUE --> SDK["Laravel AI SDK"]
-    SDK --> RESPONSES["OpenAI Responses API"]
-    QUEUE --> RUN["RetailerOrderRun advance"]
-    RUN --> STAGEHAND["StagehandRetailerBrowser tools"]
-    STAGEHAND <--> BB["Browserbase session + Context"]
-    APP --> ACTOR["ComputerExecutor Live View actor"]
-    ACTOR <--> BB
-    BB <--> WOOLIES["Woolworths account"]
-    APP <--> MCP["Laravel MCP server"]
-```
-
-Repository and application structure:
-
-```text
-web/
-├── app/
-│   ├── Actions/
-│   │   ├── Teams/
-│   │   ├── Planning/
-│   │   ├── Recipes/
-│   │   ├── Shopping/
-│   │   ├── Cooking/
-│   │   ├── Retailer/
-│   │   └── Automation/
-│   ├── Ai/
-│   │   ├── Agents/
-│   │   ├── Tools/
-│   │   └── Middleware/
-│   ├── Domain/
-│   ├── Http/
-│   ├── Mcp/
-│   ├── Models/
-│   ├── Policies/
-│   └── Providers/
-└── resources/js/
-    ├── components/
-    ├── features/
-    ├── layouts/
-    ├── pages/
-    └── types/
-docs/
-extensions/chrome/   # added when retailer automation begins
-web/automation/      # Browserbase session actor and command harness; built to automation/dist
-ios/                 # added when the native client begins
-android/             # added when the native client begins
-marketing/           # Astro public marketing site
-```
-
-The root is the product repository, while `web/` is a self-contained Laravel
-application with its own Composer and npm manifests. Do not create empty client
-directories. Future native and marketing surfaces consume Chef's reviewed
-interfaces; they do not become parallel sources of domain truth.
-
-### Brand assets and tokens
-
-The locked Shared Table identity is specified in `docs/BRAND.md`. Production SVG
-masters and installable-app icons live under `web/public/brand` and `web/public`,
-while active Tailwind/shadcn semantic tokens live in
-`web/resources/css/app.css`. Feature components should consume semantic token
-names instead of embedding palette hex values. Native and marketing clients
-translate the same named roles into their platform formats.
-
-Use action classes for meaningful domain mutations. HTTP controllers, AI tools, queued jobs, console commands, and MCP tools should call the same actions rather than duplicating business logic.
-
-## Laravel AI SDK boundary
-
-Use the Laravel AI SDK for Chef's normal server-side agent experience:
-
-- `ChefAgent` instructions and orchestration;
-- household and plan context;
-- Laravel-native domain tools;
-- structured meal proposals;
-- typed-response streaming and broadcasting;
-- queued agent work;
-- agent middleware, events, observability, and tests.
-
-The plan conversation is pinned through `OPENAI_CONVERSATION_MODEL` (default
-`gpt-5.6-luna`) for lower latency during interactive drafting. Recipe-batch and
-shopping-list workloads remain on Sol/high.
-
-The milestone 2 agent tools are deliberately narrow:
-
-- `InspectTeamContext`
-- `InspectMealPlan`
-- `CreateHouseholdPerson`
-- `UpdatePlanDateSpan`
-- `CreatePlanMealSlot`
-- `CreateMealProposal`
-- `MoveSelectedMeal`
-- `RecordHouseholdPreference`
-- `RecordSafetyConstraint`
-
-Recipe search, meal removal, shopping-list generation, and cart preparation are
-added by their owning milestones rather than exposed before the underlying
-domain actions exist.
-
-Each tool delegates to an authorised domain action and returns stable identifiers plus concise structured results.
-
-The SDK's conversation tables are not Chef's source of truth. Implement its conversational context from Chef's own `Conversation` and `Message` records, or add a small adapter if the SDK provides an appropriate conversation-store contract at implementation time.
-
-Wrap the SDK behind a Chef-owned boundary so the pre-1.0 dependency can evolve:
-
-```php
-interface ChefConversationEngine
-{
-    public function respondTo(Conversation $conversation, Message $message): AssistantReply;
-
-    /** @return iterable<AssistantStreamChunk> */
-    public function streamResponse(Conversation $conversation, Message $message): iterable;
-}
-```
-
-Retryable tool writes derive a stable database-unique idempotency key from the
-current user message and the semantic operation. This covers meal slots, meal
-proposals, preferences, and constraints. Person creation uses a unique
-message-and-name identity, while moves and date updates are naturally
-idempotent. Application lookups remain useful for fast replay, but uniqueness
-constraints are the concurrency backstop.
-
-One conversational request that adds several shopping extras is one domain
-mutation, not several independent tool writes. `AddPlanShoppingItems` validates
-the complete batch before writing, records all new rows in one transaction and
-one shopping-list revision, and derives per-item idempotency keys from the user
-message. Replaying the same turn returns the existing rows without duplicating
-items or revisions. A later retry also reconciles against existing normalised
-item names, so it adds only anything missing after a legacy or interrupted
-partial turn. Additions lock and merge onto the current list because they are
-commutative; destructive or replacement edits continue to require an expected
-revision.
-
-OpenAI models may otherwise emit several function calls from one response. Chef
-sets `parallel_tool_calls` to `false` for the OpenAI-backed mixed read/write
-agent as a defence in depth, while batch tools still preserve the user's full
-intent in a single call. Parallel execution is reserved for independently safe
-read operations, not shared-list mutations. If a provider or stream fails after
-a durable tool write, the conversation engine reconstructs a factual
-acknowledgement from revisions created after the user message began and marks
-the turn complete instead of showing a false failure.
-
-## Voice boundary
-
-The browser connects to the OpenAI Realtime API over WebRTC. Laravel creates the session or ephemeral credential using the server-held API key.
-
-Realtime tool requests must call authenticated Chef endpoints or a server-side control channel that invokes the same domain actions as the typed agent. Persist the resulting user transcript, assistant response, tool actions, and structured artifacts into Chef's conversation model.
-
-Voice is an input and response mode, not a separate product state. A plan started by typing can continue by voice and vice versa.
-
-## Retailer-order execution boundary
-
-Laravel owns the durable `RetailerOrderRun`, policies, confirmation fingerprint,
-and audit trail. Happy-path Woolworths work uses deterministic Stagehand /
-Playwright retailer tools over a Browserbase CDP session — not OpenAI vision
-computer-use. The Laravel AI SDK is not used for retailer browser control.
-
-`BuildCartProductPlan` performs bounded, read-only catalogue discovery before
-an authenticated mutation run exists. Discovery normalises noisy prep terms and
-retries once when the raw name returns no usable candidates. Heuristic
-confident matches are applied first. When safety does not require exact matches
-and remaining items still have discovered candidates, a Chef-owned structured
-`CartProductCandidateSelector` may auto-apply a best-fit then cheapest pick
-among those exact in-stock SKUs (`decision_reason = ai_best_fit_cheapest`). The
-selector cannot invent products or URLs; invalid or abstained picks leave the
-item for household review. Any allergy, medical, dietary, or religious
-constraint blocks automatic selection even when discovery or AI has a strong
-candidate. Ambiguous or unresolved leftovers keep the plan in `needs_review`.
-The owner must resolve every remaining item and review the exact plan and
-durable safety context. `StartRetailerOrderRun` then freezes that plan and the
-current non-stale revision into the run; substitutions are frozen off when
-strict constraints apply. A unique job on the `automation` queue advances a
-bounded chunk via `AdvanceRetailerOrderRun`. The local `composer dev` process runs
-`queue:work` on `default`, `ai`, and `automation` with `--timeout=0` so long
-recipe and retailer jobs are not killed by `queue:listen`'s 60s child-process
-cap; deployments should operate a dedicated `automation` worker so retailer
-work cannot starve ordinary application jobs.
-
-```php
-interface RetailerBrowser
-{
-    public function probeAuth(BrowserSession $session): AuthCheck;
-
-    public function inspectCart(BrowserSession $session): CartInspection;
-
-    public function clearCart(BrowserSession $session): CartInspection;
-
-    /** @param  array<string, mixed>  $product */
-    public function addProduct(BrowserSession $session, array $product): ToolResult;
-
-    public function extractFulfilmentOptions(BrowserSession $session, string $fulfilmentType): FulfilmentOptions;
-
-    public function applyFulfilmentSlot(BrowserSession $session, SlotSelection $slot): ToolResult;
-
-    public function submitOrderWithDefaultPayment(
-        BrowserSession $session,
-        ?RetailerOrderRunStatus $runStatus = null,
-    ): SubmitResult;
-
-    public function extractOrderConfirmation(BrowserSession $session): SubmitResult;
-}
-```
-
-`StagehandRetailerBrowser` implements that contract by invoking the TypeScript
-worker over `chef.retailer.stagehand.v1`. Default-card submit is gated in PHP:
-`submitOrderWithDefaultPayment` may run only while the run status is
-`SubmittingOrder`, which `ConfirmRetailerOrder` sets after an authorised
-household shopper confirms a fingerprint covering cart checksum, fulfilment
-type, and selected slot. Unparsed or uncertain confirmation after a likely
-submit pauses in `AwaitingPlacementVerification` and blocks automatic
-resubmit until the household verifies placement.
-
-`BrowserSessionProvider` owns Context/session creation, transient Live View and
-CDP lookup, session closure, and Context deletion. Owner authentication,
-reauthentication, and manual takeover still use recording-disabled Live View
-sessions driven by the remaining `ComputerExecutor` / TypeScript session actor.
-The model is absent during password and MFA entry. The Stagehand worker and the
-Live View actor both connect only to a Laravel-supplied transient CDP URL, have
-no Chef database or authorisation access, and never receive the OpenAI key.
-
-Required retailer-run properties:
-
-- frozen input revision;
-- idempotent resumable steps;
-- explicit retailer, origin, Context, and session scope;
-- allowlisted tool commands and origins;
-- pause, cancel, expiry, and manual takeover;
-- structured fulfilment selection and explicit in-Chef confirmation before submit;
-- reconciliation of intended and actual products;
-- never store or transmit card details; submit only with the retailer's default
-  card already on file after confirmation.
-
-Before mutation, every run performs a fresh protected-page authentication probe
-and cart inspection. A non-empty cart always pauses for merge, explicit
-replace, or cancel. Merge retains baseline lines separately; replace alone
-permits known clear controls. Authentication loss yields the existing
-recording-disabled session to its owner wherever it remains available and
-preserves verified item outcomes. If Browserbase reports a deleted Context,
-Chef clears the encrypted reference, marks the connection revoked, and requires
-a new owner login. A lost session is expired with its lease released; the next
-checkpoint restores the Context into one new session and inspects the actual
-cart before mutation. A lost Live View is returned as expired rather than
-leaving the owner attached to a dead session.
-
-`php artisan chef:automation:status` reports whether Browserbase, the compiled
-retailer worker, feature flags, normal-app proof, and queue configuration are
-ready without printing credentials. Initial verification and reauthentication
-still attach the recording-disabled login session so an approved run can claim
-it without a new proxy and Context-restore boundary after the owner has already
-proved the protected cart.
-
-The connection owner may pause an active run and take control through a
-recording-disabled session. A run-level lock prevents the worker, cancellation,
-and human control from overlapping. Finishing takeover rechecks the protected
-cart page before queued work resumes. If final reconciliation no longer
-contains a previously verified item, Chef pauses instead of presenting the cart
-as ready.
-
-`RetailerOrderRun.expires_at` bounds active browser processing rather than time
-a person spends completing a required pause. Every authorised transition from
-reauthentication, an existing-cart decision, an item decision, fulfilment
-selection, confirmation, or manual takeover back into queued work renews the
-configured run TTL. The resumed worker still rechecks the current shopping-list
-revision and protected cart before any further mutation.
-
-Normal tests bind `FakeRetailerBrowser` and never call live Browserbase,
-Woolworths, or OpenAI for retailer execution.
-
-## Collaboration
-
-The first version needs collaborative data, not Google-Docs-level simultaneous editing.
-
-- changes are persisted immediately and attributed to a user;
-- broadcasts notify other active team members of plan, list, and retailer-run changes;
-- stale updates fail visibly or merge through version checks;
-- assistant messages and structured artifacts appear consistently for every member;
-- presence indicators and character-by-character co-editing are deferred.
-
-Use optimistic UI only when rollback is clear. Prefer server-authoritative plan revisions for drag-and-drop scheduling and shopping-list edits.
-
-## Permissions and privacy
-
-- Authorise every team-owned resource through policies.
-- Never trust a `team_id` supplied by the client without membership validation.
-- Keep permanent OpenAI credentials server-side.
-- Treat web pages and screenshots as untrusted input.
-- Do not persist authenticated automation screenshots, Live View URLs, CDP URLs, credentials, MFA data, address history, or payment information.
-- Record the purpose, scope, grant time, and revocation of browser, microphone, notification, calendar, camera, and location consent.
-- Provide manual alternatives when optional permissions are declined.
-- Never infer allergies or silently weaken a safety constraint.
-
-## Testing strategy
-
-The minimum implementation gate for a feature is:
-
-1. domain tests for actions and invariants;
-2. policy tests proving cross-team isolation;
-3. request or Inertia tests for server contracts;
-4. React component tests where client behaviour is non-trivial;
-5. Laravel AI SDK fakes for prompts and ordinary tools;
-6. a fake `RetailerBrowser` and Stagehand protocol fixtures for retailer runs;
-7. a focused browser test for the completed user journey;
-8. formatting, static analysis, frontend type checking, and production builds.
-
-Do not make ordinary test runs depend on live OpenAI calls or a live supermarket.
-
-## First vertical slice
-
-The first slice proves the product thesis, not the full shopping pipeline.
-
-1. A user registers.
-2. Chef creates a team and links the user to a person.
-3. The conversational onboarding asks for participants, safety constraints, examples, dislikes, time, leftovers, budget, and retailer only as needed.
-4. The assistant proposes three to seven dated meal slots using structured output.
-5. The plan inspector fills as the conversation proceeds.
-6. The user accepts, rejects, moves, or replaces meals through either chat or direct UI.
-7. Chef shows an editable summary of what it learned.
-8. The plan and conversation survive a new session.
-9. An invited second user can view and make an attributed plan change.
-
-The slice is complete only when this journey works through the real UI with persisted data and deterministic automated tests.
-
-## Deferred decisions
-
-- production database and hosting topology;
-- exact Laravel authentication starter kit;
-- Reverb versus SSE for each stream;
-- direct retailer APIs if they become available;
-- authenticated Woolworths live evidence and normal-app cart synchronisation;
-- Coles retailer adapter;
-- Chrome-extension executor as a local alternative;
-- native mobile applications;
-- advanced concurrent editing;
-- nutrition-provider selection and medical-data boundaries.
+`MealPlan` supports arbitrary date ranges. `MealSlot` owns date, meal kind,
+position, participants, and per-person servings. `MealProposal` is reviewable
+intent; `PlannedMeal` is the selected durable result.
+
+Plan revisions are append-only summaries of meaningful changes. Conversation
+messages may explain or initiate changes but do not replace plan state.
+
+### Household truth
+
+Allergies and safety constraints are explicit records and are never inferred
+from preference evidence. Preferences retain subject, owner, sentiment,
+provenance, evidence, and correction history. Feedback-derived candidates
+require review before promotion to an ordinary preference.
+
+### Recipes and cooking
+
+Canonical ingredients and recipe ingredients remain recipe-domain concepts.
+Recipes own immutable versions containing ingredient snapshots, steps,
+equipment, notices, timing, servings, notes, and storage guidance. Planned
+meals retain the exact version used.
+
+Cooking progress and outcomes are durable. Feedback belongs to individual
+participants and can be edited without mutating historical recipe versions.
+The web client persists the required rating immediately through the existing
+meal-feedback endpoint and sends every currently saved optional field with that
+request so a rating edit cannot clear detail. Portion, effort, cost, leftovers,
+notes, and recipe adjustment are then submitted together from an optional
+questionnaire; unfinished client drafts are session-local and are never durable
+truth.
+
+Direct safety-rule capture uses the existing constraint endpoint and
+`RecordConstraint`. Its inline questionnaire requires explicit scope, kind,
+subject, a review summary, and an initially unchecked confirmation. Only that
+confirmed submission sends `explicitly_confirmed: true`; the separate current-
+plan safety review remains a distinct action. Server validation and team-scoped
+person lookup remain authoritative and fail closed.
+
+### Grocery plans and product selection
+
+`GroceryPlan` is a versioned derivative of an approved plan's retained recipe
+versions. `BuildGroceryPlan` scales every non-optional recipe ingredient by the
+planned servings, excludes water, combines only compatible normalised
+forms/units, and retains a `GroceryRequirementSource` for every contributing
+recipe ingredient. V1 assumes no pantry inventory. An unknown quantity remains
+explicit and later selects the smallest otherwise-valid standard pack.
+
+Each requirement carries a deterministic fingerprint, up to three progressively
+broader search queries, and the applicable explicit constraints. A new plan
+version supersedes rather than mutates earlier grocery truth.
+
+`RetailerPurchasePolicy` stores the household/provider defaults for home brand,
+bulk, organic, ordered preferred brands, and an optional basket target.
+`MealPlanPurchasePreference` may override only the target. The effective policy
+is snapshotted and fingerprinted into each grocery plan. Defaults are home brand
+allowed, bulk avoided, no organic preference, no preferred brands, and no
+target; they are edited through grocery settings or explicit conversation
+language rather than onboarding.
+
+`DiscoverRetailerProducts` asks the bounded retailer adapter only for Coles
+pages. Captured candidates retain safe product data and label evidence, never
+raw HTML or browser snapshots. Hard gates reject the wrong origin, missing or
+invalid SKU, unavailable stock, unusable pack/price data, restricted products,
+known safety conflicts, and insufficient label evidence for an applicable
+explicit constraint.
+
+An active `RetailerProductPreference` wins when its SKU was rediscovered and
+still passes every gate. Otherwise one batched Laravel AI structured-output
+ranker receives only captured candidates and returns ordered semantic tiers
+containing every eligible candidate ID exactly once. Chef rejects missing,
+duplicate, or unknown IDs. Within the highest tier, deterministic policy
+preferences may choose combinations costing no more than 15% above the
+cheapest equivalent option. `avoid` bulk prefers totals no greater than twice
+the requirement where possible. Low semantic confidence may force the best
+candidate only inside the already-valid set; no valid candidate blocks the
+whole run before mutation.
+
+Pack counts are deterministic. Chef chooses the least-waste valid combination
+when it costs no more than 10% above the cheapest combination; otherwise it
+chooses the lowest total price.
+
+Discovery persists each query's sequence, deterministic/AI/fallback method,
+result counts, safe reason code, and capture time. Two deterministic queries run
+first. If requirements remain unresolved and the recovery feature flag is on,
+one batched `RetailerSearchRecoveryAgent` may provide one non-URL query of at
+most 80 characters for each existing unresolved requirement. Invalid output or
+provider failure uses the deterministic broad query; the total never exceeds
+three searches per requirement and all hard gates are reapplied unchanged.
+
+The basket view exposes up to three still-valid captured alternatives for each
+selected item. `RememberRetailerProductPreference` verifies requirement
+membership and every hard gate before saving `Prefer next time`; it never
+changes the current retailer basket. Durable policy or product preferences may
+be saved from conversation only after explicit language such as `always`,
+`prefer`, or `next time`.
+
+### Budget and unavailable-product recovery
+
+Selection stops before mutation when the Chef subtotal exceeds the effective
+target or no candidate survives bounded discovery. One idempotent
+`MealPlanAdjustmentDraft` may be prepared per approved plan version and recovery
+kind. Its items may reference only existing plans, slots, meals, and
+requirements; unavailable-product drafts must cover every blocked requirement.
+The resulting pending proposals leave the approved plan unchanged and move the
+run through `preparing_resolution` to `needs_plan_review`.
+
+For budget overruns, the Coles account owner may either review the coherent
+cheaper-plan diff or record a run-specific `Use this basket` override. An
+override permits preparation only, supersedes the unused proposals, revalidates
+products, and does not authorise checkout or spending. Reapproval accepts the
+displayed proposals atomically and starts a fresh recipe/grocery run. A second
+failure of the same recovery kind stops for manual attention rather than
+creating an agent loop.
+
+### Connections, consent, and basket mutation
+
+`RetailerConnection` is household-scoped and owned by the Coles account owner.
+Its Browserbase Context ID and active session ID are encrypted and hidden.
+`RetailerAutomationGrant` records the owner, exact disclosure version/hash,
+scope, grant time, and revocation. Revoking consent pauses affected runs;
+disconnecting also requests deletion of the hosted Browserbase Context.
+
+Authentication uses an owner-only, short-lived Browserbase Live View. Chef
+stores no password, Live View URL, raw HTML, accessibility snapshot,
+screenshot, or recording. Browserbase session recording and logging are
+disabled. The Live View URL is returned once as an authorised capability and
+is not written to the database.
+
+The native client embeds Live View in a non-persistent `WKWebView`. Because
+Browserbase does not officially support mobile Live View keyboards, an
+owner-only `/api/v1/retailer-connections/{connection}/live-input` endpoint
+accepts either at most 256 characters or one allowlisted navigation key while
+an unexpired authentication/review session is active. The value is marked
+sensitive, passed once to Stagehand `page.type()`/`page.keyPress()`, never
+persisted or echoed, and cleared by the client. Closing the native or web view
+calls the explicit live-session release endpoint. Real-device security and
+keyboard feasibility remain release evidence, not an inferred guarantee.
+
+`ReplaceBasket` revalidates every selected product, captures a structured
+baseline, and executes `ensure_basket_empty` followed by
+`ensure_basket_line(product_id, absolute_quantity)`. Each mutation includes the
+checksum from the immediately preceding inspection. A lost response triggers
+inspection before retry. A concurrent edit or unverifiable response produces
+`uncertain` and stops automation.
+
+If replacement fails after clearing, Chef automatically attempts to restore
+the baseline. Incomplete restoration becomes `needs_attention`. A verified
+success stores selected products, absolute quantities, line prices, Chef
+subtotal, full Coles basket total, capture time, and checksums. Price copy
+always states that values remain time-sensitive until checkout.
+
+`BasketRun`, its items, and baseline/final/restoration snapshot records are
+Chef's durable evidence. They must not be confused with Stagehand
+`page.snapshot()`, which is transient accessibility-tree input only.
+
+## Conversation and AI
+
+The Laravel AI SDK is wrapped by Chef-owned contracts. `ChefAgent` receives
+authorised household, plan, recipe, and conversation context and exposes narrow
+tools backed by the same domain actions used by HTTP controllers.
+
+The conversational agent may inspect and change planning, household, and recipe
+state within the user's authority. It has no basket-mutation, fulfilment, or
+order tools. Product ambiguity is handled by the separate bounded ranker after
+deterministic discovery and hard validation; the browser worker never delegates
+the workflow to Stagehand `agent()`.
+
+Provider output is untrusted. Structured recipe output is validated before any
+durable recipe is written. Normal tests use SDK fakes or a deterministic
+`MealPlanRecipeDrafter`; they never call live providers.
+
+Chef conversations atomically link one SDK-private `agent_conversations` ledger
+immediately before their first provider call. Later turns reuse that unique
+ledger even when multiple clients begin from stale conversation snapshots.
+The linked ledger stores `agent_conversation_messages` execution history.
+Pre-link Chef messages are supplied once through a stored cutoff; later tool
+calls, approval state, and tool results are rehydrated from the SDK ledger.
+SDK title generation is disabled, and deleting a meal-plan conversation also
+deletes its linked ledger. Chef's `conversations` and `messages` remain the
+visible product transcript, while household, plan, safety, and consent truth
+remain in Chef-owned domain records.
+
+Conversation recovery derives acknowledgements from durable plan revisions,
+preference changes, proposals, and recipe readiness. A provider failure cannot
+invent a completed mutation.
+
+User planning messages may include up to four private JPEG, PNG, WebP, HEIC, or
+HEIF photos of 10 MiB each. `CreateUserMessage` uses Laravel's image pipeline to
+auto-orient each image, scale its longest edge down to at most 2560 px without
+upscaling, strip metadata and the source filename through re-encoding, optimize
+it as an 82-quality JPEG, store it privately, and atomically record ordered
+public dimensions and size in `message_attachments`. JPEG, PNG, and WebP inputs
+use the default GD driver. HEIC and HEIF inputs require an ImageMagick build
+with `libheif`; Imagick decodes, orients, and scales them to lossless PNG pixels
+before GD performs the canonical metadata-free JPEG encoding. Missing codec
+support fails as field validation rather than storing the undecoded source. The
+disk, path, and source hash remain server-only. Existing WebP attachments remain
+readable and are not reprocessed.
+`client_message_id` retries reuse the original files; a reused identifier with
+different text or image hashes is rejected.
+
+Both web and `/api/v1` conversation stream endpoints retain their JSON contract
+and also accept multipart `content`, `client_message_id`, and `images[]`.
+Additively, a text-free turn may contain
+`approval: { id, decision: "approve" | "reject" }`; the server never accepts a
+client-supplied tool name, arguments, or arbitrary result. The NDJSON stream may
+emit `tool_approval_request` with a safe `ConfirmPlan` projection containing
+only its call ID, bound plan revision, and reason. The latest unresolved
+projection is included in `BuildMealPlanWorkspace` and is invalidated by a
+later user turn, revision change, resolution, or confirmed plan.
+Photo-only turns keep an empty transcript body and use neutral internal prompt
+copy. Current and earlier user photos are passed to the Laravel AI SDK as image
+attachments. Visual observations may inform qualified suggestions, but photos
+never establish allergies, safety constraints, medical restrictions, or
+durable preferences.
+
+Apple WebKit confirms and previews HEIC and HEIF candidates through its native,
+hardware-accelerated rendering. Other browsers lazily load the unmodified CSP
+build of `heic-to` to confirm the file content and sequentially prepare a
+temporary 75-quality JPEG preview. Both paths retain the original file for the
+multipart upload. Preview failure remains visible but does not replace server
+validation. Temporary object URLs are revoked after removal, replacement by
+authoritative workspace data, or unmount.
+
+Authenticated web and Sanctum routes stream attachments from private storage
+after household and parent-conversation authorisation. Cross-household lookups
+resolve as `404`; responses are inline, privately cached, and marked `nosniff`.
+Deleting the meal-plan conversation atomically records each private file in a
+cleanup outbox before removing database ownership. A queued cleanup runs after
+commit, and the scheduler retries retained outbox rows until storage confirms
+deletion.
+
+## Testing architecture and release evidence
+
+The ordinary Pest boundary discovers only `tests/Unit` and `tests/Feature`.
+Every ordinary test freezes the application clock, prevents stray Laravel HTTP
+requests, and installs fail-closed Laravel AI SDK fakes for Chef, recipe
+drafting, plan adjustment, product ranking, and search recovery. Browser,
+Integration, and live Eval suites are selected explicitly so a fast or full
+backend run cannot accidentally start a browser, wait for infrastructure, or
+spend provider tokens.
+
+Tests in the `happy-path` browser group are the required web product contract.
+They use real routes, actions, jobs, policies, and persisted facts while faking
+only the AI/provider boundary. The group covers registration through planning,
+approval, recipe materialisation, Calendar/List, cooking, outcome and feedback;
+first-run Coles Live View and explicit standing consent; and standing-consent
+discovery, replacement, review, alternatives, and future preference. Each
+journey asserts desktop and iPhone-sized behaviour, accessibility, and browser
+smoke. CI runs the complete browser suite in Chromium and repeats the required
+group in Safari/WebKit.
+
+The retailer integration suite deliberately does not use `RefreshDatabase`.
+Its test process commits plan and connection state to PostgreSQL, dispatches to
+Redis, and polls facts written by a separately started `queue:work` process.
+The deterministic recorded gateway fixture resolves the same worker pipeline
+without Browserbase, Coles, Stagehand, or provider network calls. A local run
+skips unless PostgreSQL, Redis cache, Redis queue, the fixture, and the external
+worker have all been configured.
+
+CI enforces 80% application coverage and an 80% mutation floor over the three
+highest-consequence actions: plan approval, retailer product selection, and
+basket replacement. Pest 5.0.2 currently writes PHPUnit 13 coverage as reduced,
+serialized data while its bundled mutation runner expects the older object and
+absolute paths. `scripts/prepare-pest-mutation-runtime.php` applies one
+checksum-pinned compatibility preparation before mutation runs and fails closed
+when the locked upstream source changes.
+
+Deterministic Unit coverage verifies that authoritative identifiers, explicit
+safety constraints, and output boundaries are baked into all four structured
+agent prompts. The separate live Eval suite judges those workloads and Chef's
+tool/safety behaviour. Its manual and weekly workflow requires an OpenAI key
+and fails rather than reporting a false pass when credentials are absent. Live
+provider quality is evidence, not a deterministic pull-request gate.
+
+The CI workflow exposes one `Required test gate` aggregate over backend,
+frontend, retailer infrastructure, browser, mutation, and iOS jobs. GitHub
+branch rules must require that aggregate for the workflow to prevent a merge;
+the repository cannot infer or silently alter that host-level setting. As
+checked on 2026-08-01, GitHub returned `403` for `main` protection because this
+is a private repository on a plan without protected-branch support. A GitHub
+plan upgrade or making the repository public is therefore required before the
+aggregate can become an actual host-enforced merge block.
+
+## HTTP and Inertia
+
+The primary authenticated surfaces are:
+
+- dashboard / Today;
+- meal-plan conversation, Calendar, and List;
+- recipes and recipe versions;
+- calm grocery-preparation progress and a dedicated basket review page;
+- cooking mode, outcomes, and feedback;
+- household profile and security settings.
+
+`BuildMealPlanWorkspace` supplies planning, household, conversation, recipe
+readiness, and a compact `grocery_preparation` projection. Basket details use a
+dedicated authorised loader. In-app database notifications are the only
+notification channel.
+
+`ProjectBasketRunPublicState` maps internal orchestration to the stable public
+states `preparing`, `connection_required`, `plan_review_required`, `ready`,
+`needs_attention`, and `failed`, with a contextual public outcome. Routine
+internal phases collapse into one calm card and appear only in an optional
+details disclosure. Notifications are emitted only for ready or actionable
+states. `BasketRunStatusTransition` stores safe state codes and durations, and
+the worker reports a bounded Stagehand fallback count without persisting browser
+evidence or model reasoning.
+
+Historical shopping/order URLs intentionally have no redirects and still
+return `404`.
+
+## Native iOS and mobile API
+
+The native iOS application lives in `ios/` inside the Chef repository. It is a
+second client of the Laravel monolith, not a separate domain service. SwiftUI
+owns native presentation and transient interaction state; Laravel remains
+authoritative for household membership, safety, planning revisions, proposal
+state, readiness, approval, recipes, and conversation persistence.
+
+The versioned `/api/v1` contract uses Laravel Sanctum bearer tokens with a
+30-day expiry and explicit per-device revocation. Tokens are stored by the
+native client in the iOS Keychain. Mobile password authentication honours
+Fortify two-factor authentication, including recovery-code rotation; it must
+not issue a token that bypasses an enabled second factor.
+
+`BuildMealPlanWorkspace` is the shared server-side workspace loader for Inertia
+and JSON responses. Native endpoints remain thin adapters around the same
+actions used by web controllers and AI tools. The first contract covers:
+
+- registration, token issue, current-token revocation, and session bootstrap;
+- first-plan creation and the complete planning workspace;
+- newline-delimited conversation streaming with `client_message_id`
+  idempotency, including optional private image attachments;
+- participant changes with optimistic revision checks;
+- proposal acceptance and rejection;
+- explicit safety review and whole-plan approval;
+- retailer connection creation, consent verification, live input/release, and
+  disconnection;
+- grocery progress, basket retrieval, retry, restoration, owner review, and
+  notification acknowledgement.
+
+The mobile API exposes the existing `application/x-ndjson` conversation stream,
+but the current Swift target does not yet implement the native riffing surface.
+When it does, streamed text will remain optimistic presentation state only and
+the refreshed workspace will remain the source of truth. A revision conflict
+must reload and explain the newer plan rather than applying a stale local
+mutation.
+
+The current SwiftUI target stores its API token in Keychain and provides
+sign-in/TOTP, plan selection and approval, foreground grocery polling, Coles
+connection/consent, basket review, retry/restoration, owner handoff, and the
+ephemeral input relay. It does not queue offline mutations, poll in the
+background, or register for push. Native conversation, Calendar/List editing,
+voice, passkeys, and a complete first-plan journey remain later work and are
+not described as finished.
+
+`ChefAPI` decodes approval briefs, effective policy and fingerprint, plan
+targets, coherent adjustment drafts, semantic tiers, policy decisions and
+exceptions, alternatives, and saved product preferences additively. Optional
+fields and unknown statuses remain safely decodable during staged deployment.
+The SwiftUI app uses these contracts for grocery settings, plan-target editing,
+authoritative approval review, `Prefer next time`, revocation, and coherent
+owner/non-owner recovery. Every mutation suppresses duplicate submission and
+refreshes authoritative server state. Debug-only, network-free XCUITest
+fixtures exercise the M5.1 interaction path; they are never compiled into a
+release build and do not replace the real-iPhone or authenticated Coles gates.
+
+## Frontend state
+
+Conversation remains the default plan view. Calendar and List are direct
+manipulation views over the same server-authoritative plan. The composer stays
+available while recipe preparation is pending or failed.
+
+Chef vendors the shadcn Radix Questionnaire wrapper as app-owned UI code backed
+by `@shadcn/react/questionnaire`. The wrapper owns presentation, focus, progress,
+keyboard navigation, and error composition; Inertia forms continue to own
+payloads, processing state, server errors, and durable submission. Questionnaire
+use is limited to post-cooking detail and explicit safety-rule capture.
+
+Web and native clients poll only while a recipe/basket run is active and only
+while Chef is foregrounded. A terminal transition refreshes the durable basket
+and in-app notifications. Server-authoritative rules are not duplicated in
+TypeScript or Swift.
+
+## Queues and operations
+
+The application uses `default`, `ai`, and `retailer` queues. Recipe jobs are
+unique per plan and retain an application-level failure state suitable for an
+explicit retry. Requirement building, discovery, selection, replacement, and
+restoration are separate jobs. Retailer jobs have application claims and
+unique run locks; consequential mutation has one queue attempt and is
+reconciled by inspection rather than blind retry. Database, Beanstalkd, and
+Redis queue leases default to 360 seconds, longer than the maximum 300-second
+retailer job timeout, and deployments must preserve that ordering. Discovery
+and selection record a safe terminal failure after their final attempt instead
+of leaving a run active indefinitely.
+
+Live mutation is refused unless the experience, discovery, and mutation flags
+are enabled, the deployment master switch permits mutation, and the no-expiry
+Redis runtime breaker is explicitly closed. Missing, malformed, or unreadable
+runtime state fails closed. The breaker is checked before a new replacement or
+restoration claim; opening it does not abandon verification/restoration after
+an in-flight replacement has already cleared the original basket. Production
+rollout also requires PostgreSQL and Redis; SQLite remains supported for
+non-live local development and tests. A read-only discovery run terminates as
+`products_selected`, explicitly records that the basket was unchanged, and
+does not poll indefinitely or masquerade as a verified basket.
+
+The Node worker implements `chef.retailer.v1`. Its six typed commands are
+`probe_auth`, `search_products`, `inspect_basket`, `ensure_basket_empty`,
+`ensure_basket_line`, and `release_session`. Results are discriminated as
+`succeeded`, `blocked`, `retryable`, `uncertain`, or `failed`, with safe reason
+codes and verification checksums. Context creation/deletion, short-lived Live
+View creation, and the ephemeral mobile input relay are lifecycle operations,
+not additional basket commands.
+
+Only one session may own a retailer Context. Sessions use the Australian proxy
+country and `ap-southeast-1`, restrict navigation to Coles domains, and disable
+Browserbase recording/logging. Live View claims, retries, and restoration use a
+connection-first database lock and recheck both active sessions and active runs
+inside that lock. Deterministic locators run first; bounded
+Stagehand `observe` and validated `act` may recover moved controls.
+
+`npm run build` compiles both the Inertia application and the worker; CI also
+runs all six worker protocol fixtures against the development and pruned
+production installs. CI requires zero Composer advisories and zero moderate,
+high, or critical advisories in the deployed Node graph. The current pruned
+graph reports zero advisories. Stagehand 3.7.1 imports optional providers from
+its normal entrypoint, so Chef checksum-pins a small production preparation
+step that removes those unused imports after pruning while retaining its
+required OpenAI adapter and `chrome-launcher`. A Stagehand upgrade must review
+that checksum before it can deploy. Chef does not use Stagehand `agent()`,
+bounds input and fallback work, and retains the mutation breaker.
+
+`retailer:readiness --json` verifies PostgreSQL, Redis cache, a harmless Redis
+`retailer` queue marker, the built `chef.retailer.v1` artifact, feature flags,
+and breaker state without external network access. Operators use
+`retailer:circuit-breaker status|open|close --reason=...`; closing requires the
+master switch and a successful readiness probe. `retailer:metrics` aggregates
+safe transition outcomes, durations, restoration results, and bounded
+Stagehand fallback counts without team, user, product, credential, or browser
+evidence.
+
+## Data removal
+
+`2026_07_23_140000_remove_shopping_and_retailer_stack.php` remains the forward
+cleanup migration for the discarded shopping/order design. It removes those
+obsolete tables child-first,
+removes obsolete meal-plan approval columns and milestones, and clears queued
+or failed payloads for deleted job classes.
+
+Historical migrations remain byte-for-byte unchanged so deployed and fresh
+databases execute the same history. The two legacy shopping enums imported by
+those migrations remain available only as frozen migration dependencies; the
+current runtime does not use them. Rolling the cleanup migration back recreates
+the obsolete schema empty; deleted records are not recoverable.
+
+`2026_07_31_153454_create_plan_to_basket_beta_tables.php` introduces the new
+provider-neutral connection, consent, grocery, candidate, selection, preference,
+basket-run, and snapshot records. It does not revive removed route or model
+contracts.
+
+## Testing contract
+
+Every behavioural change should cover:
+
+- the action or invariant directly;
+- cross-team authorisation for team-owned state;
+- idempotency for retryable or externally visible work;
+- atomic recipe materialisation and safe retry;
+- grocery aggregation, hard product gates, pack optimisation, and invalid
+  ranker output;
+- consent ownership, cross-team isolation, idempotent replacement, lost
+  responses, concurrent edits, and restoration;
+- worker protocol fixtures with normal-test network prevention;
+- Inertia payload and route expectations where contracts change;
+- desktop and narrow-screen workflow behaviour for UI changes.
+
+The local backend gate is `composer test`: formatting and PHPStan level 7 over
+application and test code, followed by Pest 5 Test Impact Analysis. TIA runs
+with PCOV and keeps its dependency graph in Pest's user cache.
+`composer test:tia:fresh` rebuilds that graph. TIA is an acceleration layer
+only; `composer test:full`, coverage, and CI pass `--ci --no-tia` and execute
+the complete deterministic suite. A direct `vendor/bin/pest` invocation also
+runs the full suite without TIA; only the project-aware Composer launcher can
+reconcile the nested `web/` application with the repository Git root.
+
+The local browser command is `composer test:browser`; the CI-mode full browser
+gate is `composer test:browser:ci`. Pest Browser uses Playwright strictly as
+development/test infrastructure; it is not part of the application or retailer
+automation.
+
+Pest Agent provides one-off full-stack probes under the same global Laravel
+`TestCase` and `RefreshDatabase` setup as functional tests. A probe is
+exploratory evidence, not durable coverage, and must become a committed test
+when it protects an invariant or workflow.
+
+`tests/Evals` is an explicitly live, advisory suite for Chef's safety,
+household-truth, planning, tool-boundary, recipe, and prompt-injection
+behaviour. Its Chef-owned harness serialises Laravel AI response text, tool
+calls, and tool results so Pest can combine deterministic trajectory checks
+with narrow LLM-judge criteria. `composer test:evals` requires
+`OPENAI_API_KEY`; normal test commands skip evals before fixture construction
+and never call a provider. The manual/weekly workflow is intentionally outside
+pull-request gating.
+
+Laravel Boost's portable configuration is `web/boost.json` and
+`web/config/boost.php`. Generated guidelines are tagged inside the existing
+root `AGENTS.md`, generated skills are shared at root `.agents/skills`, and
+root `.codex/config.toml` starts `php artisan boost:mcp` with `cwd = "web"`.
+MCP writes require approval. Tinker and rule-writing are disabled; read-only
+application information, documentation search, route, log, schema, and
+database-query tools remain available. The repository must be trusted and
+Codex restarted before a new task can load a changed project-local MCP. The
+Composer post-update hook refreshes generated guidance and skills.
+
+Frontend handoff also requires ESLint, Prettier, TypeScript, the production
+build, worker tests, and React Doctor. Native handoff requires `swift test`, a
+simulator build/test, Dynamic Type and VoiceOver review, and a real-device
+authentication/relay journey. Live Coles pilot cases never run in ordinary CI.

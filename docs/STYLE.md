@@ -1,440 +1,319 @@
-# Chef product and interface style
+# Chef product style
 
-Chef borrows the spatial confidence and restraint of the ChatGPT and Codex desktop experiences: quiet navigation, content-led workspaces, a strong composer, and progressive disclosure. It should not be a visual clone. The design language must serve planning, shopping, and cooking rather than software-development workflows.
+Status: active interface direction after the July 2026 platform reset.
 
-## Design intent
+Chef should feel like a calm household conversation becoming a useful plan,
+then a verified, reviewable basket and recipes that are easy to cook from.
+Follow the brand tokens in
+[BRAND.md](BRAND.md); use Codex and ChatGPT as spatial inspiration, not as a
+pixel reference.
 
-Chef should feel:
+## Interaction model
 
-- calm enough for Sunday planning;
-- fast enough for a weeknight change;
-- trustworthy enough for allergies, budgets, and shopping automation;
-- focused enough to cook from with messy hands;
-- warm without becoming decorative or childish;
-- intelligent without constantly announcing that it uses AI.
+Conversation is the primary planning interface. Structured UI appears when
+review, comparison, direct manipulation, or repeated use is faster than another
+message.
 
-The product's a-ha moment is not receiving a paragraph from an assistant. It is watching a useful family plan take shape from an ordinary conversation.
+- Conversation owns intent, negotiation, explanation, and broad changes.
+- Calendar and List own visible plan structure and direct edits.
+- Recipes own durable cooking instructions.
+- A dedicated basket page owns product, pack, source, total, and restoration
+  evidence.
+- Cooking mode owns progress and outcomes.
+- The server remains authoritative for readiness, permissions, safety, and
+  recipe-generation, grocery, connection, and basket state.
 
-## Experience principles
-
-### Content is the interface
-
-Prefer the meal plan, shopping list, recipe, or conversation itself over dashboards of summary cards. Chrome should be quiet and stable.
-
-### Conversation and structure coexist
-
-Natural language expresses intent. Structured UI shows durable state and enables precise changes. A message that schedules meals should visibly update the plan inspector; it should not leave the result trapped in prose.
-
-### Progressive disclosure
-
-Show the next useful decision. Avoid presenting every setting, filter, model, metric, and stage at once.
-
-### Direct manipulation remains first-class
-
-Anything the assistant can change should also be inspectable and, where practical, directly editable. Dragging a meal, ticking a list item, and changing servings must not require a prompt.
-
-### Trust is visible
-
-Distinguish:
-
-- confirmed facts from suggestions;
-- allergies from dislikes;
-- estimates from actual prices;
-- planned items from ordered products;
-- background activity from actions awaiting approval.
-
-Safety has three visible states: not reviewed, reviewed with no restrictions
-reported, and reviewed with explicit rules. Never render an empty constraint
-list as proof that no allergies exist. A plan stores the reviewed safety
-context separately from confirmation and requires another review whenever its
-participants or explicit constraints change.
-
-### Feedback stays lightweight
-
-Assistant responses expose quiet thumbs-up/down controls after the response is
-complete. A reaction is saved immediately; optional reason tags and written
-context appear only after the person chooses to add detail. Do not interrupt a
-conversation with modal feedback requests.
-
-Ask for broader experience feedback only at meaningful boundaries such as
-planning confirmation, shopping review, and cooking completion. Checkpoint
-feedback is dismissible, does not block the next stage, and is not presented as
-an automatic change to Chef's memory or model.
-
-At a completed boundary, show the next-stage handoff before its optional
-feedback checkpoint. The handoff remains visible after refresh and provides one
-clear action into the next available surface; saving or skipping feedback must
-not be the action that advances the workflow.
-
-### One product across input modes
-
-Typing, dictation, and native voice operate the same plan. Voice must not create a separate navigation model or hidden state.
+Do not introduce a separate questionnaire onboarding flow. The first plan is
+onboarding.
 
 ## Application shell
 
-### Left rail
+Keep navigation quiet and content primary. The sidebar should expose Today,
+Plans, and Recipes plus household/account controls. Do not reserve navigation
+for features that are not implemented.
 
-The desktop left rail is persistent and narrow. It contains:
+The plan page uses three views:
 
-- `New meal plan`;
-- Today;
-- Calendar;
-- Shopping;
-- search;
-- recent plans grouped by useful state such as Draft, Upcoming, Active, and Completed;
-- team switcher and account controls at the bottom.
+- Conversation as the default;
+- Calendar for spatial understanding across dates;
+- List for compact direct editing.
 
-Do not place a large month calendar permanently in the rail. Calendar is a destination; the rail is navigation.
+The composer remains persistent whenever conversation is available. Avoid
+dashboard grids, excessive cards, gradients, novelty AI treatments, and
+decorative status chrome.
 
-Plan titles should be human and date-aware, for example `Winter weeknight plan` or `16–21 July`, not database-like identifiers.
+## Planning conversation
 
-### Top bar
+Messages should read naturally and group by speaker. Structured proposal cards
+may appear in the transcript when a decision is required. Actions use plain
+verbs: `Accept`, `Replace`, `Reject`, `Move`, and `Approve`.
 
-The top bar communicates context and owns compact controls for switching views
-within the current artifact. Do not repeat those controls in a second local
-toolbar beneath it:
+The composer accepts photos on every riff turn through a labelled `Add photos`
+control and drag-and-drop. The whole composer is the drop target and shows a
+stable dashed `Drop photos to add them` overlay while files hover over any of
+its children. File picking is always available as the accessible alternative.
+Reject invalid, duplicate, oversized, or excess photos immediately. HEIC and
+HEIF previews may be prepared locally and sequentially; keep the original file
+for upload, announce `Preparing photo preview…`, and disable Send only until
+that preparation settles. A failed local preview may use a neutral fallback and
+must leave authoritative format validation to the server.
 
-- editable plan title;
-- date range;
-- Conversation, Calendar, List, and Shopping views for a meal plan;
-- current phase or important milestone;
-- participant summary;
-- share or invite action;
-- contextual overflow actions.
+Use the shadcn `Attachment` composition for selected and persisted photos.
+Show neutral labels such as `Photo 1`, useful file size or processing state,
+keyboard-operable removal before sending, and a full-card authorised image link
+in the transcript. Place photos before message text. Distinguish `Uploading
+photos…` from `Chef is replying`; never fabricate percentage progress. At four
+photos, attachment groups scroll within the bubble with an edge fade rather
+than widening the page.
 
-Keep it one quiet row on desktop. On small screens, collapse secondary metadata
-and retain icon-labelled view controls with accessible names.
+When planning is not ready, ask one consolidated clarification that groups the
+actual blockers. Do not drip one question per slot. Omitted participants may be
+shown as editable provisional suggestions with a plain source label such as
+`Based on last Tuesday` or `Everyone in this household`; manual editing makes
+them explicit. Never visually or verbally imply that an allergy was inferred.
 
-### Main workspace
+Show one plan-level approval card only when every slot is covered and every
+participant is explicit or visibly provisional. The card summarises the
+effective meal for every slot, people and servings, estimates, explicit
+constraints, grocery policy, basket target, provisional sources, and what the
+approval will trigger. Before a household grants standing consent, the primary
+action is:
 
-The central column holds the primary activity on the meal-plan page:
+> Approve plan & prepare recipes
 
-- conversation during planning, onboarding, and preparation;
-- shopping list during the shopping phase (same page, `?phase=shopping`);
-- recipe steps during cooking (separate cook surface for now);
-- outcomes during review.
+After the Coles account owner grants standing consent, it becomes:
 
-The conversation should have a comfortable readable width rather than stretching across the viewport. Structured artifacts can break wider when comparison benefits from space.
+> Approve plan & prepare Coles basket
 
-### Inspector
+The supporting copy should explain that Chef prepares one complete recipe batch
+and that the household can keep chatting while recipe and basket work runs.
 
-The right inspector is collapsible and changes with context:
+When the conversation is paused on an SDK `ConfirmPlan` request, reuse this
+same authoritative card instead of adding approval buttons to the transcript.
+Its primary action resumes the request as `Approve plan`; its secondary action
+is `Keep editing`, which rejects the paused tool without changing the plan.
+Keep both actions in deterministic submitting and error states and prevent
+duplicate submissions. The pending card must survive reloads, but disappear
+after either decision, a later planning message, any plan revision, or direct
+approval. When no SDK request is pending, preserve the normal direct approval
+action and its recipe or Coles-specific label.
 
-- onboarding: family profile and developing first plan;
-- planning: calendar, meal slots, participants, cost and unresolved decisions;
-- shopping: list summary, budget, source meals, product matches and automation status;
-- cooking: ingredients, equipment, timers and substitutions;
-- review: outcomes and person-specific feedback.
+After approval, project internal orchestration into exactly one calm public
+state:
 
-The inspector shows current truth. Conversation explains how it changed.
+- **Preparing your Coles basket — you can leave this page** for every routine
+  recipe, discovery, selection, and replacement phase;
+- **Connect Coles** or **Continue with Coles** when owner action is required;
+- **Review the revised plan** for one coherent budget or product-unavailable
+  decision;
+- **Basket ready** only when confirmed from the actual basket;
+- **Needs attention** or **Stopped** with one actionable explanation.
 
-### Composer
+Never display fabricated percentages or an ETA without pilot evidence. Put raw
+phase labels under an optional `Preparation details` disclosure.
 
-The composer is persistent when conversation is available. It includes:
+The progress card should stay secondary to the planning conversation. Do not
+turn the plan into an operations dashboard.
 
-- multiline text entry;
-- attach;
-- microphone;
-- send or stop;
-- one contextual action when useful.
+## Calendar and List
 
-Avoid a toolbar of rarely used AI controls. Model selection, reasoning settings, and developer diagnostics do not belong in the household interface.
+Calendar prioritises days, meal occasions, people, and gaps. List prioritises
+scan speed and editing. Both are projections of the same plan and must remain
+consistent after an Inertia response.
 
-## Onboarding style
+Direct manipulation needs accessible alternatives. A move or replacement must
+be available through labelled controls, not drag-and-drop alone. Selected state,
+pending proposals, and errors need text or icons in addition to colour.
 
-Onboarding uses the normal workspace rather than a wizard.
+## Recipes
 
-- Start with one welcoming prompt and one answerable question.
-- Let the household speak naturally before showing forms.
-- Translate answers into visible chips, people, constraints, and meal slots in the inspector.
-- Ask at most one important follow-up at a time.
-- Offer `Skip` and `I don't know yet` without penalty.
-- Use quick reactions and meal cards when they reduce typing.
-- Show lightweight progress such as `Family · Food · Week · First plan`, but never block value behind completing every category.
-- End inside the useful first plan, not on a completion screen.
+Recipe index pages prioritise title, useful summary, total time, and household
+context. Recipe detail pages keep ingredients, preparation notices, equipment,
+ordered method, storage guidance, and version identity legible.
 
-Permission prompts appear only at the moment of use and explain the benefit, scope, and fallback in one concise surface.
+Ingredients and method should remain useful without conversation. Quantities use
+tabular numerals. Editing or creating a new version must never rewrite the
+historical version attached to a planned meal.
 
-## Planning interactions
+## Coles connection and basket
 
-- Present one coherent week as the default planning unit. A household may
-  approve the whole draft or conversationally swap individual meals; it should
-  not need to accept seven ordinary suggestions one at a time.
-- When the household has supplied enough intent, take safe planning actions and
-  show the result. Do not ask permission to suggest the remaining meals, tidy
-  proposal state, show the completed week, or check whether background work has
-  finished.
-- Draft meal cards show name, participants, effort, key constraint fit, and estimated cost only when available.
-- Selected meals visibly occupy dated slots.
-- Drag-and-drop is supported, with an accessible move alternative.
-- Changes caused by conversation animate subtly in the inspector so the connection is legible.
-- Unresolved decisions are explicit and actionable.
-- A stale shopping list shows a compact change summary rather than a generic warning.
-- Do not show recipe-generation progress while the household is still choosing meals. Individual selections update the plan only.
-- Approval is one visible whole-plan action. The approval surface includes the
-  dated meals, people, effort, cost where known, current safety context,
-  retailer intent, and the consequence that Chef will prepare the cart and,
-  after fulfilment selection and confirmation, may place the order. Recipe
-  creation is background preparation after approval, not a prerequisite for
-  approving the meal ideas.
-- Approval starts one whole-plan recipe batch, shopping-list preparation, and
-  read-only retailer matching automatically. Show one calm plan-level status
-  and interrupt only for a safe retry or a material decision.
-- Describe the number of remaining recipes in migrated or partially prepared plans; do not imply already-complete recipes are being regenerated.
-- Explain that shopping follows confirmation; do not leave the household to ask what happens next.
+Connection is just in time, not an onboarding questionnaire. With no standing
+grant, approval starts recipes and leaves the run at `Connect Coles`. The
+account owner then gets one primary connection action, an embedded private Live
+View, the complete disclosure, direct Coles safety/agreement links, and an
+unchecked consent control. Never preselect standing consent.
 
-Avoid gamified progress, excessive recommendation carousels, or a dense project-management board.
+Live View is a short-lived capability. Keep it inside a focused dialog or
+sheet, label the owner boundary, and stop/release the session when the person
+leaves. Web copy may state that credentials are entered directly in the hosted
+browser. Native copy must instead explain that the explicit keyboard relay
+forwards text once and clears it without storage.
 
-## Shopping interactions
+The basket page should make confidence legible:
 
-The list should feel as fast as a lightweight document while remaining structured.
+- show `confirmed from the actual Coles basket` only for a verified final
+  snapshot;
+- lead a ready result with product count, verified total, and capture time;
+- pair `uncertain` or `needs attention` with text and an icon, never colour
+  alone;
+- list the selected product, absolute pack count, line price, pack reasoning,
+  low-confidence best-valid status, and expandable recipe sources;
+- distinguish selected-product subtotal from the full Coles basket total;
+- show capture time, previous/replaced line counts, and the time-sensitive
+  price notice;
+- offer restoration and owner-only review only when policy and state allow it.
 
-Shopping uses progressive disclosure and lives on the meal-plan page as a
-phase of the same workspace (riff → prep → shop → order), with the composer
-still available. Approval and shopping-list preparation stay in conversation
-view with one calm progress status; switch to the shopping phase once a list
-exists (or open it from the plan header). Recipes remain a separate page
-family. Retailer login is the only intentional leave-and-return. Before a list
-exists, keep preparation in conversation—do not duplicate a second start action
-in the shopping phase. Once the generated list is ready, make pantry review
-optional, keep household extras conversational, and reveal budget and product
-detail as optional next decisions. `Order everything` is a valid default when
-the household does not want a pantry pass. Failed recipe preparation offers
-retry, not manual ingredient reconstruction.
+Keep item reasoning collapsed. Show no more than three still-valid alternatives
+with product, pack, captured price, and a concise policy comparison. `Prefer
+next time` must say that it changes a future preference only. Grocery settings
+may expose household policy and saved preferences, but must not become an
+onboarding questionnaire.
 
-- click or tap to edit;
-- enter to add;
-- drag to reorder where meaningful;
-- tick to complete;
-- annotate inline;
-- default to calm grocery-aisle sections such as Fruit & Veg, Meat & Seafood,
-  Dairy & Eggs, Bakery, Pantry, Frozen, Drinks, and Household; let the household
-  correct a misplaced item from its context menu;
-- allow alternate grouping by source meal or status when it becomes useful;
-- reveal product and substitution detail on demand;
-- keep estimated and actual totals visually distinct.
+Budget and unavailable-product recovery is one decision surface, not scattered
+errors. Show the whole proposed plan diff. A budget overrun offers `Use this
+basket` to the retailer account owner or `Review cheaper plan`; an unavailable
+product offers one revised-plan review. Neither action may imply that Chef has
+changed the plan before reapproval.
 
-Default list rows stay compact enough for in-store use: one large completion
-control, item name, quantity and unit, and quiet actions. Editing notes and
-other fields is progressive. Pantry review is an explicit pass over likely
-staples, never a bulk assumption that they are already available. Alternate
-table views keep completion controls at least 20 by 20 CSS pixels and may
-scroll horizontally rather than compressing controls into unusable targets.
-
-These are progressive capabilities rather than permission to invent missing
-catalogue data. M4 shows source meals and state inline in a stable generated
-order. Aisle grouping, rejected-product history, and retailer-informed
-reordering wait until the retailer catalogue and reconciliation work in M6.
-
-Automation status should read like a calm activity log:
-
-```text
-Matching 34 items
-28 added
-3 need your choice
-3 still searching
-```
-
-Approval requests state the proposed action and consequence. Do not use vague prompts such as `Allow Chef to continue?`.
-
-Retailer connection appears just in time beneath a ready shopping list. Human
-login uses a dedicated, recording-disabled browser surface with a plain
-explanation that the model is absent. Never mix password/MFA entry with agent
-activity or automatically continue into cart mutation after authentication;
-return to Shopping for a second explicit start action.
-The owner-only sign-in iframe may use clipboard read/write permission so the
-person can paste a password-manager value or MFA code. Do not grant clipboard
-permission to cart takeover or agent-controlled browser surfaces.
-
-If an already-approved cart run pauses for reauthentication, the explicit
-`I’ve signed in` action may return that same recording-disabled session to the
-run after the protected cart check passes. This is a resume of the earlier
-approved work, not a new cart-preparation approval.
-
-Before cart mutation, complete bounded read-only retailer discovery
-automatically and retain the durable product plan. Routine catalogue matches may
-include heuristic confident picks and AI best-fit/cheapest picks among discovered
-products when the household has no strict safety constraint. Summarise those
-routine and remembered matches, make them inspectable, and require a decision
-only for constrained items, AI abstentions, empty candidate sets, or materially
-expensive exceptions. The whole-plan approval carries the current participant
-and safety context; do not ask for a second blanket safety or product
-attestation when the product plan remains inside that approval envelope. Do not
-hide a blocked state behind a disabled button alone.
-
-If a retailer cart is non-empty, show its observed lines and three concrete
-choices: merge, replace the existing cart, or cancel. Replace must name the
-consequence. Progress stays item-oriented and quiet, while interventions name
-the product, observed consequence, and available recovery. The final review
-separates Chef-added, substituted, unavailable, changed, pre-existing, and
-unresolved lines, and distinguishes the Chef subtotal from the whole-cart
-total. After the cart is ready, present delivery or pickup options scraped from
-the retailer session. The household selects type, day, and time in Chef, then
-confirms a submit that plainly names the consequence: Chef will place the
-Woolworths order using the default card on file. Do not open the normal
-retailer checkout as the primary path once that confirmation exists.
-
-Active runs offer `Pause and take over` only to the connection owner. The
-manual surface must plainly say that the model is disconnected and recording
-is disabled. Returning to automation is labelled `Reconcile and resume`, so it
-does not imply that unverified manual cart edits are already accepted.
+`Review in Coles` must say that automation is stopped and checkout, fulfilment,
+and payment are human-controlled. Restoration is destructive to the current
+basket and needs a clear confirmation.
 
 ## Cooking mode
 
-Cooking mode is deliberately different from planning:
+Cooking mode should work with wet hands, divided attention, and a phone at arm's
+length:
 
-- large type and generous targets;
-- high contrast;
-- one current step with adjacent steps available;
-- ingredients and quantities reachable without losing place;
-- screen-wake support where available;
-- minimal navigation and no promotional content;
-- timers that remain visible after moving between steps;
-- substitutions from the actual shop, not only the original recipe.
+- large current-step text;
+- generous previous/next targets;
+- visible step position;
+- timers near the step that created them;
+- ingredients and preparation notices within easy reach;
+- screen-wake support where the browser permits it;
+- a clear finish/outcome action.
 
-The cook should be able to use the view at arm's length on a narrow screen.
+Feedback comes after the outcome and is optional. Ask one participant at a time
+and explain that repeated patterns remain reviewable rather than silently
+changing safety rules.
 
-## Mobile and responsive behaviour
+Save the participant's required sentiment as soon as they choose it, then move
+into an optional inline questionnaire for portion, effort, cost, leftovers, and
+free-form detail. Every optional step can be skipped, `Finish later` leaves the
+saved rating intact, and editing a rating must preserve already-saved detail.
 
-Chef is responsive web-first.
+Questionnaires are focused structured subflows, not onboarding wizards or a
+replacement for the visible whole-plan approval. Safety capture may use the
+same progression only while existing household safety records remain visible.
+Its final step must show the complete proposed rule and require an unchecked
+explicit confirmation; the interface must never preselect or infer that
+confirmation.
 
-Suggested mobile navigation:
+## Responsive behaviour
 
-- Today;
-- Plans;
-- Shop;
-- Chat.
+Desktop may place structured context beside the main workflow. Narrow screens
+must preserve the complete typed journey in one column.
 
-The desktop rail becomes a drawer. The inspector becomes a full-height sheet. Cooking mode becomes a focused full-screen flow. Preserve plan context when switching between chat and structured views.
+At 390 × 844 and similar sizes:
 
-## Visual language
+- the sidebar opens through the standard labelled trigger;
+- the composer remains reachable without covering the active decision;
+- composer and transcript attachment groups stay within the message width and
+  scroll horizontally without page overflow;
+- plan approval and retry actions use full-width or comfortably wrapping
+  controls;
+- grocery progress remains readable without hiding the conversation;
+- basket products, totals, restoration, and confirmed/uncertain state fit
+  without horizontal page scrolling;
+- Calendar and List stay operable without horizontal page scrolling;
+- cooking actions remain thumb-sized;
+- dialogs fit within the viewport and keep their primary action visible.
 
-### Brand identity
+Do not create a mobile-only reduced product.
 
-Chef uses the locked **Shared Table** identity: a paprika table between sage and
-oat chairs on a white canvas. The mark expresses the product's central promise—a
-household conversation becoming a shared, durable plan—without relying on chef
-hats, utensils, or decorative AI imagery.
+## Native iOS
 
-The production palette, typography, mark rules, asset inventory, and token
-mapping are defined in [`BRAND.md`](BRAND.md). That document is the source of
-truth for brand execution; this document remains the source of truth for product
-interaction and interface style.
+The native app should feel recognisably Chef while using platform conventions
+instead of imitating the web shell. Use SwiftUI navigation, sheets, toolbars,
+keyboard behaviour, Dynamic Type, VoiceOver, and system feedback naturally.
 
-### Colour
+The first plan remains onboarding. Do not insert a profile questionnaire before
+conversation. After authentication, a new household moves directly into its
+first planning conversation; household facts and explicit safety constraints
+are collected in context and remain visibly reviewable.
 
-Use white as the dominant canvas, quiet neutral grays for structure, and paprika
-as the primary culinary accent. Sage and oat support the identity sparingly.
-Colour communicates state before decoration. Avoid beige page washes: oat is an
-accent, not the application background.
+Conversation and the durable plan stay close together:
 
-Initial semantic roles:
+- the composer remains reachable while planning and recipe preparation run;
+- streaming text is announced without repeatedly moving VoiceOver focus;
+- List is the first compact plan projection and Calendar follows as a complete
+  alternative view;
+- proposals, participants, safety review, revision conflicts, and approval use
+  labelled native controls rather than chat-only commands;
+- cached state is clearly stale or offline and never presented as a confirmed
+  mutation;
+- destructive or safety-relevant actions require explicit, comprehensible
+  confirmation.
 
-- background and elevated surface;
-- foreground and muted foreground;
-- border and focus ring;
-- primary action;
-- success or completed;
-- warning or unresolved;
-- destructive or unsafe;
-- assistant activity;
-- hard safety constraint.
+Native basket preparation uses foreground polling only. Live View uses a
+non-persistent web view and a separate `privacySensitive` relay control. The
+relay input is hidden, cleared before the network operation completes, limited
+to the focused remote field, and accompanied by labelled Tab, Enter, and
+Backspace alternatives. Do not describe mobile keyboard support as proven
+until the real-device gate passes.
 
-Allergy and safety indicators must not rely on colour alone.
+Native grocery settings expose household policy only to owners/admins while
+keeping saved product preferences revocable for authorised plan editors. Plan
+approval leads with the authoritative brief and visually identifies provisional
+participants and displayed replacements. Recovery presents one coherent meal
+diff: non-owners receive explicit owner-action copy, consequential controls use
+confirmation dialogs, and successful preference, target, policy, override, or
+approval mutations refresh the authoritative state before another submission.
 
-### Typography
+Use standard navigation destinations with lightweight identifiers. Preserve
+scroll position and draft text when moving between Conversation and plan
+projections. Support the complete typed journey before adding native voice.
 
-- Use a highly legible sans-serif UI family.
-- Keep conversation and recipe text comfortably readable.
-- Use tabular numerals for prices, quantities, timers, and budget comparisons.
-- Reserve monospace for identifiers or developer diagnostics, not ordinary shopping lists.
-- Prefer sentence case throughout the product.
+## Content
 
-### Shape and elevation
+Use Australian English and household language. Prefer short, direct copy:
 
-- Use moderate radii and thin borders.
-- Keep shadows soft and infrequent.
-- Avoid nesting cards inside cards.
-- Use whitespace and alignment before additional containers.
-- Floating surfaces are for composers, menus, approvals, and temporary inspectors—not every section.
+- `family` or `household`, not `tenant`;
+- `people eating`, not `users assigned`;
+- `prepare recipes`, not `execute generation`;
+- `prepare Coles basket`, not `execute retailer automation`;
+- `confirmed`, `not confirmed`, and `needs attention`, not ambiguous success;
+- `try again`, not provider or queue terminology.
 
-### Icons
+State what Chef did, what remains, and what the person can do next. Never present
+an inferred allergy, completed mutation, or ready recipe without durable
+evidence.
 
-Use one consistent outline icon family. Pair unfamiliar icons with labels. Avoid food emoji as primary navigation or status language.
+## Accessibility
 
-### Motion
+- Use semantic headings, landmarks, forms, lists, and buttons.
+- Every icon-only action requires an accessible name.
+- Preserve visible focus and logical keyboard order.
+- Meet WCAG AA contrast for text and controls.
+- Do not use colour as the only state signal.
+- Announce streaming, preparation, retry, and saved-feedback status without
+  repeatedly stealing focus.
+- Use `aria-live` or native announcements for basket phase changes without
+  reading the whole product list again.
+- Keep consent, restoration, and review controls reachable with keyboard,
+  Switch Control, and VoiceOver.
+- Respect reduced motion.
+- Provide labels and error messages close to the affected control.
 
-Motion should explain:
+## Visual QA
 
-- where a newly scheduled meal went;
-- that an assistant is actively working;
-- that an inspector changed context;
-- that an automation paused for approval.
+For workflow changes, verify:
 
-Keep transitions short and respect reduced-motion preferences. Avoid ambient animation.
-
-## Component approach
-
-Use shadcn/ui primitives as the starting point and compose Chef-specific patterns from them. Prefer accessible primitives over custom interaction code.
-
-Likely shared components:
-
-- `AppShell`
-- `PlanRailItem`
-- `ConversationThread`
-- `Composer`
-- `ArtifactCard`
-- `PlanInspector`
-- `MealSlotCard`
-- `PersonChip`
-- `ConstraintBadge`
-- `ShoppingListEditor`
-- `BudgetSummary`
-- `AutomationActivity`
-- `ApprovalCard`
-- `RecipeStepView`
-- `PermissionPrompt`
-
-Do not build a large abstract design system before the first slice reveals repeated needs.
-
-## Writing and conversation style
-
-Chef is concise, warm, and practical.
-
-- Lead with the recommendation or changed outcome.
-- Ask one material question at a time.
-- Explain why a suggestion fits using household context.
-- State uncertainty plainly.
-- Never call an inferred preference a fact.
-- Never soften allergy language.
-- Avoid congratulatory filler after routine actions.
-- Use the household's names when it clarifies participation or disagreement.
-- Say `I added the items to your cart for review` while the cart is still open.
-- After confirmed submit, say `I placed your Woolworths order for [slot]`, never
-  imply an order was placed before the in-Chef confirmation.
-
-## Accessibility baseline
-
-- Meet WCAG 2.2 AA for public version 1.
-- Full keyboard access for planning and shopping interactions.
-- Visible focus states.
-- Accessible alternatives to drag-and-drop.
-- Announce streamed messages and plan changes without overwhelming screen readers.
-- Use labelled controls and meaningful status text.
-- Support zoom and large text without hiding core actions.
-- Maintain sufficient touch targets in cooking and shopping modes.
-- Caption or transcribe voice interactions.
-- Never encode safety, completion, or approval state with colour alone.
-
-## Design review checklist
-
-Before accepting a new surface, ask:
-
-1. Is the main household task immediately obvious?
-2. Is durable state visible outside the conversation?
-3. Could direct manipulation be faster here?
-4. Are suggestions, facts, constraints, and approvals distinguishable?
-5. Does the surface work by keyboard and on a narrow screen?
-6. Is any information duplicated without helping orientation?
-7. Does the interface remain calm during streaming or automation?
-8. Is the user still in control of consequential actions?
+- conversation, Calendar, and List;
+- draft, approval, preparing, failed, retry, and ready states;
+- first connection, standing-consent reuse, blocked products, restoration,
+  failed and uncertain baskets, and owner handoff;
+- Recipes index and detail;
+- cooking before, during, and after a meal;
+- desktop and narrow-screen layouts;
+- native Dynamic Type, VoiceOver, reconnect, and the real-device input relay;
+- keyboard navigation, focus, and JavaScript console output.
