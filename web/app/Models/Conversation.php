@@ -16,10 +16,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $meal_plan_id
  * @property int|null $created_by_user_id
  * @property string $title
+ * @property string|null $ai_conversation_id
+ * @property int|null $ai_context_cutoff_message_id
  * @property-read Team $team
  * @property-read MealPlan|null $mealPlan
  */
-#[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'title'])]
+#[Fillable(['team_id', 'meal_plan_id', 'created_by_user_id', 'title', 'ai_conversation_id', 'ai_context_cutoff_message_id'])]
 class Conversation extends Model
 {
     /** @use HasFactory<ConversationFactory> */

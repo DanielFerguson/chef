@@ -13,7 +13,7 @@ class BuildConversationRecoveryReply
 {
     public function __construct(private readonly AssessMealPlanReadiness $assessReadiness) {}
 
-    public function handle(Conversation $conversation, Message $message, ?int $initialPlanRevision, ?int $initialShoppingRevision = null): string
+    public function handle(Conversation $conversation, Message $message, ?int $initialPlanRevision): string
     {
         $parts = [];
         $plan = $conversation->mealPlan?->refresh();
@@ -26,19 +26,6 @@ class BuildConversationRecoveryReply
 
             if ($changes->isNotEmpty()) {
                 $parts[] = "Done — I completed these plan changes:\n".$changes->map(fn (string $summary) => '- '.$summary)->join("\n");
-            }
-        }
-
-        $shoppingList = $plan?->shoppingList?->refresh();
-
-        if ($shoppingList !== null && $initialShoppingRevision !== null) {
-            $shoppingChanges = $shoppingList->revisions()
-                ->where('revision', '>', $initialShoppingRevision)
-                ->oldest('revision')
-                ->pluck('summary');
-
-            if ($shoppingChanges->isNotEmpty()) {
-                $parts[] = "Done — I updated the shopping list:\n".$shoppingChanges->map(fn (string $summary) => '- '.$summary)->join("\n");
             }
         }
 
@@ -86,19 +73,19 @@ class BuildConversationRecoveryReply
             $readiness = $this->assessReadiness->handle($plan);
 
             if ($readiness['ready_for_approval']) {
-                $parts[] = "The complete {$readiness['total_slots']}-meal draft is ready to review as one week. Approving it will start recipe, shopping-list, product-matching, and connected-cart preparation.";
+                $parts[] = "The complete {$readiness['total_slots']}-meal draft is ready to review as one plan. Approving it will start recipe preparation.";
             } elseif ($readiness['confirmed'] && $readiness['recipes_failed'] > 0) {
-                $parts[] = 'The approved plan’s recipe batch needs another attempt before Chef can continue preparing the shop.';
+                $parts[] = 'The approved plan’s recipe batch needs another attempt.';
             } elseif ($readiness['confirmed'] && $readiness['recipes_preparing'] > 0) {
-                $parts[] = 'Chef is preparing every approved recipe together and will continue into shopping automatically.';
+                $parts[] = 'Chef is preparing every approved recipe together.';
             } elseif ($readiness['uncovered_slots'] > 0) {
                 $parts[] = $readiness['uncovered_slots'].' meal '.($readiness['uncovered_slots'] === 1 ? 'slot still needs' : 'slots still need').' an option. Tell me what to suggest next.';
             } elseif ($readiness['pending_proposals'] > 0) {
                 $parts[] = $readiness['pending_proposals'].' meal '.($readiness['pending_proposals'] === 1 ? 'suggestion is' : 'suggestions are').' ready for review.';
-            } elseif ($readiness['confirmed'] && $shoppingList !== null) {
-                $parts[] = 'The plan is approved and Chef has started its shopping preparation.';
+            } elseif ($readiness['confirmed'] && $readiness['recipes_unresolved'] > 0) {
+                $parts[] = 'The plan is approved and ready to prepare its remaining recipes.';
             } elseif ($readiness['confirmed']) {
-                $parts[] = 'The plan is approved. Chef will continue into shopping preparation automatically.';
+                $parts[] = 'The plan and its recipes are ready.';
             }
         }
 

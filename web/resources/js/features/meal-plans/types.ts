@@ -13,6 +13,37 @@ export type Message = {
     client_message_id?: string | null;
     response_status?: 'pending' | 'processing' | 'completed' | 'failed' | null;
     response_error?: string | null;
+    attachments?: MessageAttachment[];
+    metadata?: {
+        tool_approval?: {
+            id: string;
+            decision: 'approve' | 'reject';
+        };
+        [key: string]: unknown;
+    } | null;
+};
+
+export type PendingToolApproval = {
+    id: string;
+    tool: 'ConfirmPlan';
+    plan_revision: number;
+    reason: string | null;
+};
+
+export type MessageAttachment = {
+    id: number | string;
+    mime_type: string;
+    size_bytes: number;
+    width: number;
+    height: number;
+    position: number;
+    preview_url?: string;
+    preview_error?: string;
+    state?: 'idle' | 'uploading' | 'processing' | 'error' | 'done';
+};
+
+export type SelectedPhoto = MessageAttachment & {
+    file: File;
 };
 
 export type ConversationFeedback = {
@@ -111,6 +142,132 @@ export type MealProposal = {
     status: 'pending' | 'accepted' | 'rejected' | 'replaced';
 };
 
+export type ApprovalBrief = {
+    plan_id: number;
+    plan_revision: number;
+    meal_count: number;
+    estimated_minutes: number;
+    estimated_cost_cents: number;
+    meals: {
+        meal_slot_id: number;
+        date: string;
+        kind: string;
+        label: string | null;
+        title: string | null;
+        summary: string | null;
+        estimated_minutes: number | null;
+        estimated_cost_cents: number | null;
+        is_replacement: boolean;
+        participants: {
+            person_id: number;
+            name: string;
+            servings: number;
+        }[];
+        total_servings: number;
+        participant_default: {
+            origin: 'explicit' | 'provisional_history' | 'fallback_household';
+            provisional: boolean;
+            source_meal_slot_id: number | null;
+            source_label: string | null;
+        };
+    }[];
+    safety: {
+        constraints: {
+            id: number;
+            kind: string;
+            subject: string;
+            details: string | null;
+            severity: string | null;
+            person: string | null;
+            explicitly_confirmed_at: string;
+        }[];
+        inferred: false;
+    };
+    purchase_policy: {
+        provider: 'coles';
+        home_brand_preference: 'allow' | 'prefer' | 'avoid';
+        bulk_preference: 'allow' | 'avoid';
+        organic_preference: 'no_preference' | 'prefer';
+        preferred_brands: string[];
+        basket_target_cents: number | null;
+        basket_target_source: 'plan' | 'household' | null;
+    };
+    grocery_preparation: {
+        provider: 'coles';
+        has_standing_consent: boolean;
+        approval_will_replace_basket: boolean;
+        effect: string;
+    };
+};
+
+export type GroceryPreparation = {
+    enabled: boolean;
+    provider?: 'coles';
+    approval_label?: string;
+    has_standing_consent?: boolean;
+    connection?: {
+        id: number;
+        status:
+            | 'pending_authentication'
+            | 'connected'
+            | 'reauthentication_required'
+            | 'disconnected'
+            | 'failed';
+        owned_by_current_user: boolean;
+    } | null;
+    can_connect?: boolean;
+    run?: {
+        id: number;
+        status:
+            | 'waiting_for_recipes'
+            | 'waiting_for_connection'
+            | 'building_requirements'
+            | 'discovering_products'
+            | 'selecting_products'
+            | 'preparing_resolution'
+            | 'needs_plan_review'
+            | 'revalidating_products'
+            | 'products_selected'
+            | 'replacing_basket'
+            | 'ready'
+            | 'needs_product'
+            | 'reauthentication_required'
+            | 'failed'
+            | 'uncertain'
+            | 'restoring'
+            | 'restored'
+            | 'needs_attention'
+            | 'cancelled';
+        public_state:
+            | 'preparing'
+            | 'connection_required'
+            | 'plan_review_required'
+            | 'ready'
+            | 'needs_attention'
+            | 'failed';
+        public_outcome:
+            | 'basket_ready'
+            | 'products_selected'
+            | 'basket_restored'
+            | 'cancelled'
+            | null;
+        attention_kind: 'budget_overrun' | 'product_unavailable' | null;
+        failure_message: string | null;
+        chef_subtotal_cents: number | null;
+        retailer_total_cents: number | null;
+        captured_at: string | null;
+        polling: boolean;
+    } | null;
+    consent?: {
+        version: string;
+        disclosure: string;
+        links: {
+            coles_online_safety: string;
+            coles_customer_agreement: string;
+        };
+    };
+};
+
 export type MealPlanWorkspace = {
     plan: {
         id: number;
@@ -119,7 +276,6 @@ export type MealPlanWorkspace = {
         ends_on: string;
         revision: number;
         planning_confirmed_at: string | null;
-        shopping_approved_at: string | null;
         safety_reviewed_at: string | null;
         safety_reviewed_context_hash: string | null;
         derived_data_stale_at: string | null;
@@ -138,15 +294,6 @@ export type MealPlanWorkspace = {
             plan_revision: number;
             achieved_at: string;
         }[];
-        shopping_list: {
-            id: number;
-            status: 'draft' | 'completed';
-            generation_status: 'pending' | 'processing' | 'ready' | 'failed';
-            generation_failure_code: string | null;
-            generation_failure_message: string | null;
-            revision: number;
-            stale_at: string | null;
-        } | null;
     };
     conversation: {
         id: number;
@@ -201,17 +348,20 @@ export type MealPlanWorkspace = {
             | 'review_safety'
             | 'review_and_approve'
             | 'review_and_confirm'
-            | 'begin_shopping'
+            | 'recipes_ready'
             | 'continue_planning';
     };
-    shopping: import('@/features/shopping/types').ShoppingWorkspace | null;
-    phase: 'conversation' | 'shopping';
+    approval_brief: ApprovalBrief;
+    pending_tool_approval: PendingToolApproval | null;
+    grocery_preparation: GroceryPreparation;
+    phase: 'conversation' | 'calendar' | 'list';
 };
 
-export type PlanView = 'conversation' | 'calendar' | 'list' | 'shopping';
+export type PlanView = 'conversation' | 'calendar' | 'list';
 
 export type StreamEvent = {
-    type: 'delta' | 'complete' | 'persisted' | 'error';
+    type:
+        'delta' | 'complete' | 'persisted' | 'tool_approval_request' | 'error';
     code?:
         | 'rate_limited'
         | 'provider_overloaded'
@@ -224,4 +374,8 @@ export type StreamEvent = {
     delta?: string;
     message?: string;
     retryable?: boolean;
+    metadata?: {
+        pending_tool_approval?: PendingToolApproval;
+        [key: string]: unknown;
+    };
 };

@@ -1,19 +1,19 @@
-import { router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     ArrowDown,
     ArrowRight,
     Check,
     Clock3,
+    CircleDollarSign,
     LoaderCircle,
     RefreshCw,
-    ShieldCheck,
     ShoppingBasket,
     Sparkles,
+    UsersRound,
     X,
 } from 'lucide-react';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { FormEvent, RefObject } from 'react';
-import { toast } from 'sonner';
+import type { FormEvent, ReactNode, RefObject } from 'react';
 import {
     accept,
     reject,
@@ -28,21 +28,47 @@ import {
     MessageScrollerViewport,
     useMessageScroller,
     useMessageScrollerScrollable,
-    useMessageScrollerVisibility,
 } from '@/components/ui/message-scroller';
+import { ColesConnectionDialog } from '@/features/retailers/coles-connection-dialog';
 import { cn } from '@/lib/utils';
+import { show as showBasketRun } from '@/routes/basket-runs';
+import { approve as approveMealPlan } from '@/routes/meal-plans';
+import { prepare as prepareRecipes } from '@/routes/meal-plans/recipes';
 import { ConversationComposer } from './conversation-composer';
 import { PlanningCheckpointFeedback } from './conversation-feedback';
 import { ConversationMessageRow } from './conversation-message';
 import { formatDay } from './format-day';
+import { SafetyRules } from './household-truth';
 import type {
+    GroceryPreparation,
     MealPlanWorkspace,
     Message as ConversationMessage,
 } from './types';
-import { useChefConversation } from './use-chef-conversation';
+import type { useChefConversation } from './use-chef-conversation';
 
 const dateKeyFormatters = new Map<string, Intl.DateTimeFormat>();
 const dateLabelFormatters = new Map<string, Intl.DateTimeFormat>();
+const basketRunTitleByStatus = {
+    waiting_for_recipes: 'Preparing recipes',
+    waiting_for_connection: 'Connect Coles',
+    building_requirements: 'Building the grocery plan',
+    discovering_products: 'Finding suitable Coles products',
+    selecting_products: 'Choosing the best valid packs',
+    preparing_resolution: 'Preparing one plan resolution',
+    needs_plan_review: 'Review the revised meal plan',
+    revalidating_products: 'Checking stock, packs, and prices',
+    products_selected: 'Products selected; basket unchanged',
+    replacing_basket: 'Replacing and verifying the Coles basket',
+    ready: 'Your Coles basket is ready',
+    needs_product: 'Chef needs a valid product',
+    reauthentication_required: 'Reconnect Coles',
+    failed: 'Basket preparation stopped',
+    uncertain: 'The Coles basket needs review',
+    restoring: 'Restoring the previous basket',
+    restored: 'The previous basket was restored',
+    needs_attention: 'The Coles basket needs attention',
+    cancelled: 'Basket preparation was cancelled',
+} satisfies Record<NonNullable<GroceryPreparation['run']>['status'], string>;
 
 function dateKeyFormatter(timeZone: string) {
     let formatter = dateKeyFormatters.get(timeZone);
@@ -156,54 +182,6 @@ function groupMessagesByDate(
         showDateMarkers:
             new Set(entries.map((entry) => entry.dateKey)).size > 1,
     };
-}
-
-function SourceMessageLanding({
-    messageId,
-    onLanded,
-    onMissing,
-}: {
-    messageId: string;
-    onLanded: (messageId: string) => void;
-    onMissing: () => void;
-}) {
-    const { visibleMessageIds } = useMessageScrollerVisibility();
-    const landed = useRef(false);
-
-    useEffect(() => {
-        const missingTimeout = window.setTimeout(() => {
-            if (!landed.current) {
-                onMissing();
-            }
-        }, 2000);
-
-        if (!visibleMessageIds.includes(messageId) || landed.current) {
-            return () => window.clearTimeout(missingTimeout);
-        }
-
-        landed.current = true;
-        const frame = window.requestAnimationFrame(() => {
-            const source = document.querySelector<HTMLElement>(
-                `[data-message-id="${CSS.escape(messageId)}"]`,
-            );
-
-            if (!source) {
-                onMissing();
-
-                return;
-            }
-
-            source.focus({ preventScroll: true });
-            onLanded(messageId);
-        });
-
-        return () => {
-            window.clearTimeout(missingTimeout);
-            window.cancelAnimationFrame(frame);
-        };
-    }, [messageId, onLanded, onMissing, visibleMessageIds]);
-
-    return null;
 }
 
 function LatestMessageControl({
@@ -354,24 +332,316 @@ function ProposalCards({ workspace }: { workspace: MealPlanWorkspace }) {
     });
 }
 
-function PlanNextStep({
+function PlanStateCopy({
+    children,
+    icon,
+    title,
+}: {
+    children: ReactNode;
+    icon?: ReactNode;
+    title: ReactNode;
+}) {
+    return (
+        <div className="typeset typeset-docs max-w-[37em]" data-plan-state-copy>
+            <p className={cn('font-medium', icon && 'flex items-center gap-2')}>
+                {icon}
+                {title}
+            </p>
+            <p className="mt-0.5 text-muted-foreground">{children}</p>
+        </div>
+    );
+}
+
+function BasketRunNextStep({
+    basketRun,
+}: {
+    basketRun: NonNullable<GroceryPreparation['run']>;
+}) {
+    const active = basketRun.public_state === 'preparing';
+    const total =
+        basketRun.retailer_total_cents ?? basketRun.chef_subtotal_cents;
+    const title = active
+        ? 'Preparing your Coles basket'
+        : basketRun.public_state === 'plan_review_required'
+          ? 'Review one revised meal plan'
+          : basketRun.public_outcome === 'basket_ready'
+            ? 'Your Coles basket is ready'
+            : basketRunTitleByStatus[basketRun.status];
+    const description = active
+        ? 'You can leave this page. Chef is preparing and verifying the basket in the background; there is nothing else to do right now.'
+        : basketRun.public_state === 'plan_review_required'
+          ? basketRun.attention_kind === 'budget_overrun'
+              ? 'The valid products exceed your basket target. Choose this basket or review Chef’s single cheaper-plan proposal.'
+              : 'A required product was unavailable. Chef prepared one coherent plan diff for your approval; the existing Coles basket is unchanged.'
+          : basketRun.failure_message
+            ? basketRun.failure_message
+            : basketRun.public_outcome === 'basket_ready'
+              ? `Chef verified the basket${total === null ? '.' : ` · $${(total / 100).toFixed(2)} captured total.`} Prices remain estimates until checkout.`
+              : 'Open the basket details to review the confirmed state and available next steps.';
+
+    return (
+        <section
+            className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 px-4 py-3"
+            aria-live="polite"
+        >
+            <PlanStateCopy
+                title={title}
+                icon={
+                    active ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                    ) : basketRun.public_outcome === 'basket_ready' ? (
+                        <Check className="size-4" />
+                    ) : undefined
+                }
+            >
+                {description}
+            </PlanStateCopy>
+            <Button asChild size="sm" variant="outline">
+                <Link href={showBasketRun(basketRun.id)}>
+                    View basket <ArrowRight />
+                </Link>
+            </Button>
+        </section>
+    );
+}
+
+function PlanApprovalCard({
     workspace,
-    onOpenPlanDetails,
-    onOpenShopping,
+    conversation,
 }: {
     workspace: MealPlanWorkspace;
-    onOpenPlanDetails: () => void;
-    onOpenShopping: () => void;
+    conversation: ChefConversationControls;
 }) {
-    const shoppingList = workspace.plan.shopping_list;
-    const shoppingPreparing =
-        shoppingList !== null &&
-        shoppingList.generation_status !== 'ready' &&
-        shoppingList.generation_status !== 'failed';
-    const shoppingFailed =
-        shoppingList !== null &&
-        (shoppingList.generation_status === 'failed' ||
-            shoppingList.generation_failure_code === 'context_changed');
+    const brief = workspace.approval_brief;
+    const grocery = workspace.grocery_preparation;
+    const pendingApproval = workspace.pending_tool_approval;
+
+    return (
+        <section
+            data-plan-approval
+            className="mx-auto w-full max-w-xl rounded-2xl border bg-card p-4 shadow-sm"
+        >
+            <div className="flex items-start justify-between gap-3">
+                <PlanStateCopy title="Your plan is ready to approve">
+                    {pendingApproval
+                        ? 'Chef is waiting for your decision. Review the whole plan once, then approve it or keep editing.'
+                        : 'Review the whole plan once. You can keep chatting to swap anything before approving it.'}
+                </PlanStateCopy>
+                <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[11px] font-medium text-foreground">
+                    {brief.meal_count}{' '}
+                    {brief.meal_count === 1 ? 'meal' : 'meals'}
+                </span>
+            </div>
+            <dl className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+                <div>
+                    <dt className="sr-only">Estimated time</dt>
+                    <dd className="flex items-center gap-1.5">
+                        <Clock3 aria-hidden="true" className="size-3.5" />
+                        {brief.estimated_minutes} min total
+                    </dd>
+                </div>
+                <div>
+                    <dt className="sr-only">Estimated meal cost</dt>
+                    <dd className="flex items-center gap-1.5">
+                        <CircleDollarSign
+                            aria-hidden="true"
+                            className="size-3.5"
+                        />
+                        ~${(brief.estimated_cost_cents / 100).toFixed(2)} meal
+                        cost
+                    </dd>
+                </div>
+                <div>
+                    <dt className="sr-only">Basket target</dt>
+                    <dd className="flex items-center gap-1.5">
+                        <ShoppingBasket
+                            aria-hidden="true"
+                            className="size-3.5"
+                        />
+                        {brief.purchase_policy.basket_target_cents === null
+                            ? 'No basket target'
+                            : `$${(
+                                  brief.purchase_policy.basket_target_cents /
+                                  100
+                              ).toFixed(2)} basket target`}
+                    </dd>
+                </div>
+            </dl>
+            <ul className="mt-4 divide-y border-y text-sm">
+                {brief.meals.map((meal) => (
+                    <li
+                        key={meal.meal_slot_id}
+                        className="grid gap-1 py-3 sm:grid-cols-[6rem_1fr] sm:gap-3"
+                    >
+                        <span className="text-xs text-muted-foreground">
+                            {formatDay(meal.date)}
+                        </span>
+                        <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium">
+                                    {meal.title ?? 'Open meal'}
+                                </span>
+                                {meal.is_replacement && (
+                                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground">
+                                        Replacement
+                                    </span>
+                                )}
+                            </span>
+                            <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                    <UsersRound className="size-3" />
+                                    {meal.participants
+                                        .map(
+                                            (participant) =>
+                                                `${participant.name} (${participant.servings})`,
+                                        )
+                                        .join(', ')}
+                                </span>
+                                {meal.estimated_minutes !== null && (
+                                    <span>{meal.estimated_minutes} min</span>
+                                )}
+                                {meal.estimated_cost_cents !== null && (
+                                    <span>
+                                        ~$
+                                        {(
+                                            meal.estimated_cost_cents / 100
+                                        ).toFixed(2)}
+                                    </span>
+                                )}
+                            </span>
+                            {meal.participant_default.provisional && (
+                                <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-300">
+                                    Suggested servings · edit before approval if
+                                    needed
+                                </span>
+                            )}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+            <div className="typeset typeset-docs mt-3 space-y-1 text-muted-foreground">
+                <p>
+                    {brief.grocery_preparation.effect} Checkout stays with you.
+                </p>
+                <p>
+                    Grocery policy:{' '}
+                    {brief.purchase_policy.home_brand_preference} home brand,{' '}
+                    {brief.purchase_policy.bulk_preference} bulk, and{' '}
+                    {brief.purchase_policy.organic_preference.replace('_', ' ')}{' '}
+                    organic.
+                </p>
+                {brief.safety.constraints.length > 0 && (
+                    <p>
+                        {brief.safety.constraints.length} explicit safety{' '}
+                        {brief.safety.constraints.length === 1
+                            ? 'constraint is'
+                            : 'constraints are'}{' '}
+                        retained; Chef has not inferred any.
+                    </p>
+                )}
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <Button
+                    className="w-full sm:w-auto"
+                    disabled={conversation.sending}
+                    onClick={() => {
+                        if (pendingApproval) {
+                            void conversation.resolveToolApproval(
+                                pendingApproval,
+                                'approve',
+                            );
+
+                            return;
+                        }
+
+                        router.post(approveMealPlan.url(workspace.plan.id));
+                    }}
+                >
+                    {conversation.sending && pendingApproval ? (
+                        <LoaderCircle className="animate-spin" />
+                    ) : (
+                        <Sparkles />
+                    )}{' '}
+                    {pendingApproval
+                        ? 'Approve plan'
+                        : (grocery.approval_label ??
+                          'Approve plan & prepare recipes')}
+                </Button>
+                {pendingApproval && (
+                    <Button
+                        className="w-full sm:w-auto"
+                        variant="outline"
+                        disabled={conversation.sending}
+                        onClick={() =>
+                            void conversation.resolveToolApproval(
+                                pendingApproval,
+                                'reject',
+                            )
+                        }
+                    >
+                        Keep editing
+                    </Button>
+                )}
+            </div>
+        </section>
+    );
+}
+
+function PlanNextStep({
+    workspace,
+    conversation,
+}: {
+    workspace: MealPlanWorkspace;
+    conversation: ChefConversationControls;
+}) {
+    const [connectionOpen, setConnectionOpen] = useState(false);
+    const grocery = workspace.grocery_preparation;
+    const basketRun = grocery.enabled ? (grocery.run ?? null) : null;
+    const needsConnection = basketRun?.public_state === 'connection_required';
+
+    if (needsConnection && basketRun !== null) {
+        const canConnect =
+            grocery.can_connect === true &&
+            (grocery.connection?.owned_by_current_user ?? true);
+        const isReauthentication =
+            basketRun.status === 'reauthentication_required';
+
+        return (
+            <>
+                <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+                    <PlanStateCopy
+                        title={
+                            isReauthentication
+                                ? 'Continue with Coles'
+                                : 'Connect Coles to continue'
+                        }
+                    >
+                        {canConnect
+                            ? isReauthentication
+                                ? 'Your saved consent remains in place. Continue the Coles sign-in and Chef will resume this basket automatically.'
+                                : 'Recipes are preparing in the background. Sign in as the Coles account owner, review the disclosure, and Chef will resume this basket automatically.'
+                            : 'The household member who owns the connected Coles account needs to sign in before Chef can continue.'}
+                    </PlanStateCopy>
+                    <Button
+                        data-testid="connect-coles"
+                        size="sm"
+                        disabled={!canConnect}
+                        onClick={() => setConnectionOpen(true)}
+                    >
+                        <ShoppingBasket />{' '}
+                        {isReauthentication
+                            ? 'Continue with Coles'
+                            : 'Connect Coles'}
+                    </Button>
+                </section>
+                <ColesConnectionDialog
+                    groceryPreparation={grocery}
+                    open={connectionOpen}
+                    onOpenChange={setConnectionOpen}
+                />
+            </>
+        );
+    }
 
     if (
         workspace.readiness.confirmed &&
@@ -379,21 +649,16 @@ function PlanNextStep({
     ) {
         return (
             <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-destructive/5 px-4 py-3">
-                <div>
-                    <p className="text-sm font-medium">
-                        The completed plan needs another try
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        Chef kept every meal choice. Retry the single recipe
-                        batch before Chef continues preparing the shop.
-                    </p>
-                </div>
+                <PlanStateCopy title="The completed plan needs another try">
+                    Chef kept every meal choice. Retry the single recipe batch
+                    to finish preparing the plan.
+                </PlanStateCopy>
                 <Button
                     size="sm"
                     variant="outline"
                     onClick={() =>
                         router.post(
-                            `/meal-plans/${workspace.plan.id}/recipes/prepare`,
+                            prepareRecipes.url(workspace.plan.id),
                             {},
                             { preserveScroll: true },
                         )
@@ -407,51 +672,44 @@ function PlanNextStep({
 
     if (
         workspace.readiness.confirmed &&
-        (workspace.readiness.recipes_preparing > 0 || shoppingPreparing)
+        workspace.readiness.recipes_preparing > 0
     ) {
         const recipesUnresolved = workspace.readiness.recipes_unresolved;
 
         return (
             <section className="mx-auto w-full max-w-xl rounded-xl bg-primary/5 px-4 py-3">
-                <p className="flex items-center gap-2 text-sm font-medium">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    {workspace.readiness.recipes_preparing > 0
-                        ? 'Preparing the completed plan'
-                        : 'Preparing your shopping list'}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                    {workspace.readiness.recipes_preparing > 0
-                        ? `Chef is generating ${recipesUnresolved} ${recipesUnresolved === 1 ? 'remaining recipe' : 'remaining recipes'} together from the completed plan. You can keep chatting while the batch finishes.`
-                        : 'Chef is combining the confirmed recipes into one traceable list. You can keep chatting while it finishes.'}
-                </p>
+                <PlanStateCopy
+                    title="Preparing the completed plan"
+                    icon={<LoaderCircle className="size-4 animate-spin" />}
+                >
+                    Chef is generating {recipesUnresolved}{' '}
+                    {recipesUnresolved === 1
+                        ? 'remaining recipe'
+                        : 'remaining recipes'}{' '}
+                    together from the completed plan. You can keep chatting
+                    while the batch finishes.
+                </PlanStateCopy>
             </section>
         );
     }
 
-    if (workspace.readiness.confirmed && shoppingFailed) {
+    if (
+        workspace.readiness.confirmed &&
+        workspace.readiness.ready_for_safety_confirmation
+    ) {
         return (
-            <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-destructive/5 px-4 py-3">
-                <div>
-                    <p className="text-sm font-medium">
-                        Shopping list needs another try
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        {shoppingList.generation_failure_message ??
-                            'Chef could not finish this shopping list. Retry when you are ready.'}
-                    </p>
-                </div>
+            <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 px-4 py-3">
+                <PlanStateCopy title="Plan details changed">
+                    Participants or plan details changed. Reapprove to refresh
+                    recipe preparation.
+                </PlanStateCopy>
                 <Button
                     size="sm"
-                    variant="outline"
                     onClick={() =>
-                        router.post(
-                            `/meal-plans/${workspace.plan.id}/shopping-list`,
-                            {},
-                            { preserveScroll: true },
-                        )
+                        router.post(approveMealPlan.url(workspace.plan.id))
                     }
                 >
-                    <RefreshCw /> Retry shopping list
+                    <RefreshCw /> Reapprove &amp; prepare recipes
                 </Button>
             </section>
         );
@@ -459,67 +717,43 @@ function PlanNextStep({
 
     if (
         workspace.readiness.confirmed &&
-        workspace.readiness.ready_for_safety_review &&
-        workspace.readiness.safety_review_required
+        workspace.readiness.recipes_unresolved > 0
     ) {
         return (
-            <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-500/5 px-4 py-3">
-                <div>
-                    <p className="text-sm font-medium">
-                        Review this plan&rsquo;s safety details
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        {workspace.readiness.confirmed
-                            ? 'Participants or explicit household constraints changed. Review the current details before reconfirming.'
-                            : 'Confirm what the household has reported before confirming this plan. Allergies are never inferred.'}
-                    </p>
-                </div>
-                <Button size="sm" onClick={onOpenPlanDetails}>
-                    <ShieldCheck /> Open plan details
+            <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 px-4 py-3">
+                <PlanStateCopy title="Recipes are ready to prepare">
+                    Start one batch for the remaining recipes in this approved
+                    plan.
+                </PlanStateCopy>
+                <Button
+                    size="sm"
+                    onClick={() =>
+                        router.post(
+                            prepareRecipes.url(workspace.plan.id),
+                            {},
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    <Sparkles /> Prepare recipes
                 </Button>
             </section>
         );
     }
 
-    if (workspace.readiness.confirmed) {
-        const shoppingReady =
-            shoppingList !== null && shoppingList.generation_status === 'ready';
+    if (basketRun !== null) {
+        return <BasketRunNextStep basketRun={basketRun} />;
+    }
 
+    if (workspace.readiness.confirmed) {
         return (
             <section className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/5 px-4 py-3">
-                <div>
-                    <p className="text-sm font-medium">Planning is complete</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        {shoppingReady
-                            ? 'Your traceable shopping list is ready to review and edit with Chef.'
-                            : 'Shopping is next. Chef will turn the confirmed recipes into one traceable list.'}
-                    </p>
-                </div>
-                <Button
-                    size="sm"
-                    onClick={() => {
-                        if (shoppingReady) {
-                            onOpenShopping();
-
-                            return;
-                        }
-
-                        router.post(
-                            `/meal-plans/${workspace.plan.id}/shopping-list`,
-                            {},
-                            { preserveScroll: true },
-                        );
-                    }}
-                >
-                    {shoppingReady ? (
-                        <>
-                            Review shopping list <ArrowRight />
-                        </>
-                    ) : (
-                        <>
-                            <ShoppingBasket /> Start shopping list
-                        </>
-                    )}
+                <PlanStateCopy title="Plan and recipes are ready">
+                    Your household can review the recipes now and return here
+                    whenever the plan needs to change.
+                </PlanStateCopy>
+                <Button size="sm" onClick={() => router.get('/recipes')}>
+                    View recipes <ArrowRight />
                 </Button>
             </section>
         );
@@ -529,103 +763,8 @@ function PlanNextStep({
         return null;
     }
 
-    const pendingBySlot = new Map<
-        number | null,
-        (typeof workspace.plan.proposals)[number]
-    >();
-
-    for (const proposal of workspace.plan.proposals) {
-        if (proposal.status !== 'pending') {
-            continue;
-        }
-
-        const current = pendingBySlot.get(proposal.meal_slot_id);
-
-        if (current === undefined || proposal.id > current.id) {
-            pendingBySlot.set(proposal.meal_slot_id, proposal);
-        }
-    }
-
-    const draftMeals = workspace.plan.slots.map((slot) => ({
-        slot,
-        meal: slot.planned_meal ?? pendingBySlot.get(slot.id) ?? null,
-    }));
-
-    const safetyConstraints = [
-        ...workspace.household.constraints,
-        ...workspace.household.people.flatMap((person) => person.constraints),
-    ];
-
     return (
-        <section
-            data-plan-approval
-            className="mx-auto w-full max-w-xl rounded-2xl border bg-card p-4 shadow-sm"
-        >
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <p className="text-sm font-medium">
-                        Your plan is ready to approve
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        Review the whole plan once. You can keep chatting to
-                        swap anything before approving it.
-                    </p>
-                </div>
-                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
-                    {draftMeals.length} meals
-                </span>
-            </div>
-            <ul className="mt-4 divide-y border-y text-sm">
-                {draftMeals.map(({ slot, meal }) => (
-                    <li
-                        key={slot.id}
-                        className="grid grid-cols-[5.5rem_1fr] gap-3 py-2.5"
-                    >
-                        <span className="text-xs text-muted-foreground">
-                            {formatDay(slot.date)}
-                        </span>
-                        <span>
-                            <span className="font-medium">
-                                {meal?.title ?? 'Open meal'}
-                            </span>
-                            {meal?.estimated_minutes && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                    {meal.estimated_minutes} min
-                                </span>
-                            )}
-                            {meal?.estimated_cost && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                    ~${meal.estimated_cost.toFixed(2)}
-                                </span>
-                            )}
-                        </span>
-                    </li>
-                ))}
-            </ul>
-            <div className="mt-4 rounded-xl bg-muted/50 px-3 py-2.5 text-xs leading-5">
-                <p className="font-medium">Safety check</p>
-                <p className="text-muted-foreground">
-                    {safetyConstraints.length > 0
-                        ? `${safetyConstraints.length} explicit household ${safetyConstraints.length === 1 ? 'rule is' : 'rules are'} included in this plan.`
-                        : 'No allergies or safety rules are currently recorded. Approving confirms this is current.'}
-                </p>
-            </div>
-            <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                Chef will prepare the recipes, combine the shopping list, match
-                routine Woolworths products, and prepare the connected cart. It
-                will pause for genuine exceptions and leave checkout to you.
-            </p>
-            <Button
-                className="mt-4 w-full sm:w-auto"
-                onClick={() =>
-                    router.post(`/meal-plans/${workspace.plan.id}/approve`, {
-                        explicitly_reviewed_safety: true,
-                    })
-                }
-            >
-                <ShoppingBasket /> Approve plan &amp; prepare shopping
-            </Button>
-        </section>
+        <PlanApprovalCard workspace={workspace} conversation={conversation} />
     );
 }
 
@@ -633,29 +772,26 @@ export type ChefConversationControls = ReturnType<typeof useChefConversation>;
 
 export function ConversationPanel({
     workspace,
-    sourceMessageId,
-    onSourceMessageShown,
-    onOpenPlanDetails,
-    onOpenShopping,
     conversation,
 }: {
     workspace: MealPlanWorkspace;
-    sourceMessageId: number | null;
-    onSourceMessageShown: () => void;
-    onOpenPlanDetails: () => void;
-    onOpenShopping: () => void;
     conversation: ChefConversationControls;
 }) {
     const {
         activeClientMessageId,
+        addPhotos,
         error,
         input,
         messages,
         retryMessage,
+        removePhoto,
+        selectedPhotos,
+        sendPhase,
         sending,
         sendMessage,
         setInput,
     } = conversation;
+
     const hasPendingProposals =
         !workspace.readiness.ready_for_approval &&
         workspace.plan.proposals.some(
@@ -663,57 +799,17 @@ export function ConversationPanel({
         );
     const viewportRef = useRef<HTMLDivElement>(null);
     const positionedConversationId = useRef<number | null>(null);
-    const sourceHighlightTimeout = useRef<number | null>(null);
-    const [sourceLandingMessageId, setSourceLandingMessageId] = useState<
-        string | null
-    >(null);
-    const [sourceHighlightMessageId, setSourceHighlightMessageId] = useState<
-        string | null
-    >(null);
-    const [sourceAnnouncement, setSourceAnnouncement] = useState('');
     const latestMessageId = String(messages.at(-1)?.id ?? '');
     const { scrollToEnd, scrollToMessage } = useMessageScroller();
     const datedConversation = groupMessagesByDate(
         messages,
         workspace.household.timezone,
     );
-    const handleSourceLanded = (messageId: string) => {
-        setSourceLandingMessageId(null);
-        setSourceAnnouncement('Source message shown.');
-
-        if (sourceHighlightTimeout.current !== null) {
-            window.clearTimeout(sourceHighlightTimeout.current);
-        }
-
-        sourceHighlightTimeout.current = window.setTimeout(() => {
-            setSourceHighlightMessageId((current) =>
-                current === messageId ? null : current,
-            );
-            sourceHighlightTimeout.current = null;
-        }, 2000);
-    };
-    const handleSourceMissing = () => {
-        setSourceLandingMessageId(null);
-        setSourceHighlightMessageId(null);
-        setSourceAnnouncement('Source message is no longer available.');
-        toast('Source message is no longer available.');
-    };
-
-    useEffect(
-        () => () => {
-            if (sourceHighlightTimeout.current !== null) {
-                window.clearTimeout(sourceHighlightTimeout.current);
-            }
-        },
-        [],
-    );
-
     useLayoutEffect(() => {
         const targetMessageId =
-            sourceMessageId ??
-            (positionedConversationId.current === workspace.conversation.id
+            positionedConversationId.current === workspace.conversation.id
                 ? null
-                : messages.findLast((message) => message.role === 'user')?.id);
+                : messages.findLast((message) => message.role === 'user')?.id;
 
         if (targetMessageId === null || targetMessageId === undefined) {
             positionedConversationId.current = workspace.conversation.id;
@@ -725,34 +821,14 @@ export function ConversationPanel({
         const registrationFrame = window.requestAnimationFrame(() => {
             settledFrame = window.requestAnimationFrame(() => {
                 const didScroll = scrollToMessage(String(targetMessageId), {
-                    align: sourceMessageId === null ? 'start' : 'center',
-                    behavior: sourceMessageId === null ? 'auto' : 'smooth',
-                    scrollMargin: sourceMessageId === null ? 56 : 16,
+                    align: 'start',
+                    behavior: 'auto',
+                    scrollMargin: 56,
                 });
 
-                if (!didScroll) {
-                    if (sourceMessageId !== null) {
-                        onSourceMessageShown();
-                        setSourceLandingMessageId(null);
-                        setSourceHighlightMessageId(null);
-                        setSourceAnnouncement(
-                            'Source message is no longer available.',
-                        );
-                        toast('Source message is no longer available.');
-                    }
-
-                    return;
-                }
-
-                positionedConversationId.current = workspace.conversation.id;
-
-                if (sourceMessageId !== null) {
-                    const targetId = String(targetMessageId);
-
-                    setSourceAnnouncement('');
-                    setSourceHighlightMessageId(targetId);
-                    setSourceLandingMessageId(targetId);
-                    onSourceMessageShown();
+                if (didScroll) {
+                    positionedConversationId.current =
+                        workspace.conversation.id;
                 }
             });
         });
@@ -761,13 +837,7 @@ export function ConversationPanel({
             window.cancelAnimationFrame(registrationFrame);
             window.cancelAnimationFrame(settledFrame);
         };
-    }, [
-        messages,
-        onSourceMessageShown,
-        scrollToMessage,
-        sourceMessageId,
-        workspace.conversation.id,
-    ]);
+    }, [messages, scrollToMessage, workspace.conversation.id]);
 
     const sendConversationMessage = (event: FormEvent<HTMLFormElement>) => {
         scrollToEnd({ behavior: 'auto' });
@@ -782,9 +852,13 @@ export function ConversationPanel({
 
     const composer = (
         <ConversationComposer
+            addPhotos={addPhotos}
             error={error}
             input={input}
             onSubmit={sendConversationMessage}
+            removePhoto={removePhoto}
+            selectedPhotos={selectedPhotos}
+            sendPhase={sendPhase}
             sending={sending}
             setInput={setInput}
         />
@@ -824,8 +898,6 @@ export function ConversationPanel({
                                         nextEntry.message,
                                     );
                                 const messageId = String(message.id);
-                                const isSourceTarget =
-                                    sourceHighlightMessageId === messageId;
 
                                 return (
                                     <Fragment key={message.id}>
@@ -855,18 +927,8 @@ export function ConversationPanel({
                                                 message.client_message_id !==
                                                     activeClientMessageId
                                             }
-                                            tabIndex={
-                                                isSourceTarget ? -1 : undefined
-                                            }
-                                            data-source-target={
-                                                isSourceTarget
-                                                    ? 'true'
-                                                    : undefined
-                                            }
                                             className={cn(
                                                 continuesPrevious && '-mt-4',
-                                                isSourceTarget &&
-                                                    'rounded-xl bg-primary/5 ring-2 ring-primary/35 transition-[background-color,box-shadow] duration-500 outline-none motion-reduce:transition-none',
                                             )}
                                         >
                                             <ConversationMessageRow
@@ -889,41 +951,43 @@ export function ConversationPanel({
                                     <ProposalCards workspace={workspace} />
                                 </MessageScrollerItem>
                             )}
+                            <MessageScrollerItem messageId="household-safety">
+                                <SafetyRules
+                                    household={workspace.household}
+                                    planId={workspace.plan.id}
+                                    safetyReviewRequired={
+                                        workspace.readiness
+                                            .ready_for_safety_review &&
+                                        !workspace.readiness.safety_reviewed
+                                    }
+                                    conversationId={workspace.conversation.id}
+                                    onShowMessageSource={(messageId) => {
+                                        scrollToMessage(String(messageId), {
+                                            align: 'start',
+                                            behavior: 'smooth',
+                                            scrollMargin: 56,
+                                        });
+                                    }}
+                                />
+                            </MessageScrollerItem>
                             <MessageScrollerItem messageId="plan-next-step">
                                 <PlanNextStep
                                     workspace={workspace}
-                                    onOpenPlanDetails={onOpenPlanDetails}
-                                    onOpenShopping={onOpenShopping}
+                                    conversation={conversation}
                                 />
                             </MessageScrollerItem>
                             {workspace.plan.planning_confirmed_at && (
-                                <MessageScrollerItem messageId="planning-feedback">
-                                    <PlanningCheckpointFeedback
-                                        conversationId={
-                                            workspace.conversation.id
-                                        }
-                                        feedback={workspace.conversation.feedback.find(
-                                            (item) =>
-                                                item.context ===
-                                                'planning_confirmed',
-                                        )}
-                                    />
-                                </MessageScrollerItem>
+                                <PlanningCheckpointFeedback
+                                    conversationId={workspace.conversation.id}
+                                    feedback={workspace.conversation.feedback.find(
+                                        (item) =>
+                                            item.context ===
+                                            'planning_confirmed',
+                                    )}
+                                />
                             )}
                         </MessageScrollerContent>
                     </MessageScrollerViewport>
-                    {sourceLandingMessageId && (
-                        <SourceMessageLanding
-                            messageId={sourceLandingMessageId}
-                            onLanded={handleSourceLanded}
-                            onMissing={handleSourceMissing}
-                        />
-                    )}
-                    {sourceAnnouncement && (
-                        <span className="sr-only" role="status">
-                            {sourceAnnouncement}
-                        </span>
-                    )}
                     <LatestMessageControl
                         latestMessageId={latestMessageId}
                         sending={sending}

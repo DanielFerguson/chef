@@ -1,0 +1,40 @@
+name: AI evals
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 18 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  all-prompt-workloads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: web
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      PEST_EVALS_LARAVEL_SCORING_PROVIDER: ${{ vars.PEST_EVALS_LARAVEL_SCORING_PROVIDER || 'openai' }}
+      PEST_EVALS_LARAVEL_SCORING_MODEL: ${{ vars.PEST_EVALS_LARAVEL_SCORING_MODEL || 'gpt-5.4-nano' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require eval credentials
+        run: |
+          test -n "$OPENAI_API_KEY" || {
+            echo "::error::OPENAI_API_KEY is required; live prompt evals fail closed."
+            exit 1
+          }
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: gd, imagick, mbstring, sqlite3
+          coverage: none
+      - uses: ramsey/composer-install@v3
+        with:
+          working-directory: web
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - run: composer test:evals

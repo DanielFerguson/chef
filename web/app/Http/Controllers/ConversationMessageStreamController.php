@@ -5,13 +5,14 @@ namespace App\Http\Controllers;
 use App\Actions\Conversations\CreateUserMessage;
 use App\Actions\Conversations\RecordMessageResponseAttempt;
 use App\Actions\Conversations\RecordMessageResponseFailure;
+use App\Actions\Conversations\ResolvePendingPlanApproval;
 use App\Ai\Contracts\ChefConversationEngine;
 use App\Enums\MessageResponseStatus;
 use App\Enums\MessageRole;
+use App\Http\Requests\ConversationMessageStreamRequest;
 use App\Models\Conversation;
 use App\Models\Message;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -19,23 +20,39 @@ use Throwable;
 class ConversationMessageStreamController extends Controller
 {
     public function __invoke(
-        Request $request,
+        ConversationMessageStreamRequest $request,
         Conversation $conversation,
         CreateUserMessage $createUserMessage,
         RecordMessageResponseAttempt $recordResponseAttempt,
         RecordMessageResponseFailure $recordResponseFailure,
+        ResolvePendingPlanApproval $resolvePendingApproval,
         ChefConversationEngine $engine,
     ): StreamedResponse|JsonResponse {
         $this->authorize('update', $conversation);
-        $validated = $request->validate([
-            'content' => ['required', 'string', 'max:10000'],
-            'client_message_id' => ['required', 'uuid'],
-        ]);
+        $validated = $request->validated();
+        $approval = $request->approval();
+
+        if ($approval !== null) {
+            $pendingApproval = $resolvePendingApproval->handle($conversation);
+
+            if ($pendingApproval === null || ! hash_equals($pendingApproval['id'], $approval['id'])) {
+                return response()->json([
+                    'message' => 'That plan approval is no longer current. Review the latest plan before approving it.',
+                ], 409);
+            }
+        }
+
+        $content = $approval === null
+            ? ($validated['content'] ?? '')
+            : ($approval['decision'] === 'approve' ? 'Approve this meal plan.' : 'Keep editing this meal plan.');
+        $metadata = $approval === null ? null : ['tool_approval' => $approval];
         $message = $createUserMessage->handle(
             $conversation,
             $request->user(),
-            $validated['content'],
+            $content,
             $validated['client_message_id'],
+            $metadata,
+            $request->images(),
         );
 
         $existingResponse = $message->response()->first();

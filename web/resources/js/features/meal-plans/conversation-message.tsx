@@ -1,4 +1,13 @@
-import { CircleAlert, RefreshCcw } from 'lucide-react';
+import { CircleAlert, ImageIcon, RefreshCcw } from 'lucide-react';
+import {
+    Attachment,
+    AttachmentContent,
+    AttachmentDescription,
+    AttachmentGroup,
+    AttachmentMedia,
+    AttachmentTitle,
+    AttachmentTrigger,
+} from '@/components/ui/attachment';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import { Button } from '@/components/ui/button';
@@ -11,6 +20,7 @@ import {
     MessageHeader,
 } from '@/components/ui/message';
 import { Spinner } from '@/components/ui/spinner';
+import { show as showMessageAttachment } from '@/routes/message-attachments';
 import { AssistantMessage } from './assistant-message';
 import { MessageFeedback } from './conversation-feedback';
 import type { Message as ConversationMessage } from './types';
@@ -23,6 +33,89 @@ function getInitials(name: string) {
         .map((part) => part[0])
         .join('')
         .toUpperCase();
+}
+
+function UserMessage({ content }: { content: string }) {
+    return (
+        <div
+            className="typeset typeset-docs max-w-[37em]"
+            data-message-role="user"
+        >
+            {content}
+        </div>
+    );
+}
+
+function formatBytes(bytes: number) {
+    if (bytes < 1024 * 1024) {
+        return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function UserMessageAttachments({ message }: { message: ConversationMessage }) {
+    if (!message.attachments?.length) {
+        return null;
+    }
+
+    return (
+        <AttachmentGroup
+            className="w-full max-w-full pb-2"
+            aria-label="Attached photos"
+        >
+            {message.attachments.map((attachment, index) => {
+                const href =
+                    attachment.preview_url ??
+                    (typeof attachment.id === 'number'
+                        ? showMessageAttachment.url(attachment.id)
+                        : undefined);
+
+                return (
+                    <Attachment
+                        key={attachment.id}
+                        state={attachment.state ?? 'done'}
+                        size="sm"
+                        className="max-w-52 bg-background/70"
+                    >
+                        {href && (
+                            <AttachmentTrigger asChild>
+                                <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label={`Open photo ${index + 1}`}
+                                />
+                            </AttachmentTrigger>
+                        )}
+                        <AttachmentMedia variant="image">
+                            {href ? (
+                                <img
+                                    src={href}
+                                    alt=""
+                                    className="size-full object-cover"
+                                />
+                            ) : (
+                                <ImageIcon />
+                            )}
+                        </AttachmentMedia>
+                        <AttachmentContent>
+                            <AttachmentTitle>Photo {index + 1}</AttachmentTitle>
+                            <AttachmentDescription>
+                                {attachment.state === 'uploading'
+                                    ? 'Uploading…'
+                                    : attachment.state === 'processing'
+                                      ? 'Processing…'
+                                      : attachment.state === 'error'
+                                        ? 'Upload needs attention'
+                                        : formatBytes(attachment.size_bytes)}
+                            </AttachmentDescription>
+                        </AttachmentContent>
+                    </Attachment>
+                );
+            })}
+        </AttachmentGroup>
+    );
 }
 
 function UserMessageStatus({
@@ -113,9 +206,7 @@ export function ConversationMessageRow({
                         <MarkerIcon>
                             <Spinner />
                         </MarkerIcon>
-                        <MarkerContent className="shimmer">
-                            Thinking…
-                        </MarkerContent>
+                        <MarkerContent>Thinking…</MarkerContent>
                     </Marker>
                 ) : (
                     <>
@@ -124,16 +215,31 @@ export function ConversationMessageRow({
                                 message.role === 'user' ? 'muted' : 'ghost'
                             }
                             align={message.role === 'user' ? 'end' : 'start'}
+                            className={
+                                message.role === 'user' &&
+                                message.attachments?.length
+                                    ? 'max-w-[min(90%,36rem)]'
+                                    : undefined
+                            }
                         >
                             <BubbleContent
                                 className={
                                     message.role === 'user'
-                                        ? 'whitespace-pre-wrap'
+                                        ? 'w-full whitespace-pre-wrap'
                                         : undefined
                                 }
                             >
                                 {message.role === 'user' ? (
-                                    message.content
+                                    <>
+                                        <UserMessageAttachments
+                                            message={message}
+                                        />
+                                        {message.content !== '' && (
+                                            <UserMessage
+                                                content={message.content}
+                                            />
+                                        )}
+                                    </>
                                 ) : (
                                     <AssistantMessage
                                         content={message.content}

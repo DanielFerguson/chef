@@ -15,6 +15,15 @@ return [
         ],
     ],
 
+    'conversations' => [
+        'connection' => env('AI_CONVERSATION_DB_CONNECTION'),
+        'generate_title' => false,
+        'tables' => [
+            'conversations' => 'agent_conversations',
+            'messages' => 'agent_conversation_messages',
+        ],
+    ],
+
     'workloads' => [
         'conversation' => [
             'model' => env('OPENAI_CONVERSATION_MODEL', 'gpt-5.6-luna'),
@@ -23,13 +32,17 @@ return [
             'model' => env('OPENAI_RECIPE_BATCH_MODEL', 'gpt-5.6-sol'),
             'reasoning_effort' => env('OPENAI_RECIPE_BATCH_REASONING_EFFORT', 'high'),
         ],
-        'shopping_list' => [
-            'model' => env('OPENAI_SHOPPING_LIST_MODEL', 'gpt-5.6-sol'),
-            'reasoning_effort' => env('OPENAI_SHOPPING_LIST_REASONING_EFFORT', 'high'),
+        'retailer_selection' => [
+            'model' => env('OPENAI_RETAILER_SELECTION_MODEL', 'gpt-5.6-luna'),
+            'reasoning_effort' => env('OPENAI_RETAILER_SELECTION_REASONING_EFFORT', 'medium'),
         ],
-        'product_match' => [
-            'model' => env('OPENAI_PRODUCT_MATCH_MODEL', 'gpt-5.6-luna'),
-            'reasoning_effort' => env('OPENAI_PRODUCT_MATCH_REASONING_EFFORT', 'low'),
+        'retailer_recovery' => [
+            'model' => env('OPENAI_RETAILER_RECOVERY_MODEL', 'gpt-5.6-luna'),
+            'reasoning_effort' => env('OPENAI_RETAILER_RECOVERY_REASONING_EFFORT', 'low'),
+        ],
+        'retailer_adjustment' => [
+            'model' => env('OPENAI_RETAILER_ADJUSTMENT_MODEL', 'gpt-5.6-sol'),
+            'reasoning_effort' => env('OPENAI_RETAILER_ADJUSTMENT_REASONING_EFFORT', 'medium'),
         ],
     ],
 
