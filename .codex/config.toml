@@ -1,0 +1,5 @@
+[mcp_servers.laravel-boost]
+command = "php"
+args = ["artisan", "boost:mcp"]
+cwd = "web"
+default_tools_approval_mode = "writes"
