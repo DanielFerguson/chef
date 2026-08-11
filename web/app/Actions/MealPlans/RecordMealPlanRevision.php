@@ -28,43 +28,12 @@ class RecordMealPlanRevision
             $nextRevision = $locked->revision + 1;
             $updates = ['revision' => $nextRevision];
 
-            if ($locked->shopping_approved_at !== null) {
-                $updates['shopping_approved_by_user_id'] = null;
-                $updates['shopping_approved_at'] = null;
-                $updates['shopping_approval_fingerprint'] = null;
-            }
-
             if ($locked->planning_confirmed_at !== null) {
                 $updates['derived_data_stale_at'] = now();
                 $updates['derived_data_stale_reason'] = $summary;
             }
 
             $locked->update($updates);
-
-            if ($locked->planning_confirmed_at !== null) {
-                $shoppingList = $locked->shoppingList;
-
-                if ($shoppingList !== null) {
-                    $storedDiff = $shoppingList->stale_diff;
-                    $storedChanges = $storedDiff === null ? [] : $storedDiff['changes'];
-                    $staleDiff = [
-                        'from_plan_revision' => $storedDiff === null
-                            ? $shoppingList->source_plan_revision
-                            : $storedDiff['from_plan_revision'],
-                        'to_plan_revision' => $nextRevision,
-                        'changes' => [...$storedChanges, [
-                            'revision' => $nextRevision,
-                            'summary' => $summary,
-                            'details' => $changes,
-                        ]],
-                    ];
-                    $shoppingList->update([
-                        'stale_at' => now(),
-                        'stale_reason' => $summary,
-                        'stale_diff' => $staleDiff,
-                    ]);
-                }
-            }
 
             return $locked->revisions()->create([
                 'team_id' => $locked->team_id,

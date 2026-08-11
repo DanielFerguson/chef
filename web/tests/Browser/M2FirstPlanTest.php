@@ -13,14 +13,11 @@ use App\Enums\MealSlotKind;
 use App\Enums\MessageResponseStatus;
 use App\Enums\MessageRole;
 use App\Models\MealSlot;
-use App\Models\ShoppingList;
-use App\Models\ShoppingListItem;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Ai\Responses\Data\ToolCall;
-
-uses(RefreshDatabase::class);
 
 it('creates a first plan and continues its conversation in a real browser', function () {
     $user = User::factory()->create();
@@ -40,35 +37,6 @@ it('creates a first plan and continues its conversation in a real browser', func
             'estimated_cost' => 18,
         ]),
         'I have added satay chicken for you to review.',
-        new ToolCall('inspect-shopping', 'InspectPlanShoppingList', []),
-        fn () => new ToolCall('add-extras', 'AddPlanShoppingItems', [
-            'items' => [
-                [
-                    'name' => 'Milk',
-                    'quantity' => 3,
-                    'unit' => 'litres',
-                    'note' => 'Household extra',
-                    'staple' => true,
-                ],
-                [
-                    'name' => 'Paper towels',
-                    'quantity' => 1,
-                    'unit' => 'pack',
-                    'note' => null,
-                    'staple' => false,
-                ],
-            ],
-        ]),
-        fn () => new ToolCall('pantry-ingredient', 'UpdatePlanShoppingItem', [
-            'item_id' => ShoppingListItem::query()->where('normalized_name', 'satay chicken ingredients')->sole()->id,
-            'in_pantry' => true,
-            'expected_revision' => ShoppingList::query()->sole()->revision,
-        ]),
-        new ToolCall('set-budget', 'SetPlanShoppingBudget', [
-            'amount' => 180,
-            'household_default' => false,
-        ]),
-        'Done — I added three litres of milk and paper towels, marked the satay ingredients as already at home, and set the budget to $180.',
     ])->preventStrayPrompts();
     $this->actingAs($user);
 
@@ -80,36 +48,11 @@ it('creates a first plan and continues its conversation in a real browser', func
         ->click('[data-testid="send-message"]')
         ->assertSee('I have added satay chicken for you to review.')
         ->assertSee('Satay chicken')
-        ->assertSee('Accept')
-        ->click('Accept')
-        ->assertSee('Satay chicken')
-        ->assertSee('Review this plan’s safety details')
-        ->pressAndWaitFor('Confirm none reported')
-        ->assertSee('Your plan is ready to confirm')
-        ->pressAndWaitFor('Review and confirm')
-        ->assertSee('Confirmed')
-        ->pressAndWaitFor('Start shopping list')
-        ->assertSee('Shopping list')
-        ->assertNotPresent('textarea[aria-label="Ingredients for Satay chicken"]')
-        ->assertNotPresent('summary[aria-label="Plan recap"]')
-        ->click('button[aria-label="List view"]')
-        ->assertSee('For Satay chicken')
-        ->click('button[aria-label="Conversation"]')
-        ->assertSee('Satay chicken')
-        ->type(
-            'textarea[aria-label="Message Chef"]',
-            'We already have the satay ingredients. Add three litres of milk and paper towels, and keep the shop below $180.',
-        )
-        ->click('[data-testid="send-message"]')
-        ->assertSee('Done — I added three litres of milk')
-        ->visit(route('meal-plans.show', ['mealPlan' => $plan, 'phase' => 'shopping']))
-        ->click('button[aria-label="Edit Milk"]')
-        ->assertPresent('input[aria-label="Milk name"]')
-        ->click('button[aria-label="Edit Paper towels"]')
-        ->assertPresent('input[aria-label="Paper towels name"]')
-        ->assertSee('Already in pantry')
-        ->click('Budget and estimate')
-        ->assertSee('$180.00');
+        ->assertSee('Your plan is ready to approve')
+        ->pressAndWaitFor('Approve plan & prepare recipes')
+        ->assertSee('Plan and recipes are ready')
+        ->pressAndWaitFor('View recipes')
+        ->assertSee('Satay chicken');
 
     $page->assertNoJavaScriptErrors();
 });
@@ -139,6 +82,46 @@ it('renders persisted and streamed assistant markdown as readable content', func
         ->assertSee('Updated options')
         ->assertPresent('[data-message-role="assistant"] ol')
         ->assertDontSee('**Butter chicken**')
+        ->assertNoJavaScriptErrors();
+});
+
+it('uses the response typeset for user and assistant messages', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
+    $message = app(CreateUserMessage::class)->handle(
+        $plan->conversations->firstOrFail(),
+        $user,
+        'Please suggest three quick dinners.',
+        (string) Str::uuid(),
+    );
+    $message->update([
+        'response_status' => MessageResponseStatus::Completed,
+        'response_completed_at' => now(),
+    ]);
+    $matchesResponseTypeset = <<<'JS'
+        () => {
+            const userMessage = document.querySelector('[data-message-role="user"]');
+            const assistantMessage = document.querySelector('[data-message-role="assistant"]');
+
+            if (! userMessage || ! assistantMessage) {
+                return false;
+            }
+
+            const userStyle = getComputedStyle(userMessage);
+            const assistantStyle = getComputedStyle(assistantMessage);
+
+            return userStyle.fontFamily === assistantStyle.fontFamily
+                && userStyle.fontSize === assistantStyle.fontSize
+                && userStyle.lineHeight === assistantStyle.lineHeight;
+        }
+        JS;
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $plan))->on()->desktop()
+        ->assertScript($matchesResponseTypeset)
+        ->resize(390, 844)
+        ->assertScript($matchesResponseTypeset)
         ->assertNoJavaScriptErrors();
 });
 
@@ -292,12 +275,13 @@ it('recovers plan-specific dinner suggestions without duplicating the failed tur
     $this->actingAs($user);
 
     $page = visit(route('meal-plans.show', $plan))->on()->desktop()
-        ->assertSee('3 suggestions ready; 4 slots still need an option.')
+        ->assertSee('Butter chicken')
+        ->assertSee('Satay chicken')
         ->assertSee('Chef could not finish that response. Retry this message.')
         ->assertPresent('button[aria-label="Retry message"]')
         ->click('button[aria-label="Retry message"]')
         ->assertSee('added four more quick dinner suggestions')
-        ->assertSee('7 suggestions need review.')
+        ->assertSee('Your plan is ready to approve')
         ->assertSee('Butter chicken')
         ->assertSee('Fish tacos')
         ->assertPresent('textarea[aria-label="Message Chef"]')
@@ -487,8 +471,8 @@ it('keeps the planning workspace usable at a narrow mobile width', function () {
         ->assertPresent('button[aria-label="Retry message"]')
         ->click('button[aria-label="Retry message"]')
         ->assertSee('Recovered on the narrow planning screen.')
-        ->click('button[aria-label="Open plan details"]')
-        ->assertSee('Household truth')
+        ->assertDontSee('Household truth')
+        ->assertNotPresent('button[aria-label="Open plan details"]')
         ->assertNoJavaScriptErrors();
 
     expect($message->refresh()->response_status)->toBe(MessageResponseStatus::Completed)
@@ -520,7 +504,7 @@ it('resets conversation state when navigating between plans', function () {
         ->assertNoJavaScriptErrors();
 });
 
-it('shows safety provenance and can link an invitation to a household person', function () {
+it('keeps safety evidence in the durable conversation while changing plan views', function () {
     $user = User::factory()->create(['name' => 'Daniel']);
     $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
     $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDay());
@@ -545,29 +529,12 @@ it('shows safety provenance and can link an invitation to a household person', f
     $this->actingAs($user);
 
     visit(route('meal-plans.show', $plan))->on()->desktop()
-        ->assertSee('Confirmed by Daniel')
-        ->assertSee('Tahlia has a severe peanut allergy.')
+        ->assertPresent("[data-message-id=\"{$message->id}\"]")
         ->click('nav[aria-label="Meal plan view"] button:nth-child(2)')
         ->assertPresent('[data-testid="calendar-grid"]')
-        ->assertVisible('button[aria-label="View source for Peanuts"]')
-        ->click('button[aria-label="View source for Peanuts"]')
-        ->wait(1)
+        ->click('Conversation')
+        ->assertPresent("[data-message-id=\"{$message->id}\"]")
         ->assertPresent('textarea[aria-label="Message Chef"]')
-        ->assertScript("() => {
-            const viewport = document.querySelector('[data-slot=message-scroller-viewport]');
-            const source = document.querySelector('[data-message-id=\"{$message->id}\"]');
-            const viewportBounds = viewport.getBoundingClientRect();
-            const sourceBounds = source.getBoundingClientRect();
-            const announcement = [...document.querySelectorAll('[role=status]')]
-                .some((item) => item.textContent.includes('Source message shown.'));
-            return sourceBounds.top >= viewportBounds.top
-                && sourceBounds.bottom <= viewportBounds.bottom
-                && source.dataset.sourceTarget === 'true'
-                && document.activeElement === source
-                && announcement;
-        }")
-        ->assertPresent('select[aria-label="Link invitation to household member"]')
-        ->assertSee('Tahlia')
         ->assertNoJavaScriptErrors();
 });
 
@@ -584,5 +551,101 @@ it('keeps reject and move actions available as direct controls', function () {
         ->assertSee('Mushroom pasta')
         ->click('Reject')
         ->assertDontSee('Mushroom pasta')
+        ->assertNoJavaScriptErrors();
+});
+
+it('uses the photo picker and renders persisted attachments with accessible controls', function () {
+    Storage::fake('local');
+    config()->set('filesystems.default', 'local');
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDay());
+    $contents = file_get_contents(base_path('tests/Fixtures/Images/iphone-pantry.heif'));
+
+    if ($contents === false) {
+        throw new RuntimeException('The HEIC browser fixture could not be read.');
+    }
+
+    app(CreateUserMessage::class)->handle(
+        $plan->conversations()->firstOrFail(),
+        $user,
+        '',
+        (string) Str::uuid(),
+        images: [UploadedFile::fake()->createWithContent('pantry.heif', $contents)],
+    );
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $plan))->on()->mobile()
+        ->assertPresent('a[aria-label="Open photo 1"]')
+        ->assertAttributeContains('a[aria-label="Open photo 1"]', 'href', '/message-attachments/')
+        ->attach('input[type="file"]', base_path('tests/Fixtures/Images/iphone-pantry.heif'))
+        ->assertSee('Photo 1')
+        ->assertPresent('button[aria-label="Remove photo 1"]')
+        ->wait(4)
+        ->assertPresent('img[src^="blob:"]')
+        ->assertEnabled('[data-testid="send-message"]')
+        ->click('button[aria-label="Remove photo 1"]')
+        ->assertMissing('button[aria-label="Remove photo 1"]')
+        ->attach('input[type="file"]', base_path('tests/Fixtures/Images/broken-preview.heic'))
+        ->assertSee('Preview unavailable — photo will still upload')
+        ->assertPresent('[data-slot="attachment"][data-state="error"]')
+        ->assertEnabled('[data-testid="send-message"]')
+        ->click('button[aria-label="Remove photo 1"]')
+        ->resize(390, 844)
+        ->assertPresent('a[aria-label="Open photo 1"]')
+        ->assertNoJavaScriptErrors();
+});
+
+it('retains the original photo when the first conversation request never reaches the server', function () {
+    Storage::fake('local');
+    config()->set('filesystems.default', 'local');
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDay());
+    $this->actingAs($user);
+
+    $page = visit(route('meal-plans.show', $plan))->on()->desktop()
+        ->assertScript('(window.__chefRealFetch = window.fetch.bind(window), true)')
+        ->assertScript('(window.__chefConversationRequests = 0, true)')
+        ->assertScript('(window.fetch = (...args) => {
+            const body = args[1]?.body;
+            if (!(body instanceof FormData)) {
+                return window.__chefRealFetch(...args);
+            }
+
+            window.__chefConversationRequests += 1;
+            if (window.__chefConversationRequests === 1) {
+                return Promise.reject(new TypeError("Simulated network interruption."));
+            }
+
+            window.__chefRetryPayload = {
+                clientMessageId: body.get("client_message_id"),
+                content: body.get("content"),
+                imageCount: body.getAll("images[]").length,
+                imageName: body.getAll("images[]")[0]?.name,
+            };
+            const ndjson = [
+                JSON.stringify({ type: "delta", delta: "I can use that pantry photo for the plan." }),
+                JSON.stringify({ type: "complete", delta: "", metadata: {} }),
+            ].join("\n") + "\n";
+
+            return Promise.resolve(new Response(ndjson, {
+                status: 200,
+                headers: { "Content-Type": "application/x-ndjson" },
+            }));
+        }, true)');
+
+    $page->attach('input[type="file"]', base_path('tests/Fixtures/Images/iphone-pantry.heif'))
+        ->wait(4)
+        ->type('textarea[aria-label="Message Chef"]', 'Use this pantry photo.')
+        ->click('[data-testid="send-message"]')
+        ->assertSee('Simulated network interruption.')
+        ->assertPresent('button[aria-label="Retry message"]')
+        ->click('button[aria-label="Retry message"]')
+        ->assertScript('() => window.__chefRetryPayload?.content === "Use this pantry photo."
+            && typeof window.__chefRetryPayload.clientMessageId === "string"
+            && window.__chefRetryPayload.clientMessageId.length > 0
+            && window.__chefRetryPayload.imageCount === 1
+            && window.__chefRetryPayload.imageName === "iphone-pantry.heif"')
         ->assertNoJavaScriptErrors();
 });

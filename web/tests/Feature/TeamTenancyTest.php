@@ -6,10 +6,7 @@ use App\Actions\Teams\InviteUserToTeam;
 use App\Enums\TeamRole;
 use App\Models\Person;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
-
-uses(RefreshDatabase::class);
 
 it('lets two accounts see the same family workspace', function () {
     $owner = User::factory()->create(['name' => 'Alex Owner']);

@@ -1,6 +1,7 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
+import PendingInvitationBanner from '@/components/pending-invitation-banner';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +15,14 @@ type Props = {
 };
 
 export default function Register({ passwordRules }: Props) {
+    const { pendingInvitation } = usePage().props;
+
     return (
         <>
             <Head title="Register" />
+            {pendingInvitation && (
+                <PendingInvitationBanner invitation={pendingInvitation} />
+            )}
             <Form
                 {...store.form()}
                 resetOnSuccess={['password', 'password_confirmation']}

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\MealSlotKind;
+use App\Enums\MealSlotParticipantOrigin;
 use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Database\Factories\MealSlotFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -22,8 +23,11 @@ use Illuminate\Support\Carbon;
  * @property string|null $label
  * @property int $position
  * @property string|null $notes
+ * @property MealSlotParticipantOrigin $participant_assignment_origin
+ * @property int|null $participant_source_meal_slot_id
+ * @property Carbon|null $participant_defaults_applied_at
  */
-#[Fillable(['team_id', 'meal_plan_id', 'source_message_id', 'idempotency_key', 'date', 'kind', 'label', 'position', 'notes'])]
+#[Fillable(['team_id', 'meal_plan_id', 'source_message_id', 'idempotency_key', 'date', 'kind', 'label', 'position', 'notes', 'participant_assignment_origin', 'participant_source_meal_slot_id', 'participant_defaults_applied_at'])]
 class MealSlot extends Model
 {
     /** @use HasFactory<MealSlotFactory> */
@@ -49,6 +53,12 @@ class MealSlot extends Model
         return $this->belongsTo(Message::class, 'source_message_id');
     }
 
+    /** @return BelongsTo<MealSlot, $this> */
+    public function participantSourceSlot(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'participant_source_meal_slot_id');
+    }
+
     /** @return BelongsToMany<Person, $this> */
     public function participants(): BelongsToMany
     {
@@ -69,6 +79,8 @@ class MealSlot extends Model
         return [
             'date' => 'date:Y-m-d',
             'kind' => MealSlotKind::class,
+            'participant_assignment_origin' => MealSlotParticipantOrigin::class,
+            'participant_defaults_applied_at' => 'datetime',
         ];
     }
 }

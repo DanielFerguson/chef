@@ -2,6 +2,7 @@
 
 use App\Ai\ClassifyConversationFailure;
 use App\Enums\ConversationFailureCode;
+use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Exceptions\AiException;
@@ -9,9 +10,6 @@ use Laravel\Ai\Exceptions\InsufficientCreditsException;
 use Laravel\Ai\Exceptions\NoSuchToolException;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 it('classifies conversation failures without exposing their raw messages', function (Closure $exceptionFactory, ConversationFailureCode $code) {
     $exception = $exceptionFactory();
@@ -27,7 +25,7 @@ it('classifies conversation failures without exposing their raw messages', funct
     'configuration error' => [fn () => new InvalidArgumentException('Missing provider setting'), ConversationFailureCode::ConfigurationError],
     'missing tool' => [fn () => new NoSuchToolException('UntrustedToolName'), ConversationFailureCode::ToolError],
     'invalid tool arguments' => [fn () => ValidationException::withMessages(['field' => 'Invalid tool input']), ConversationFailureCode::ToolError],
-    'missing tool resource' => [fn () => (new ModelNotFoundException)->setModel('HiddenModel', [42]), ConversationFailureCode::ToolError],
+    'missing tool resource' => [fn () => (new ModelNotFoundException)->setModel(User::class, [42]), ConversationFailureCode::ToolError],
     'empty response' => [fn () => new RuntimeException('Chef completed without a visible response.'), ConversationFailureCode::EmptyResponse],
     'provider error' => [fn () => new AiException('Provider response body'), ConversationFailureCode::ProviderError],
     'unknown' => [fn () => new RuntimeException('Unexpected household content'), ConversationFailureCode::Unknown],

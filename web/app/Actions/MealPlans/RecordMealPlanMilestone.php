@@ -35,10 +35,6 @@ class RecordMealPlanMilestone
                 ]);
             }
 
-            if ($kind === MealPlanMilestoneKind::ShoppingListGenerated) {
-                $mealPlan->update(['derived_data_stale_at' => null, 'derived_data_stale_reason' => null]);
-            }
-
             return $milestone;
         });
     }

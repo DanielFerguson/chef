@@ -21,22 +21,31 @@ use App\Enums\PlannedMealType;
 use App\Enums\PreferenceCandidateStatus;
 use App\Enums\PreferenceProvenance;
 use App\Models\MealOutcome;
-use App\Models\Order;
-use App\Models\OrderLine;
+use App\Models\MealPlan;
+use App\Models\MealSlot;
+use App\Models\Person;
+use App\Models\PlannedMeal;
 use App\Models\Preference;
 use App\Models\PreferenceCandidate;
-use App\Models\Retailer;
-use App\Models\ShoppingList;
-use App\Models\ShoppingListItem;
-use App\Models\ShoppingListItemSource;
+use App\Models\Recipe;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 
-uses(RefreshDatabase::class);
-
+/**
+ * @return array{
+ *     user: User,
+ *     team: Team,
+ *     person: Person,
+ *     secondPerson: Person,
+ *     plan: MealPlan,
+ *     recipe: Recipe,
+ *     slot: MealSlot,
+ *     meal: PlannedMeal
+ * }
+ */
 function m5CookingWorkspace(int $dayOffset = 0): array
 {
     $user = User::factory()->create();
@@ -350,77 +359,6 @@ it('falls forward to the next planned date when today is empty', function () {
             ->where('today.showing_next', true)
             ->where('today.meals.0.title', 'Lemon chicken tray bake')
             ->where('today.meals.0.date', today()->addDays(6)->toDateString()));
-});
-
-it('shows the actual ordered product and substitution while cooking', function () {
-    $workspace = m5CookingWorkspace();
-    $retailer = Retailer::query()->where('slug', 'coles')->firstOrFail();
-    $list = ShoppingList::query()->create([
-        'team_id' => $workspace['team']->id,
-        'meal_plan_id' => $workspace['plan']->id,
-        'created_by_user_id' => $workspace['user']->id,
-        'revision' => 1,
-        'source_plan_revision' => $workspace['plan']->refresh()->revision,
-        'status' => 'completed',
-        'completed_at' => now(),
-    ]);
-    $item = ShoppingListItem::query()->create([
-        'team_id' => $workspace['team']->id,
-        'shopping_list_id' => $list->id,
-        'source_kind' => 'recipe',
-        'category' => 'meat_seafood',
-        'name' => 'Chicken thigh',
-        'normalized_name' => 'chicken thigh',
-        'quantity' => 500,
-        'unit' => 'g',
-        'included' => true,
-        'position' => 1,
-    ]);
-    ShoppingListItemSource::query()->create([
-        'team_id' => $workspace['team']->id,
-        'shopping_list_item_id' => $item->id,
-        'planned_meal_id' => $workspace['meal']->id,
-        'recipe_ingredient_id' => $workspace['recipe']->latestVersion->ingredients()->firstOrFail()->id,
-        'quantity' => 500,
-        'unit' => 'g',
-    ]);
-    $order = Order::query()->create([
-        'team_id' => $workspace['team']->id,
-        'shopping_list_id' => $list->id,
-        'retailer_id' => $retailer->id,
-        'recorded_by_user_id' => $workspace['user']->id,
-        'shopping_list_revision' => 1,
-        'status' => 'recorded',
-        'currency' => 'AUD',
-        'actual_total' => 12.5,
-        'recorded_at' => now(),
-    ]);
-    OrderLine::query()->create([
-        'team_id' => $workspace['team']->id,
-        'order_id' => $order->id,
-        'shopping_list_item_id' => $item->id,
-        'product_name' => 'Older chicken choice',
-        'brand' => 'Old brand',
-        'quantity' => 1,
-        'total_price' => 10,
-    ]);
-    OrderLine::query()->create([
-        'team_id' => $workspace['team']->id,
-        'order_id' => $order->id,
-        'shopping_list_item_id' => $item->id,
-        'product_name' => 'Coles RSPCA Chicken Drumsticks',
-        'brand' => 'Coles',
-        'quantity' => 1,
-        'total_price' => 12.5,
-        'substituted_from_name' => 'Chicken thigh',
-    ]);
-
-    $this->withoutVite()->actingAs($workspace['user'])
-        ->get(route('planned-meals.cook.show', $workspace['meal']))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('shoppingChoices.0.ingredient', 'Chicken thigh')
-            ->where('shoppingChoices.0.product', 'Coles RSPCA Chicken Drumsticks')
-            ->where('shoppingChoices.0.substituted_from', 'Chicken thigh'));
 });
 
 it('protects every M5 root record with family policies', function () {

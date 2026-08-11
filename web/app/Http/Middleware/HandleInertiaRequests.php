@@ -2,11 +2,14 @@
 
 namespace App\Http\Middleware;
 
+use App\Actions\Teams\PendingTeamInvitation;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    public function __construct(private readonly PendingTeamInvitation $pendingInvitation) {}
+
     /**
      * The root template that's loaded on the first page visit.
      *
@@ -47,13 +50,47 @@ class HandleInertiaRequests extends Middleware
                     ->orderBy('name')
                     ->get(['teams.id', 'teams.name']) ?? [],
             ],
+            'pendingInvitation' => fn () => $this->pendingInvitation->shared($request),
+            'notifications' => function () use ($user) {
+                if ($user === null) {
+                    return ['unread_count' => 0, 'items' => []];
+                }
+
+                $teamId = $user->current_team_id;
+                if ($teamId === null) {
+                    return ['unread_count' => 0, 'items' => []];
+                }
+
+                $notificationQuery = $user->notifications()
+                    ->where('data->team_id', $teamId);
+                $unreadCount = (clone $notificationQuery)
+                    ->whereNull('read_at')
+                    ->count();
+                $notifications = $notificationQuery
+                    ->latest()
+                    ->limit(10)
+                    ->get()
+                    ->values();
+
+                return [
+                    'unread_count' => $unreadCount,
+                    'items' => $notifications->map(fn ($notification): array => [
+                        'id' => $notification->id,
+                        'title' => $notification->data['title'],
+                        'message' => $notification->data['message'],
+                        'status' => $notification->data['status'],
+                        'basket_run_id' => $notification->data['basket_run_id'],
+                        'read_at' => $notification->read_at?->toIso8601String(),
+                        'created_at' => $notification->created_at?->toIso8601String(),
+                    ])->all(),
+                ];
+            },
             'recentMealPlans' => function () use ($user) {
                 $plans = $user?->currentTeam?->mealPlans()
-                    ->withExists(['shoppingList as has_shopping_list'])
                     ->latest('updated_at')
                     ->orderByDesc('id')
                     ->limit(8)
-                    ->get(['id', 'team_id', 'title', 'starts_on', 'ends_on', 'revision', 'planning_confirmed_at', 'shopping_approved_at']);
+                    ->get(['id', 'team_id', 'title', 'starts_on', 'ends_on', 'revision', 'planning_confirmed_at', 'recipe_generation_status']);
 
                 if ($plans === null) {
                     return [];
@@ -75,10 +112,9 @@ class HandleInertiaRequests extends Middleware
                         'revision' => $mealPlan->revision,
                         'phase' => $superseded
                             ? 'Superseded'
-                            : ($mealPlan->shopping_approved_at !== null
+                            : (in_array($mealPlan->recipe_generation_status?->value, ['pending', 'processing'], true)
                             ? 'Preparing'
                             : ($mealPlan->planning_confirmed_at !== null ? 'Confirmed' : 'Draft')),
-                        'has_shopping_list' => (bool) $mealPlan->has_shopping_list,
                         'can' => [
                             'update' => $user->can('update', $mealPlan),
                             'delete' => $user->can('delete', $mealPlan),

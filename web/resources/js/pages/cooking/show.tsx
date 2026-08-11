@@ -8,7 +8,6 @@ import {
     ChevronRight,
     Clock3,
     Maximize2,
-    PackageCheck,
     UsersRound,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -33,13 +32,8 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { CookingTimer } from '@/features/cooking/cooking-timer';
-import type {
-    CookingMeal,
-    CookingPerson,
-    MealFeedback,
-    MealOutcomeStatus,
-    ShoppingChoice,
-} from '@/features/cooking/types';
+import { MealFeedbackQuestionnaire } from '@/features/cooking/meal-feedback-questionnaire';
+import type { CookingMeal, MealOutcomeStatus } from '@/features/cooking/types';
 
 const OUTCOME_STATUSES = [
     'cooked',
@@ -252,176 +246,7 @@ function OutcomeDialog({ meal }: { meal: CookingMeal }) {
     );
 }
 
-function FeedbackForm({
-    meal,
-    person,
-    existing,
-}: {
-    meal: CookingMeal;
-    person: CookingPerson;
-    existing?: MealFeedback;
-}) {
-    const outcome = meal.outcome;
-    const form = useForm({
-        rating: existing?.rating ?? 'neutral',
-        portion: existing?.portion ?? '',
-        effort: existing?.effort ?? '',
-        cost: existing?.cost ?? '',
-        leftovers: existing?.leftovers ?? '',
-        notes: existing?.notes ?? '',
-        recipe_adjustment: existing?.recipe_adjustment ?? '',
-    });
-
-    if (!outcome) {
-        return null;
-    }
-
-    const submit = (event: FormEvent) => {
-        event.preventDefault();
-        form.transform((data) => ({
-            ...data,
-            portion: data.portion || null,
-            effort: data.effort || null,
-            cost: data.cost || null,
-            leftovers: data.leftovers || null,
-            notes: data.notes || null,
-            recipe_adjustment: data.recipe_adjustment || null,
-        }));
-        form.put(`/meal-outcomes/${outcome.id}/people/${person.id}/feedback`, {
-            preserveScroll: true,
-        });
-    };
-
-    return (
-        <form
-            onSubmit={submit}
-            className="border-t py-6 first:border-t-0 first:pt-0"
-            data-feedback-person={person.id}
-        >
-            <div className="flex items-center justify-between gap-3">
-                <h3 className="font-medium">{person.name}</h3>
-                {existing && <Badge variant="secondary">Feedback saved</Badge>}
-            </div>
-            <div className="mt-3 grid grid-cols-4 gap-2">
-                {(['dislike', 'neutral', 'like', 'favourite'] as const).map(
-                    (rating) => (
-                        <Button
-                            key={rating}
-                            type="button"
-                            variant={
-                                form.data.rating === rating
-                                    ? 'default'
-                                    : 'outline'
-                            }
-                            className="h-auto min-h-11 px-2 capitalize"
-                            aria-label={`${rating} for ${person.name}`}
-                            onClick={() => form.setData('rating', rating)}
-                        >
-                            {rating}
-                        </Button>
-                    ),
-                )}
-            </div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <Select
-                    value={form.data.portion}
-                    onValueChange={(value) => form.setData('portion', value)}
-                >
-                    <SelectTrigger
-                        className="w-full"
-                        aria-label={`Portion for ${person.name}`}
-                    >
-                        <SelectValue placeholder="Portion" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="too_small">Too small</SelectItem>
-                        <SelectItem value="right">Portion was right</SelectItem>
-                        <SelectItem value="too_large">Too large</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select
-                    value={form.data.effort}
-                    onValueChange={(value) => form.setData('effort', value)}
-                >
-                    <SelectTrigger
-                        className="w-full"
-                        aria-label={`Effort for ${person.name}`}
-                    >
-                        <SelectValue placeholder="Effort" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="easy">Easy</SelectItem>
-                        <SelectItem value="right">Effort was right</SelectItem>
-                        <SelectItem value="too_much">
-                            Too much effort
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Select
-                    value={form.data.cost}
-                    onValueChange={(value) => form.setData('cost', value)}
-                >
-                    <SelectTrigger
-                        className="w-full"
-                        aria-label={`Cost for ${person.name}`}
-                    >
-                        <SelectValue placeholder="Cost" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="good_value">Good value</SelectItem>
-                        <SelectItem value="right">Cost was right</SelectItem>
-                        <SelectItem value="too_high">Too expensive</SelectItem>
-                    </SelectContent>
-                </Select>
-                <Select
-                    value={form.data.leftovers}
-                    onValueChange={(value) => form.setData('leftovers', value)}
-                >
-                    <SelectTrigger
-                        className="w-full"
-                        aria-label={`Leftovers for ${person.name}`}
-                    >
-                        <SelectValue placeholder="Leftovers" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">None left</SelectItem>
-                        <SelectItem value="some">Some left</SelectItem>
-                        <SelectItem value="plenty">Plenty left</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <textarea
-                aria-label={`Feedback notes for ${person.name}`}
-                className="mt-3 min-h-20 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder="What worked or did not? (optional)"
-                value={form.data.notes}
-                onChange={(event) => form.setData('notes', event.target.value)}
-            />
-            <Input
-                className="mt-3"
-                aria-label={`Recipe adjustment for ${person.name}`}
-                placeholder="Recipe change to keep next time (optional)"
-                value={form.data.recipe_adjustment}
-                onChange={(event) =>
-                    form.setData('recipe_adjustment', event.target.value)
-                }
-            />
-            <Button className="mt-3" type="submit" disabled={form.processing}>
-                Save {person.name}&apos;s feedback
-            </Button>
-        </form>
-    );
-}
-
-export default function CookingShow({
-    meal,
-    shoppingChoices,
-}: {
-    meal: CookingMeal;
-    shoppingChoices: ShoppingChoice[];
-}) {
+export default function CookingShow({ meal }: { meal: CookingMeal }) {
     const recipe = meal.recipe_version;
     const outcome = meal.outcome;
     const [currentStep, setCurrentStep] = useState(
@@ -632,7 +457,7 @@ export default function CookingShow({
                                 {canCollectFeedback &&
                                     meal.meal_slot.participants.map(
                                         (person) => (
-                                            <FeedbackForm
+                                            <MealFeedbackQuestionnaire
                                                 key={person.id}
                                                 meal={meal}
                                                 person={person}
@@ -697,30 +522,6 @@ export default function CookingShow({
                                     ))}
                                 </ul>
                             </section>
-                            {shoppingChoices.length > 0 && (
-                                <section>
-                                    <h2 className="flex items-center gap-2 text-sm font-semibold">
-                                        <PackageCheck className="size-4" />{' '}
-                                        Products and substitutions
-                                    </h2>
-                                    <ul className="mt-3 space-y-3">
-                                        {shoppingChoices.map((choice) => (
-                                            <li
-                                                key={choice.ingredient}
-                                                className="text-sm"
-                                            >
-                                                <p>{choice.product}</p>
-                                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                                    For {choice.ingredient}
-                                                    {choice.substituted_from
-                                                        ? ` · substituted for ${choice.substituted_from}`
-                                                        : ''}
-                                                </p>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </section>
-                            )}
                             {recipe.equipment.length > 0 && (
                                 <section>
                                     <h2 className="text-sm font-semibold">

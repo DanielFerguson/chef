@@ -64,24 +64,6 @@ class Team extends Model
         return $this->hasMany(PlannedMealRecipePreparation::class);
     }
 
-    /** @return HasMany<ShoppingList, $this> */
-    public function shoppingLists(): HasMany
-    {
-        return $this->hasMany(ShoppingList::class);
-    }
-
-    /** @return HasMany<Budget, $this> */
-    public function budgets(): HasMany
-    {
-        return $this->hasMany(Budget::class);
-    }
-
-    /** @return HasMany<ProductPreference, $this> */
-    public function productPreferences(): HasMany
-    {
-        return $this->hasMany(ProductPreference::class);
-    }
-
     /** @return HasMany<Conversation, $this> */
     public function conversations(): HasMany
     {
@@ -116,5 +98,35 @@ class Team extends Model
     public function retailerConnections(): HasMany
     {
         return $this->hasMany(RetailerConnection::class);
+    }
+
+    /** @return HasMany<GroceryPlan, $this> */
+    public function groceryPlans(): HasMany
+    {
+        return $this->hasMany(GroceryPlan::class);
+    }
+
+    /** @return HasMany<BasketRun, $this> */
+    public function basketRuns(): HasMany
+    {
+        return $this->hasMany(BasketRun::class);
+    }
+
+    /** @return HasMany<RetailerProductPreference, $this> */
+    public function retailerProductPreferences(): HasMany
+    {
+        return $this->hasMany(RetailerProductPreference::class);
+    }
+
+    /** @return HasMany<RetailerPurchasePolicy, $this> */
+    public function retailerPurchasePolicies(): HasMany
+    {
+        return $this->hasMany(RetailerPurchasePolicy::class);
+    }
+
+    /** @return HasMany<MealPlanAdjustmentDraft, $this> */
+    public function mealPlanAdjustmentDrafts(): HasMany
+    {
+        return $this->hasMany(MealPlanAdjustmentDraft::class);
     }
 }

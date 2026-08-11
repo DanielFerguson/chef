@@ -8,7 +8,7 @@ readonly class MealPlanRecipeDraftRequest implements JsonSerializable
 {
     /**
      * @param  array<int, array<string, mixed>>  $meals
-     * @param  array<int, array{role: string, content: string}>  $conversationContext
+     * @param  array<int, array{message_id: int, role: string, sources: list<string>, content: string}>  $conversationContext
      */
     public function __construct(
         public int $teamId,

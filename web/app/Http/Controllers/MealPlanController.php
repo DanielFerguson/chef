@@ -2,13 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\MealPlans\BuildMealPlanWorkspace;
 use App\Actions\MealPlans\DeleteMealPlan;
 use App\Actions\MealPlans\RenameMealPlan;
 use App\Actions\MealPlans\StartMealPlan;
-use App\Actions\Planning\AssessMealPlanReadiness;
-use App\Actions\Shopping\BuildShoppingWorkspace;
-use App\Enums\RetailerOrderRunStatus;
-use App\Enums\ShoppingListGenerationStatus;
 use App\Models\MealPlan;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,81 +41,19 @@ class MealPlanController extends Controller
     public function show(
         Request $request,
         MealPlan $mealPlan,
-        AssessMealPlanReadiness $assessReadiness,
-        BuildShoppingWorkspace $buildShoppingWorkspace,
+        BuildMealPlanWorkspace $buildWorkspace,
     ): Response {
         $this->authorize('view', $mealPlan);
-
-        $mealPlan->load([
-            'conversations.messages.author:id,name',
-            'conversations.messages.feedback' => fn ($query) => $query->whereBelongsTo($request->user()),
-            'conversations.feedback' => fn ($query) => $query->whereBelongsTo($request->user())->whereNull('message_id'),
-            'slots.participants',
-            'slots.plannedMeal.recipeVersion.ingredients',
-            'slots.plannedMeal.recipeVersion.steps',
-            'slots.plannedMeal.recipeVersion.equipment',
-            'slots.plannedMeal.recipeVersion.preparationNotices',
-            'slots.plannedMeal.sourcePlannedMeal',
-            'proposals' => fn ($query) => $query->latest(),
-            'revisions' => fn ($query) => $query->limit(20),
-            'milestones',
-            'shoppingList:id,meal_plan_id,status,generation_status,generation_failure_code,generation_failure_message,revision,stale_at',
-            'team.people.userLink',
-            'team.people.preferences.sourceMessage:id,conversation_id',
-            'team.people.constraints.confirmationMessage.author:id,name',
-            'team.preferences' => fn ($query) => $query
-                ->whereNull('person_id')
-                ->with('sourceMessage:id,conversation_id'),
-            'team.constraints' => fn ($query) => $query
-                ->whereNull('person_id')
-                ->with('confirmationMessage.author:id,name'),
-            'team.recipes.latestVersion.ingredients',
-        ]);
-
-        $conversation = $mealPlan->conversations->firstOrFail();
-        $readiness = $assessReadiness->handle($mealPlan);
-        $shoppingEligible = $buildShoppingWorkspace->isEligible($mealPlan);
-        $shoppingList = $mealPlan->shoppingList;
         $requestedPhase = $request->query('phase');
-        $generationInProgress = $shoppingList !== null
-            && in_array($shoppingList->generation_status, [
-                ShoppingListGenerationStatus::Pending,
-                ShoppingListGenerationStatus::Processing,
-            ], true);
-        $hasActiveOrderRun = $shoppingList !== null
-            && $shoppingList->retailerOrderRuns()
-                ->whereNotIn('status', [
-                    RetailerOrderRunStatus::Placed->value,
-                    RetailerOrderRunStatus::Failed->value,
-                    RetailerOrderRunStatus::Cancelled->value,
-                ])
-                ->exists();
-        $shoppingListReady = $shoppingList !== null
-            && ($shoppingList->generation_status === ShoppingListGenerationStatus::Ready
-                || $hasActiveOrderRun);
-        $phase = match (true) {
-            $requestedPhase === 'shopping' && $shoppingEligible => 'shopping',
-            $requestedPhase === 'conversation' => 'conversation',
-            $shoppingListReady && $requestedPhase !== 'calendar' && $requestedPhase !== 'list' => 'shopping',
+        $phase = match ($requestedPhase) {
+            'calendar' => 'calendar',
+            'list' => 'list',
             default => 'conversation',
         };
-        $needsShoppingWorkspace = $shoppingEligible && (
-            $phase === 'shopping'
-            || $generationInProgress
-            || $hasActiveOrderRun
-        );
-        $shopping = $needsShoppingWorkspace
-            ? $buildShoppingWorkspace->handle($mealPlan, $request->user())
-            : null;
 
         return Inertia::render('meal-plans/show', [
             'workspace' => [
-                'plan' => $mealPlan,
-                'conversation' => $conversation,
-                'household' => $mealPlan->team,
-                'recipes' => $mealPlan->team->recipes,
-                'readiness' => $readiness,
-                'shopping' => $shopping,
+                ...$buildWorkspace->handle($mealPlan, $request->user()),
                 'phase' => $phase,
             ],
         ]);

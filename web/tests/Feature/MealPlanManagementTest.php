@@ -7,11 +7,8 @@ use App\Actions\Teams\CreateTeamForUser;
 use App\Enums\TeamRole;
 use App\Models\MealPlan;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
-
-uses(RefreshDatabase::class);
 
 it('renames a plan and its conversation through the shared domain action', function () {
     $user = User::factory()->create();

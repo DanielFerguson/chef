@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import { Check, Copy, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { MessageScrollerItem } from '@/components/ui/message-scroller';
 import type { ConversationFeedback } from './types';
 
 const reasonOptions = [
@@ -249,11 +250,9 @@ export function PlanningCheckpointFeedback({
     feedback?: ConversationFeedback;
 }) {
     const [editing, setEditing] = useState<Rating | null>(null);
-    const [saved, setSaved] = useState(false);
     const action = `/conversations/${conversationId}/feedback`;
 
     const choose = (rating: Rating) => {
-        setSaved(false);
         router.put(
             action,
             {
@@ -269,73 +268,59 @@ export function PlanningCheckpointFeedback({
         );
     };
 
+    if (feedback && editing === null) {
+        return null;
+    }
+
     return (
-        <section className="mx-auto w-full max-w-xl rounded-xl bg-muted/40 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <p className="text-sm font-medium">
-                        How did planning feel?
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                        Did Chef understand your household and help you reach a
-                        useful plan?
-                    </p>
+        <MessageScrollerItem messageId="planning-feedback">
+            <section className="mx-auto w-full max-w-xl rounded-xl bg-muted/40 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-medium">
+                            How did planning feel?
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                            Did Chef understand your household and help you
+                            reach a useful plan?
+                        </p>
+                    </div>
+                    <div className="flex gap-1">
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Planning was helpful"
+                            aria-pressed={feedback?.rating === 'helpful'}
+                            onClick={() => choose('helpful')}
+                            className="size-8"
+                        >
+                            <ThumbsUp />
+                        </Button>
+                        <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Planning was unhelpful"
+                            aria-pressed={feedback?.rating === 'unhelpful'}
+                            onClick={() => choose('unhelpful')}
+                            className="size-8"
+                        >
+                            <ThumbsDown />
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex gap-1">
-                    <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        aria-label="Planning was helpful"
-                        aria-pressed={feedback?.rating === 'helpful'}
-                        onClick={() => choose('helpful')}
-                        className="size-8"
-                    >
-                        <ThumbsUp />
-                    </Button>
-                    <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        aria-label="Planning was unhelpful"
-                        aria-pressed={feedback?.rating === 'unhelpful'}
-                        onClick={() => choose('unhelpful')}
-                        className="size-8"
-                    >
-                        <ThumbsDown />
-                    </Button>
-                </div>
-            </div>
-            {feedback && editing === null && (
-                <button
-                    type="button"
-                    className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => setEditing(feedback.rating)}
-                >
-                    Add optional context
-                </button>
-            )}
-            {saved && editing === null && (
-                <p className="mt-2 text-xs text-muted-foreground" role="status">
-                    Thanks — feedback saved.
-                </p>
-            )}
-            {editing && (
-                <FeedbackDetails
-                    action={action}
-                    feedback={feedback}
-                    rating={editing}
-                    extraData={{ context: 'planning_confirmed' }}
-                    onSaved={() => {
-                        setEditing(null);
-                        setSaved(true);
-                    }}
-                    onCancel={() => {
-                        setEditing(null);
-                        setSaved(true);
-                    }}
-                />
-            )}
-        </section>
+                {editing && (
+                    <FeedbackDetails
+                        action={action}
+                        feedback={feedback}
+                        rating={editing}
+                        extraData={{ context: 'planning_confirmed' }}
+                        onSaved={() => setEditing(null)}
+                        onCancel={() => setEditing(null)}
+                    />
+                )}
+            </section>
+        </MessageScrollerItem>
     );
 }

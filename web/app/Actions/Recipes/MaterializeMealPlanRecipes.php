@@ -3,7 +3,6 @@
 namespace App\Actions\Recipes;
 
 use App\Actions\MealPlans\MealPlanSafetyContext;
-use App\Actions\MealPlans\MealPlanShoppingApprovalContext;
 use App\Actions\MealPlans\RecordMealPlanRevision;
 use App\Ai\Contracts\MealPlanRecipeDrafter;
 use App\Ai\Data\MealPlanRecipeDraftRequest;
@@ -11,6 +10,7 @@ use App\Enums\MealPlanRecipeGenerationStatus;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\PreparationNoticeKind;
+use App\Events\MealPlanRecipesReady;
 use App\Models\MealPlan;
 use App\Models\PlannedMeal;
 use App\Models\User;
@@ -28,7 +28,6 @@ class MaterializeMealPlanRecipes
         private readonly CreateRecipe $createRecipe,
         private readonly RecordMealPlanRevision $recordRevision,
         private readonly MealPlanSafetyContext $safetyContext,
-        private readonly MealPlanShoppingApprovalContext $approvalContext,
     ) {}
 
     public function handle(MealPlan $mealPlan): MealPlan
@@ -124,10 +123,6 @@ class MaterializeMealPlanRecipes
                 }
 
                 $user = User::query()->findOrFail($claimed['user_id']);
-                $shoppingApproval = $locked->shopping_approved_at === null ? null : [
-                    'shopping_approved_by_user_id' => $locked->shopping_approved_by_user_id,
-                    'shopping_approved_at' => $locked->shopping_approved_at,
-                ];
                 $recipesByMeal = [];
                 foreach ($validated['recipes'] as $recipeData) {
                     $recipesByMeal[(int) $recipeData['planned_meal_id']] = $recipeData;
@@ -178,16 +173,14 @@ class MaterializeMealPlanRecipes
                         ['planned_meal_ids' => $preparedMealIds],
                     );
 
-                    if ($shoppingApproval !== null) {
-                        $locked = $locked->refresh();
-                        $safetyFingerprint = $this->safetyContext->fingerprint($locked);
-                        $locked->update([
-                            ...$shoppingApproval,
-                            'shopping_approval_fingerprint' => $this->approvalContext->fingerprint($locked),
-                            'safety_reviewed_context_hash' => $safetyFingerprint,
-                            'confirmed_safety_context_hash' => $safetyFingerprint,
-                        ]);
-                    }
+                    $locked = $locked->refresh();
+                    $safetyFingerprint = $this->safetyContext->fingerprint($locked);
+                    $locked->update([
+                        'safety_reviewed_context_hash' => $safetyFingerprint,
+                        'confirmed_safety_context_hash' => $safetyFingerprint,
+                        'derived_data_stale_at' => null,
+                        'derived_data_stale_reason' => null,
+                    ]);
                 }
                 $locked->update([
                     'recipe_generation_status' => MealPlanRecipeGenerationStatus::Completed,
@@ -195,6 +188,7 @@ class MaterializeMealPlanRecipes
                     'recipe_generation_failure_message' => null,
                     'recipe_generation_completed_at' => now(),
                 ]);
+                MealPlanRecipesReady::dispatch($locked->id);
 
                 return $locked->refresh();
             });

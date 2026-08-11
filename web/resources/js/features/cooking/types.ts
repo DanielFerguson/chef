@@ -59,11 +59,3 @@ export type CookingMeal = {
         | null;
     outcome: MealOutcome | null;
 };
-
-export type ShoppingChoice = {
-    ingredient: string;
-    product: string;
-    brand: string | null;
-    substituted_from: string | null;
-    retailer: string | null;
-};

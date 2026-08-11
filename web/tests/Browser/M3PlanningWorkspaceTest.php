@@ -7,11 +7,12 @@ use App\Actions\Recipes\CreateRecipe;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Enums\MealSlotKind;
 use App\Enums\PlannedMealType;
+use App\Models\MealPlan;
+use App\Models\Recipe;
+use App\Models\Team;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
-uses(RefreshDatabase::class);
-
+/** @return array{user: User, team: Team, plan: MealPlan, recipe: Recipe} */
 function m3BrowserWorkspace(): array
 {
     $user = User::factory()->create();
@@ -66,9 +67,12 @@ it('selects and confirms a recipe from the complete planning workspace', functio
         ->pressAndWaitFor('Select meal')
         ->assertSee('Chicken schnitzel')
         ->assertSee('Why this fits')
-        ->pressAndWaitFor('Confirm none reported')
-        ->click('Confirm plan')
-        ->assertSee('Confirmed')
+        ->click('Conversation')
+        ->assertSee('Your plan is ready to approve')
+        ->pressAndWaitFor('Approve plan & prepare recipes')
+        ->assertSee('Plan and recipes are ready')
+        ->pressAndWaitFor('View recipes')
+        ->assertSee('Chicken schnitzel')
         ->assertNoJavaScriptErrors();
 });
 
@@ -136,9 +140,9 @@ it('uses per-person serving controls for every household participant', function 
     expect($slot->participants->pluck('id')->all())
         ->toContain($guest->id)
         ->not->toContain($tahlia->id)
-        ->and((float) $slot->participants->firstWhere('id', $primary->id)->pivot->servings)
+        ->and((float) $slot->participants->firstWhere('id', $primary->id)->pivot->getAttribute('servings'))
         ->toBe(1.0)
-        ->and((float) $slot->participants->firstWhere('id', $guest->id)->pivot->servings)
+        ->and((float) $slot->participants->firstWhere('id', $guest->id)->pivot->getAttribute('servings'))
         ->toBe(2.0);
 });
 

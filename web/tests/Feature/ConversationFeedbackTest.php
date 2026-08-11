@@ -8,11 +8,13 @@ use App\Enums\ConversationFeedbackContext;
 use App\Enums\ConversationFeedbackRating;
 use App\Enums\MealPlanMilestoneKind;
 use App\Enums\TeamRole;
+use App\Models\Conversation;
+use App\Models\MealPlan;
+use App\Models\Message;
+use App\Models\Team;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 
-uses(RefreshDatabase::class);
-
+/** @return array{user: User, team: Team, plan: MealPlan, conversation: Conversation, message: Message} */
 function feedbackWorkspace(): array
 {
     $user = User::factory()->create();

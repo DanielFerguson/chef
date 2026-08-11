@@ -3,27 +3,40 @@
 namespace App\Policies;
 
 use App\Models\RetailerConnection;
+use App\Models\Team;
 use App\Models\User;
 
 class RetailerConnectionPolicy
 {
-    public function view(User $user, RetailerConnection $connection): bool
+    public function viewAny(User $user): bool
     {
-        return $user->memberships()->where('team_id', $connection->team_id)->exists();
+        return $user->current_team_id !== null
+            && $user->memberships()->where('team_id', $user->current_team_id)->exists();
     }
 
-    public function authenticate(User $user, RetailerConnection $connection): bool
+    public function view(User $user, RetailerConnection $retailerConnection): bool
     {
-        return $this->view($user, $connection) && $connection->owner_user_id === $user->id;
+        return $user->memberships()->where('team_id', $retailerConnection->team_id)->exists();
     }
 
-    public function disconnect(User $user, RetailerConnection $connection): bool
+    public function create(User $user, Team $team): bool
     {
-        return $this->authenticate($user, $connection);
+        return $user->memberships()->whereBelongsTo($team)->exists();
     }
 
-    public function useForAutomation(User $user, RetailerConnection $connection): bool
+    public function update(User $user, RetailerConnection $retailerConnection): bool
     {
-        return $this->authenticate($user, $connection);
+        return $this->view($user, $retailerConnection)
+            && $retailerConnection->owner_user_id === $user->id;
+    }
+
+    public function delete(User $user, RetailerConnection $retailerConnection): bool
+    {
+        return $this->update($user, $retailerConnection);
+    }
+
+    public function useLiveView(User $user, RetailerConnection $retailerConnection): bool
+    {
+        return $this->update($user, $retailerConnection);
     }
 }

@@ -12,7 +12,7 @@ use Stringable;
 
 class RecoverableTool implements Tool
 {
-    public function __construct(private readonly Tool $tool) {}
+    public function __construct(protected readonly Tool $tool) {}
 
     public function name(): string
     {

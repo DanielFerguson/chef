@@ -2,31 +2,25 @@
 
 namespace App\Providers;
 
-use App\Ai\Contracts\CartProductCandidateSelector;
 use App\Ai\Contracts\ChefConversationEngine;
+use App\Ai\Contracts\MealPlanAdjustmentDrafter;
 use App\Ai\Contracts\MealPlanRecipeDrafter;
-use App\Ai\Contracts\ShoppingListDrafter;
-use App\Ai\LaravelAiCartProductCandidateSelector;
+use App\Ai\Contracts\RetailerProductRanker;
+use App\Ai\Contracts\RetailerSearchRecovery;
 use App\Ai\LaravelAiConversationEngine;
+use App\Ai\LaravelAiMealPlanAdjustmentDrafter;
 use App\Ai\LaravelAiMealPlanRecipeDrafter;
-use App\Ai\LaravelAiShoppingListDrafter;
-use App\Ai\Testing\DeterministicCartProductCandidateSelector;
+use App\Ai\LaravelAiRetailerProductRanker;
+use App\Ai\LaravelAiRetailerSearchRecovery;
+use App\Ai\Testing\DeterministicMealPlanAdjustmentDrafter;
 use App\Ai\Testing\DeterministicMealPlanRecipeDrafter;
-use App\Ai\Testing\DisabledShoppingListDrafter;
-use App\Automation\Browserbase\BrowserbaseBrowserSessionProvider;
-use App\Automation\Browserbase\TypeScriptComputerExecutor;
-use App\Automation\Browserbase\WoolworthsCartAdapter;
-use App\Automation\Browserbase\WoolworthsCatalogueDiscovery;
-use App\Automation\Contracts\BrowserSessionProvider;
-use App\Automation\Contracts\ComputerExecutor;
-use App\Automation\Contracts\RetailerCartAdapter;
-use App\Automation\Contracts\RetailerProductDiscovery;
-use App\Automation\Testing\FakeBrowserSessionProvider;
-use App\Automation\Testing\FakeComputerExecutor;
-use App\Automation\Testing\FakeRetailerProductDiscovery;
-use App\Retailer\Browserbase\StagehandRetailerBrowser;
-use App\Retailer\Contracts\RetailerBrowser;
-use App\Retailer\Testing\FakeRetailerBrowser;
+use App\Ai\Testing\DeterministicRetailerProductRanker;
+use App\Ai\Testing\DeterministicRetailerSearchRecovery;
+use App\Models\BasketRun;
+use App\Observers\BasketRunObserver;
+use App\Retailer\Browserbase\TypeScriptRetailerAutomationGateway;
+use App\Retailer\Contracts\RetailerAutomationGateway;
+use App\Retailer\Testing\FakeRetailerAutomationGateway;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Support\Facades\Date;
@@ -49,42 +43,28 @@ class AppServiceProvider extends ServiceProvider
                 : LaravelAiMealPlanRecipeDrafter::class,
         );
         $this->app->bind(
-            ShoppingListDrafter::class,
+            MealPlanAdjustmentDrafter::class,
             $this->app->environment('testing')
-                ? DisabledShoppingListDrafter::class
-                : LaravelAiShoppingListDrafter::class,
+                ? DeterministicMealPlanAdjustmentDrafter::class
+                : LaravelAiMealPlanAdjustmentDrafter::class,
         );
         $this->app->bind(
-            CartProductCandidateSelector::class,
+            RetailerProductRanker::class,
             $this->app->environment('testing')
-                ? DeterministicCartProductCandidateSelector::class
-                : LaravelAiCartProductCandidateSelector::class,
+                ? DeterministicRetailerProductRanker::class
+                : LaravelAiRetailerProductRanker::class,
+        );
+        $this->app->bind(
+            RetailerSearchRecovery::class,
+            $this->app->environment('testing')
+                ? DeterministicRetailerSearchRecovery::class
+                : LaravelAiRetailerSearchRecovery::class,
         );
         $this->app->singleton(
-            BrowserSessionProvider::class,
-            $this->app->environment('testing')
-                ? FakeBrowserSessionProvider::class
-                : BrowserbaseBrowserSessionProvider::class,
-        );
-        $this->app->singleton(
-            ComputerExecutor::class,
-            $this->app->environment('testing')
-                ? FakeComputerExecutor::class
-                : TypeScriptComputerExecutor::class,
-        );
-        $this->app->bind(RetailerCartAdapter::class, WoolworthsCartAdapter::class);
-        $this->app->singleton(
-            RetailerProductDiscovery::class,
-            $this->app->environment('testing')
-                ? FakeRetailerProductDiscovery::class
-                : WoolworthsCatalogueDiscovery::class,
-        );
-
-        $this->app->singleton(
-            RetailerBrowser::class,
-            $this->app->environment('testing')
-                ? FakeRetailerBrowser::class
-                : StagehandRetailerBrowser::class,
+            RetailerAutomationGateway::class,
+            fn () => $this->app->environment('testing')
+                ? new FakeRetailerAutomationGateway
+                : new TypeScriptRetailerAutomationGateway,
         );
     }
 
@@ -93,11 +73,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        BasketRun::observe(BasketRunObserver::class);
+
         if ($this->app->runningInConsole()) {
-            // queue:listen's child Process defaults to a 60s kill and aborts long
-            // AI jobs (e.g. MaterializeMealPlanRecipesJob at 180s). Use queue:work.
+            // Reload application code between local jobs while allowing each job
+            // to define its own execution timeout.
             DevCommands::artisan(
-                'queue:work --queue=default,ai,automation --tries=1 --timeout=0',
+                'queue:listen --queue=default,ai,retailer --tries=1 --timeout=0',
                 'queue',
             )->purple();
         }

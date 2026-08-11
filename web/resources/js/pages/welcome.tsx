@@ -1,5 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { CalendarDays, MessagesSquare, ShoppingBasket } from 'lucide-react';
+import { BookOpen, CalendarDays, MessagesSquare } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
 import { dashboard, login, register } from '@/routes';
@@ -16,10 +16,10 @@ const features = [
         icon: CalendarDays,
     },
     {
-        title: 'Shop with confidence',
+        title: 'Cook from complete recipes',
         description:
-            'Review a budget-aware list before Chef prepares the cart.',
-        icon: ShoppingBasket,
+            'Approve the week and Chef prepares every recipe together.',
+        icon: BookOpen,
     },
 ];
 
@@ -29,7 +29,7 @@ export default function Welcome() {
     return (
         <>
             <Head title="Plan dinner together" />
-            <div className="min-h-screen bg-background text-foreground">
+            <div className="min-h-dvh bg-background text-foreground">
                 <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
                     <Link
                         href="/"
@@ -71,8 +71,8 @@ export default function Welcome() {
                         </h1>
                         <p className="mt-6 max-w-2xl text-base leading-7 text-pretty text-muted-foreground sm:text-lg">
                             Chef learns how your family eats, turns an ordinary
-                            chat into a useful plan, and keeps shopping and
-                            cooking close at hand.
+                            chat into a useful plan, and prepares the recipes
+                            your household can cook from.
                         </p>
                         <Button size="lg" className="mt-9" asChild>
                             <Link href={auth.user ? dashboard() : register()}>

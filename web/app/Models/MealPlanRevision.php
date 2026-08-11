@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property array<string, mixed>|null $changes
+ */
 #[Fillable(['team_id', 'meal_plan_id', 'user_id', 'revision', 'summary', 'changes'])]
 class MealPlanRevision extends Model
 {

@@ -2,9 +2,6 @@
 
 use App\Actions\Teams\CreateTeamForUser;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-
-uses(RefreshDatabase::class);
 
 it('combines family switching and account actions in one sidebar control', function () {
     $user = User::factory()->create([

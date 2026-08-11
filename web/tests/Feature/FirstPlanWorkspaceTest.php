@@ -15,12 +15,9 @@ use App\Enums\ConstraintKind;
 use App\Enums\MealProposalStatus;
 use App\Enums\MealSlotKind;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Ai\Responses\Data\ToolCall;
-
-uses(RefreshDatabase::class);
 
 it('creates and resumes a meal plan workspace', function () {
     $this->withoutVite();
@@ -190,6 +187,34 @@ it('records direct safety rules and an explicit current-plan safety review over 
         ->and($plan->refresh()->safety_reviewed_at)->not->toBeNull()
         ->and($plan->safety_reviewed_by_user_id)->toBe($user->id)
         ->and($plan->safety_reviewed_context_hash)->not->toBeNull();
+});
+
+it('rejects unconfirmed and cross-household direct safety rules', function () {
+    $user = User::factory()->create();
+    $team = app(CreateTeamForUser::class)->handle($user, 'The Test Kitchen');
+    $otherUser = User::factory()->create();
+    $otherTeam = app(CreateTeamForUser::class)->handle(
+        $otherUser,
+        'Another household',
+    );
+
+    $this->actingAs($user)
+        ->post(route('constraints.store'), [
+            'kind' => ConstraintKind::Allergy->value,
+            'subject' => 'Peanuts',
+            'explicitly_confirmed' => false,
+        ])
+        ->assertSessionHasErrors('explicitly_confirmed');
+
+    $this->post(route('constraints.store'), [
+        'person_id' => $otherTeam->people()->sole()->id,
+        'kind' => ConstraintKind::Medical->value,
+        'subject' => 'Foreign rule',
+        'explicitly_confirmed' => true,
+    ])->assertNotFound();
+
+    expect($team->constraints()->count())->toBe(0)
+        ->and($otherTeam->constraints()->count())->toBe(0);
 });
 
 it('hides plan route bindings outside the active family', function () {

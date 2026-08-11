@@ -3,6 +3,7 @@
 namespace App\Actions\Planning;
 
 use App\Actions\MealPlans\RecordMealPlanRevision;
+use App\Enums\MealSlotParticipantOrigin;
 use App\Models\MealSlot;
 use App\Models\Person;
 use App\Models\User;
@@ -28,6 +29,11 @@ class UpdateMealSlotParticipants
         }
 
         return DB::transaction(function () use ($slot, $user, $people, $servingsByPerson, $expectedRevision): MealSlot {
+            $slot->update([
+                'participant_assignment_origin' => MealSlotParticipantOrigin::Explicit,
+                'participant_source_meal_slot_id' => null,
+                'participant_defaults_applied_at' => null,
+            ]);
             $slot->participants()->sync($people->mapWithKeys(fn (Person $person) => [
                 $person->id => ['servings' => (float) $servingsByPerson[$person->id]],
             ])->all());

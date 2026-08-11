@@ -1,12 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
-import {
-    BookOpen,
-    CirclePlus,
-    Clock3,
-    ShoppingBasket,
-    Utensils,
-} from 'lucide-react';
+import { BookOpen, CirclePlus, Clock3, Utensils } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
+import { BasketNotifications } from '@/components/basket-notifications';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -32,23 +27,6 @@ const mainNavItems: NavItem[] = [
 
 export function AppSidebar() {
     const { recentMealPlans } = usePage().props;
-    const activeShoppingPlan = recentMealPlans.find(
-        (plan) =>
-            (plan.phase === 'Confirmed' || plan.phase === 'Preparing') &&
-            plan.has_shopping_list,
-    );
-    const shoppingHref = activeShoppingPlan
-        ? `/meal-plans/${activeShoppingPlan.id}?phase=shopping`
-        : (() => {
-              const confirmedPlan = recentMealPlans.find(
-                  (plan) =>
-                      plan.phase === 'Confirmed' || plan.phase === 'Preparing',
-              );
-
-              return confirmedPlan
-                  ? `/meal-plans/${confirmedPlan.id}`
-                  : '/shopping';
-          })();
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -71,7 +49,7 @@ export function AppSidebar() {
                             <SidebarMenuButton
                                 asChild
                                 tooltip="Start a new meal plan"
-                                className="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground disabled:opacity-70"
+                                className="bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground hover:shadow-sm disabled:opacity-70"
                             >
                                 <Link
                                     href="/meal-plans"
@@ -93,14 +71,6 @@ export function AppSidebar() {
                                 <Link href="/recipes">
                                     <BookOpen />
                                     <span>Recipes</span>
-                                </Link>
-                            </SidebarMenuButton>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <SidebarMenuButton asChild tooltip="Shopping">
-                                <Link href={shoppingHref}>
-                                    <ShoppingBasket />
-                                    <span>Shopping</span>
                                 </Link>
                             </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -129,6 +99,7 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
+                <BasketNotifications />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

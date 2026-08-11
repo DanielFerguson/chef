@@ -1,27 +1,16 @@
 <?php
 
-namespace Tests\Feature;
-
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
 
-class ExampleTest extends TestCase
-{
-    use RefreshDatabase;
+test('guests are redirected from the root route to login', function () {
+    $response = $this->get(route('home'));
 
-    public function test_guests_are_redirected_from_the_root_route_to_login()
-    {
-        $response = $this->get(route('home'));
+    $response->assertRedirect(route('login'));
+});
 
-        $response->assertRedirect(route('login'));
-    }
+test('authenticated users are redirected from the root route to the dashboard', function () {
+    $response = $this->actingAs(User::factory()->create())
+        ->get(route('home'));
 
-    public function test_authenticated_users_are_redirected_from_the_root_route_to_the_dashboard()
-    {
-        $response = $this->actingAs(User::factory()->create())
-            ->get(route('home'));
-
-        $response->assertRedirect(route('dashboard'));
-    }
-}
+    $response->assertRedirect(route('dashboard'));
+});

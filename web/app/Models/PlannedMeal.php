@@ -23,6 +23,21 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property float|null $estimated_cost
  * @property PlannedMealType $type
  * @property PlannedMealStatus $status
+ * @property array{
+ *     safety: string,
+ *     preferences: list<array{subject: string, sentiment: string}>,
+ *     feedback: list<array{
+ *         person: string,
+ *         sentiment: string,
+ *         evidence_count: int,
+ *         confidence: float,
+ *         status: string,
+ *         explanation: string
+ *     }>,
+ *     recency: string,
+ *     effort: string,
+ *     cost: string
+ * }|null $recommendation_explanation
  */
 #[Fillable(['team_id', 'meal_plan_id', 'meal_slot_id', 'meal_proposal_id', 'recipe_version_id', 'source_planned_meal_id', 'selected_by_user_id', 'type', 'status', 'servings', 'title', 'summary', 'notes', 'estimated_minutes', 'estimated_cost', 'recommendation_explanation'])]
 class PlannedMeal extends Model

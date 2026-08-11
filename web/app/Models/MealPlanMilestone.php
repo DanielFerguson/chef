@@ -7,7 +7,12 @@ use App\Models\Concerns\ResolvesWithinCurrentTeam;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $plan_revision
+ * @property Carbon $achieved_at
+ */
 #[Fillable(['team_id', 'meal_plan_id', 'user_id', 'kind', 'plan_revision', 'achieved_at'])]
 class MealPlanMilestone extends Model
 {

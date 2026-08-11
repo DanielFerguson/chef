@@ -12,6 +12,9 @@ use App\Models\Message;
 use App\Models\Person;
 use App\Models\PlannedMeal;
 use App\Models\Preference;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class BuildMealPlanRecipeDraftRequest
 {
@@ -23,17 +26,9 @@ class BuildMealPlanRecipeDraftRequest
         ]);
         $team = $mealPlan->team;
         $conversation = $mealPlan->conversations()->latest('id')->first();
-        $conversationContext = $conversation?->messages()
-            ->reorder('id', 'desc')
-            ->limit(40)
-            ->get()
-            ->reverse()
-            ->map(fn (Message $message): array => [
-                'role' => $message->role->value,
-                'content' => $message->content,
-            ])
-            ->values()
-            ->all() ?? [];
+        $conversationContext = $conversation === null
+            ? []
+            : $this->conversationContext($mealPlan, $conversation->messages()->getQuery());
         $otherMeals = $mealPlan->plannedMeals()
             ->where('status', PlannedMealStatus::Planned->value)
             ->with('mealSlot:id,date,kind')
@@ -126,5 +121,103 @@ class BuildMealPlanRecipeDraftRequest
         unset($structuralInput['conversation_context']);
 
         return hash('sha256', json_encode($structuralInput, JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param  Builder<Message>  $messages
+     * @return list<array{message_id: int, role: string, sources: list<string>, content: string}>
+     */
+    private function conversationContext(MealPlan $mealPlan, $messages): array
+    {
+        $participantIds = $mealPlan->slots()
+            ->with('participants:id')
+            ->get()
+            ->flatMap(fn ($slot) => $slot->participants->pluck('id'))
+            ->unique()
+            ->values();
+        $proposalSourceIds = $mealPlan->plannedMeals()
+            ->with('proposal:id,message_id')
+            ->get()
+            ->pluck('proposal.message_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id);
+        $preferenceSourceIds = Preference::query()
+            ->where('team_id', $mealPlan->team_id)
+            ->whereNull('superseded_at')
+            ->where(function ($query) use ($participantIds): void {
+                $query->whereNull('person_id')->orWhereIn('person_id', $participantIds);
+            })
+            ->pluck('source_message_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id);
+        $constraintSourceIds = Constraint::query()
+            ->where('team_id', $mealPlan->team_id)
+            ->where(function ($query) use ($participantIds): void {
+                $query->whereNull('person_id')->orWhereIn('person_id', $participantIds);
+            })
+            ->pluck('confirmation_message_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id);
+        $recentInstructionIds = (clone $messages)
+            ->where('role', 'user')
+            ->reorder('id', 'desc')
+            ->limit(30)
+            ->get(['id', 'content'])
+            ->filter(fn (Message $message): bool => $this->looksLikePlanInstruction($message->content))
+            ->take(12)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id);
+        $sourcesByMessage = [
+            'proposal_source' => $proposalSourceIds,
+            'preference_source' => $preferenceSourceIds,
+            'constraint_source' => $constraintSourceIds,
+            'recent_plan_instruction' => $recentInstructionIds,
+        ];
+        $messageIds = collect($sourcesByMessage)
+            ->flatMap(fn (Collection $ids): Collection => $ids)
+            ->unique()
+            ->values();
+
+        return array_values((clone $messages)
+            ->whereIn('id', $messageIds)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Message $message): array => [
+                'message_id' => $message->id,
+                'role' => $message->role->value,
+                'sources' => array_values(collect($sourcesByMessage)
+                    ->filter(fn (Collection $ids): bool => $ids->contains($message->id))
+                    ->keys()
+                    ->values()
+                    ->all()),
+                'content' => $message->content,
+            ])
+            ->values()
+            ->all());
+    }
+
+    private function looksLikePlanInstruction(string $content): bool
+    {
+        return Str::contains(Str::lower($content), [
+            'time',
+            'minute',
+            'quick',
+            'budget',
+            'cheap',
+            'cost',
+            'variety',
+            'different',
+            'repeat',
+            'leftover',
+            'nutrition',
+            'healthy',
+            'protein',
+            'vegetable',
+            'ingredient',
+            'avoid',
+            'pantry',
+            'spicy',
+            'serve',
+        ]);
     }
 }

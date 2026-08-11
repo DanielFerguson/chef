@@ -7,11 +7,31 @@ export type RecentMealPlan = {
     ends_on: string;
     revision: number;
     phase: 'Draft' | 'Confirmed' | 'Preparing' | 'Superseded';
-    has_shopping_list: boolean;
     can: {
         update: boolean;
         delete: boolean;
     };
+};
+
+export type PendingInvitation = {
+    householdName: string;
+    inviterName: string | null;
+    url: string;
+};
+
+export type BasketNotification = {
+    id: string;
+    title: string;
+    message: string;
+    status: string;
+    basket_run_id: number;
+    read_at: string | null;
+    created_at: string | null;
+};
+
+export type BasketNotifications = {
+    unread_count: number;
+    items: BasketNotification[];
 };
 
 declare module 'react' {
@@ -26,8 +46,10 @@ declare module '@inertiajs/core' {
         sharedPageProps: {
             name: string;
             auth: Auth;
+            pendingInvitation: PendingInvitation | null;
             sidebarOpen: boolean;
             recentMealPlans: RecentMealPlan[];
+            notifications: BasketNotifications;
             flash: {
                 invitationUrl: string | null;
             };

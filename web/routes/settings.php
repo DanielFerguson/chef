@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\GrocerySettingsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -24,6 +25,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('user-password.update');
 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
+});
+
+Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
+    Route::get('settings/groceries', [GrocerySettingsController::class, 'edit'])->name('groceries.edit');
+    Route::put('settings/groceries', [GrocerySettingsController::class, 'update'])->name('groceries.update');
 });
 
 Route::get('.well-known/passkey-endpoints', function () {

@@ -3,7 +3,6 @@
 namespace App\Actions\Planning;
 
 use App\Actions\MealPlans\RecordMealPlanRevision;
-use App\Actions\Recipes\PrepareMealPlanRecipes;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
 use App\Models\MealSlot;
@@ -19,7 +18,6 @@ class SelectPlannedMeal
     public function __construct(
         private readonly RecordMealPlanRevision $recordRevision,
         private readonly BuildRecommendationExplanation $buildExplanation,
-        private readonly PrepareMealPlanRecipes $prepareRecipes,
     ) {}
 
     public function handle(MealSlot $slot, User $user, PlannedMealType $type, ?RecipeVersion $recipeVersion = null, ?string $title = null, ?string $summary = null, ?float $servings = null, ?int $estimatedMinutes = null, ?float $estimatedCost = null, ?PlannedMeal $sourcePlannedMeal = null, ?int $expectedRevision = null): PlannedMeal
@@ -91,8 +89,6 @@ class SelectPlannedMeal
 
             return $plannedMeal->load('recipeVersion');
         });
-
-        $this->prepareRecipes->handle($plannedMeal->mealPlan, $user);
 
         return $plannedMeal->refresh()->load('recipeVersion');
     }

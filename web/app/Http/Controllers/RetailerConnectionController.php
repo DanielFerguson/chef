@@ -2,63 +2,75 @@
 
 namespace App\Http\Controllers;
 
-use App\Actions\Automation\DisconnectRetailerConnection;
-use App\Actions\Automation\StartRetailerConnection;
+use App\Actions\Retailers\DisconnectRetailerConnection;
+use App\Actions\Retailers\RevokeRetailerAutomationGrant;
+use App\Actions\Retailers\StartRetailerConnection;
 use App\Models\RetailerConnection;
-use App\Models\ShoppingList;
-use Illuminate\Http\RedirectResponse;
+use App\Retailer\Contracts\RetailerAutomationGateway;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class RetailerConnectionController extends Controller
 {
-    public function store(Request $request, ShoppingList $shoppingList, StartRetailerConnection $start): RedirectResponse
-    {
-        $this->authorize('update', $shoppingList);
-        $session = $start->handle($shoppingList->team, $request->user());
-        $session->update([
-            'metadata' => [
-                ...($session->metadata ?? []),
-                'return_shopping_list_id' => $shoppingList->id,
-            ],
-        ]);
+    public function store(
+        Request $request,
+        StartRetailerConnection $startConnection,
+        RetailerAutomationGateway $gateway,
+    ): JsonResponse {
+        $user = $request->user();
+        $team = $user->currentTeam;
+        abort_unless($team !== null, 404);
+        $result = $startConnection->handle($team, $user, $gateway);
+        $requiresStandingConsent = ! $result['connection']->grants()
+            ->whereNull('revoked_at')
+            ->exists();
 
-        return to_route('browser-sessions.authenticate.show', $session);
+        return response()->json([
+            'connection' => [
+                'id' => $result['connection']->id,
+                'status' => $result['connection']->status->value,
+                'requires_standing_consent' => $requiresStandingConsent,
+            ],
+            'session' => [
+                'live_view_url' => $result['session']->liveViewUrl,
+                'expires_at' => $result['session']->expiresAt->toIso8601String(),
+            ],
+            'consent' => [
+                'version' => config('retailer.consent.disclosure_version'),
+                'disclosure' => config('retailer.consent.disclosure'),
+                'links' => config('retailer.consent.links'),
+            ],
+        ], 201);
     }
 
     public function destroy(
         Request $request,
         RetailerConnection $retailerConnection,
         DisconnectRetailerConnection $disconnect,
-    ): RedirectResponse {
-        $returnUrl = $this->shoppingUrl($retailerConnection);
-        $disconnect->handle($retailerConnection, $request->user());
+        RetailerAutomationGateway $gateway,
+    ): JsonResponse {
+        $connection = $disconnect->handle($retailerConnection, $request->user(), $gateway);
 
-        return redirect($returnUrl)->with('success', 'Woolworths was disconnected.');
+        return response()->json([
+            'connection' => [
+                'id' => $connection->id,
+                'status' => $connection->status->value,
+            ],
+        ]);
     }
 
-    private function shoppingUrl(RetailerConnection $connection): string
-    {
-        $run = $connection->orderRuns()->latest('id')->first();
+    public function revokeGrant(
+        Request $request,
+        RetailerConnection $retailerConnection,
+        RevokeRetailerAutomationGrant $revokeGrant,
+    ): JsonResponse {
+        $connection = $revokeGrant->handle($retailerConnection, $request->user());
 
-        if ($run !== null) {
-            return route('meal-plans.show', [
-                'mealPlan' => $run->shoppingList->meal_plan_id,
-                'phase' => 'shopping',
-            ]);
-        }
-
-        $shoppingList = ShoppingList::query()
-            ->where('team_id', $connection->team_id)
-            ->latest('id')
-            ->first();
-
-        if ($shoppingList !== null) {
-            return route('meal-plans.show', [
-                'mealPlan' => $shoppingList->meal_plan_id,
-                'phase' => 'shopping',
-            ]);
-        }
-
-        return route('shopping.index');
+        return response()->json([
+            'connection' => [
+                'id' => $connection->id,
+                'standing_consent' => false,
+            ],
+        ]);
     }
 }

@@ -757,8 +757,8 @@ export function PlanWorkspace({
                 <div className="mx-auto max-w-3xl space-y-5 px-5 py-7 sm:px-8">
                     {workspace.plan.slots.length === 0 && (
                         <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-                            Add meal slots from the plan inspector or ask Chef
-                            in the conversation.
+                            Add meal slots in conversation, or ask Chef to
+                            schedule them.
                         </p>
                     )}
                     {dates.map((date) => {

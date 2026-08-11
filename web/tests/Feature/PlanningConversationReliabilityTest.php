@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Conversations\CreateUserMessage;
+use App\Actions\Conversations\ResolvePendingPlanApproval;
 use App\Actions\Households\RecordPreference;
 use App\Actions\Households\RemovePreference;
 use App\Actions\MealPlans\ConfirmMealPlan;
@@ -20,16 +21,34 @@ use App\Enums\MessageResponseStatus;
 use App\Enums\PlannedMealType;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
+use App\Models\Conversation;
+use App\Models\MealPlan;
+use App\Models\MealSlot;
+use App\Models\Person;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Ai\AiManager;
+use Laravel\Ai\Gateway\FakeTextGateway;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Mockery\VerificationDirector;
+use Tests\Support\MockExpectation;
 
-uses(RefreshDatabase::class);
-
+/**
+ * @return array{
+ *     user: User,
+ *     team: Team,
+ *     plan: MealPlan,
+ *     conversation: Conversation,
+ *     person: Person,
+ *     slots: Collection<int, MealSlot>
+ * }
+ */
 function planningReliabilityWorkspace(int $slotCount = 3): array
 {
     $user = User::factory()->create();
@@ -50,6 +69,19 @@ function planningReliabilityWorkspace(int $slotCount = 3): array
     }
 
     return compact('user', 'team', 'plan', 'conversation', 'person', 'slots');
+}
+
+/** @param array<int, mixed> $responses */
+function useResumableChefGateway(array $responses): void
+{
+    $manager = app(AiManager::class);
+    $forgetRegisteredFake = Closure::bind(function (): void {
+        unset($this->fakeAgentGateways[ChefAgent::class]);
+    }, $manager, $manager);
+    $forgetRegisteredFake();
+    $manager->textProvider('openai')->useTextGateway(
+        (new FakeTextGateway($responses))->preventStrayPrompts(),
+    );
 }
 
 it('derives the next planning action from structured state and guards confirmation', function () {
@@ -81,16 +113,8 @@ it('derives the next planning action from structured state and guards confirmati
     expect($assess->handle($workspace['plan']->refresh()))->toMatchArray([
         'filled_slots' => 2,
         'open_slots' => 0,
-        'ready_for_confirmation' => false,
-        'safety_review_required' => true,
-        'ready_for_approval' => true,
-        'next_action' => 'review_and_approve',
-    ]);
-
-    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
-
-    expect($assess->handle($workspace['plan']->refresh()))->toMatchArray([
         'ready_for_confirmation' => true,
+        'safety_review_required' => false,
         'ready_for_approval' => true,
         'next_action' => 'review_and_approve',
     ]);
@@ -102,7 +126,7 @@ it('derives the next planning action from structured state and guards confirmati
         ->and($assess->handle($workspace['plan']->refresh()))->toMatchArray([
             'confirmed' => true,
             'ready_for_confirmation' => false,
-            'next_action' => 'begin_shopping',
+            'next_action' => 'prepare_recipes',
         ]);
 });
 
@@ -250,11 +274,11 @@ it('turns an otherwise blank tool-only completion into a visible acknowledgement
 it('never persists a completed blank assistant message from any engine', function () {
     $workspace = planningReliabilityWorkspace(1);
     $engine = Mockery::mock(ChefConversationEngine::class);
-    $engine->shouldReceive('streamResponse')->once()->andReturn([
+    MockExpectation::for($engine, 'streamResponse')->andReturn([
         new AssistantStreamChunk('complete'),
     ]);
     app()->instance(ChefConversationEngine::class, $engine);
-    Log::spy();
+    $log = Log::spy();
 
     $clientId = (string) Str::uuid();
     $response = $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $workspace['conversation']), [
@@ -274,7 +298,13 @@ it('never persists a completed blank assistant message from any engine', functio
         ->and($message->metadata['response']['last_failure']['code'])->toBe('empty_response')
         ->and($message->metadata['response']['last_failure']['retryable'])->toBeTrue();
 
-    Log::shouldHaveReceived('error')->once()->withArgs(
+    $verification = $log->shouldHaveReceived('error');
+
+    if (! $verification instanceof VerificationDirector) {
+        throw new LogicException('Mockery did not create a log verification.');
+    }
+
+    $verification->once()->withArgs(
         fn (string $summary, array $context): bool => $summary === 'Chef conversation response failed.'
             && $context['failure_id'] === $message->metadata['response']['last_failure']['id']
             && $context['message_id'] === $message->id
@@ -286,9 +316,8 @@ it('never persists a completed blank assistant message from any engine', functio
 it('classifies an escaped tool validation failure for an in-place retry', function () {
     $workspace = planningReliabilityWorkspace(1);
     $engine = Mockery::mock(ChefConversationEngine::class);
-    $engine->shouldReceive('streamResponse')->once()->andReturnUsing(function (): iterable {
+    MockExpectation::for($engine, 'streamResponse')->andReturnUsing(function (): iterable {
         throw ValidationException::withMessages(['meal_slot_id' => 'Choose a current meal slot.']);
-        yield;
     });
     app()->instance(ChefConversationEngine::class, $engine);
 
@@ -430,7 +459,7 @@ it('retries stale preference evidence and creates only the four uncovered propos
         ]);
 });
 
-it('confirms a ready plan through the same action used by the interface', function () {
+it('pauses confirm plan for sdk approval and resumes through the same domain action', function () {
     $workspace = planningReliabilityWorkspace(1);
     app(SelectPlannedMeal::class)->handle(
         $workspace['slots']->sole(),
@@ -440,19 +469,190 @@ it('confirms a ready plan through the same action used by the interface', functi
     );
     app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
 
-    ChefAgent::fake([
-        new ToolCall('confirm-plan', 'ConfirmPlan', []),
-        'The plan is confirmed. Next, I can build the shopping list.',
-    ])->preventStrayPrompts();
+    $approvalId = 'confirm-plan-call';
+    $revision = $workspace['plan']->refresh()->revision;
+    useResumableChefGateway([
+        new ToolCall($approvalId, 'ConfirmPlan', ['plan_revision' => $revision]),
+        'The plan is confirmed and its recipes are being prepared.',
+    ]);
 
-    $message = app(CreateUserMessage::class)->handle(
-        $workspace['conversation'],
+    $request = $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'content' => 'The plan looks ready.',
+        'client_message_id' => (string) Str::uuid(),
+    ]);
+    $pendingStream = $request->streamedContent();
+    $pending = app(ResolvePendingPlanApproval::class)->handle($workspace['conversation']);
+
+    expect($pendingStream)->toContain('"type":"tool_approval_request"')
+        ->and($workspace['plan']->refresh()->planning_confirmed_at)->toBeNull()
+        ->and($workspace['conversation']->refresh()->ai_conversation_id)->not->toBeNull()
+        ->and($pending)->toMatchArray([
+            'id' => $approvalId,
+            'tool' => 'ConfirmPlan',
+            'plan_revision' => $revision,
+        ]);
+
+    $approval = $this->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'approval' => ['id' => $approvalId, 'decision' => 'approve'],
+        'client_message_id' => (string) Str::uuid(),
+    ]);
+
+    $approval->streamedContent();
+    $approvalReply = $workspace['conversation']->messages()->where('role', 'assistant')->reorder()->latest('id')->firstOrFail();
+
+    expect($approvalReply->content)->toContain('recipes are being prepared')
+        ->and($workspace['plan']->refresh()->planning_confirmed_at)->not->toBeNull()
+        ->and(app(ResolvePendingPlanApproval::class)->handle($workspace['conversation']))->toBeNull()
+        ->and($workspace['conversation']->messages()->where('role', 'user')->reorder()->latest('id')->firstOrFail()->metadata['tool_approval'])->toBe([
+            'id' => $approvalId,
+            'decision' => 'approve',
+        ]);
+});
+
+it('rejects or invalidates a pending sdk plan approval without changing the plan', function () {
+    $workspace = planningReliabilityWorkspace(1);
+    app(SelectPlannedMeal::class)->handle(
+        $workspace['slots']->sole(),
         $workspace['user'],
-        'Yes, confirm the plan.',
-        (string) Str::uuid(),
+        PlannedMealType::Custom,
+        title: 'Satay chicken',
     );
-    $reply = app(ChefConversationEngine::class)->respondTo($workspace['conversation'], $message);
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    $revision = $workspace['plan']->refresh()->revision;
+    $approvalId = 'reject-plan-call';
+    useResumableChefGateway([
+        new ToolCall($approvalId, 'ConfirmPlan', ['plan_revision' => $revision]),
+        'No problem — the plan is unchanged.',
+    ]);
 
-    expect($reply->content)->toContain('shopping list')
-        ->and($workspace['plan']->refresh()->planning_confirmed_at)->not->toBeNull();
+    $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'content' => 'Show me the approval.',
+        'client_message_id' => (string) Str::uuid(),
+    ])->streamedContent();
+
+    $rejection = $this->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'approval' => ['id' => $approvalId, 'decision' => 'reject'],
+        'client_message_id' => (string) Str::uuid(),
+    ]);
+
+    $rejection->streamedContent();
+    $rejectionReply = $workspace['conversation']->messages()->where('role', 'assistant')->reorder()->latest('id')->firstOrFail();
+
+    expect($rejectionReply->content)->toContain('plan is unchanged')
+        ->and($workspace['plan']->refresh()->planning_confirmed_at)->toBeNull()
+        ->and(app(ResolvePendingPlanApproval::class)->handle($workspace['conversation']))->toBeNull();
+
+    useResumableChefGateway([
+        new ToolCall('stale-plan-call', 'ConfirmPlan', ['plan_revision' => $revision]),
+    ]);
+    $this->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'content' => 'Ask again.',
+        'client_message_id' => (string) Str::uuid(),
+    ])->streamedContent();
+    $workspace['plan']->increment('revision');
+
+    $stale = $this->postJson(route('conversations.messages.stream', $workspace['conversation']), [
+        'approval' => ['id' => 'stale-plan-call', 'decision' => 'approve'],
+        'client_message_id' => (string) Str::uuid(),
+    ]);
+
+    $stale->assertConflict();
+    expect($workspace['plan']->refresh()->planning_confirmed_at)->toBeNull();
+});
+
+it('persists an approved tool result before recovering from a provider failure', function () {
+    $workspace = planningReliabilityWorkspace(1);
+    app(SelectPlannedMeal::class)->handle(
+        $workspace['slots']->sole(),
+        $workspace['user'],
+        PlannedMealType::Custom,
+        title: 'Satay chicken',
+    );
+    app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+
+    $approvalId = 'provider-failure-call';
+    $revision = $workspace['plan']->refresh()->revision;
+    useResumableChefGateway([
+        new ToolCall($approvalId, 'ConfirmPlan', ['plan_revision' => $revision]),
+        fn () => throw new RuntimeException('Provider stopped after the approved tool ran.'),
+    ]);
+
+    $this->actingAs($workspace['user'])->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'content' => 'The plan is ready.',
+        'client_message_id' => (string) Str::uuid(),
+    ])->streamedContent();
+
+    $approval = $this->post(route('conversations.messages.stream', $workspace['conversation']), [
+        'approval' => ['id' => $approvalId, 'decision' => 'approve'],
+        'client_message_id' => (string) Str::uuid(),
+    ]);
+
+    expect($approval->streamedContent())->toContain('Approved')
+        ->and($workspace['plan']->refresh()->planning_confirmed_at)->not->toBeNull()
+        ->and($workspace['conversation']->messages()->where('role', 'assistant')->reorder()->latest('id')->firstOrFail()->metadata['recovered_from_failure'])->toBeTrue();
+
+    $pausedLedgerRow = DB::table(config('ai.conversations.tables.messages'))
+        ->where('conversation_id', $workspace['conversation']->refresh()->ai_conversation_id)
+        ->whereNotNull('approval_state')
+        ->sole();
+
+    $toolResults = json_decode($pausedLedgerRow->tool_results, true, flags: JSON_THROW_ON_ERROR);
+
+    if (! is_array($toolResults)) {
+        throw new RuntimeException('Expected the paused conversation ledger to contain tool results.');
+    }
+
+    $toolResultIds = [];
+
+    foreach ($toolResults as $toolResult) {
+        if (is_array($toolResult) && is_string($toolResult['id'] ?? null)) {
+            $toolResultIds[] = $toolResult['id'];
+        }
+    }
+
+    expect(json_decode($pausedLedgerRow->approval_state, true))->toBe(['pending' => []])
+        ->and($toolResultIds)->toBe([$approvalId]);
+});
+
+it('fails closed for unknown and cross-conversation approval decisions', function () {
+    $first = planningReliabilityWorkspace(1);
+    $second = planningReliabilityWorkspace(1);
+
+    foreach ([$first, $second] as $workspace) {
+        app(SelectPlannedMeal::class)->handle(
+            $workspace['slots']->sole(),
+            $workspace['user'],
+            PlannedMealType::Custom,
+            title: 'Satay chicken',
+        );
+        app(ReviewMealPlanSafety::class)->handle($workspace['plan']->refresh(), $workspace['user']);
+    }
+
+    useResumableChefGateway([
+        new ToolCall('first-conversation-call', 'ConfirmPlan', [
+            'plan_revision' => $first['plan']->refresh()->revision,
+        ]),
+    ]);
+    $this->actingAs($first['user'])->post(route('conversations.messages.stream', $first['conversation']), [
+        'content' => 'Review this plan.',
+        'client_message_id' => (string) Str::uuid(),
+    ])->streamedContent();
+
+    $unknown = $this->postJson(route('conversations.messages.stream', $first['conversation']), [
+        'approval' => ['id' => 'unknown-call', 'decision' => 'approve'],
+        'client_message_id' => (string) Str::uuid(),
+    ]);
+
+    $crossConversation = $this->actingAs($second['user'])->postJson(
+        route('conversations.messages.stream', $second['conversation']),
+        [
+            'approval' => ['id' => 'first-conversation-call', 'decision' => 'approve'],
+            'client_message_id' => (string) Str::uuid(),
+        ],
+    );
+
+    $unknown->assertConflict();
+    $crossConversation->assertConflict();
+    expect($first['plan']->refresh()->planning_confirmed_at)->toBeNull()
+        ->and($second['plan']->refresh()->planning_confirmed_at)->toBeNull();
 });

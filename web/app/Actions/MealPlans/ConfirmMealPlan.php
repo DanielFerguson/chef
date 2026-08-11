@@ -14,6 +14,7 @@ class ConfirmMealPlan
     public function __construct(
         private readonly AssessMealPlanReadiness $assessReadiness,
         private readonly RecordMealPlanMilestone $recordMilestone,
+        private readonly ReviewMealPlanSafety $reviewSafety,
         private readonly MealPlanSafetyContext $safetyContext,
     ) {}
 
@@ -28,10 +29,12 @@ class ConfirmMealPlan
 
         if (! $readiness['ready_for_confirmation'] && ! $readiness['ready_for_safety_confirmation']) {
             throw ValidationException::withMessages([
-                'plan' => 'Fill every meal slot, resolve pending suggestions, confirm participants, and review the current safety details before approving the plan.',
+                'plan' => 'Fill every meal slot, resolve pending suggestions, and confirm participants before approving the plan.',
             ]);
         }
 
-        return $this->recordMilestone->handle($mealPlan, $user, MealPlanMilestoneKind::PlanningConfirmed);
+        $this->reviewSafety->handle($mealPlan, $user);
+
+        return $this->recordMilestone->handle($mealPlan->refresh(), $user, MealPlanMilestoneKind::PlanningConfirmed);
     }
 }

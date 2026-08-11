@@ -11,10 +11,8 @@ use App\Enums\MessageRole;
 use App\Models\Conversation;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
-
-uses(RefreshDatabase::class);
+use Tests\Support\MockExpectation;
 
 it('starts a durable first plan and its conversation', function () {
     $user = User::factory()->create();
@@ -47,7 +45,7 @@ it('stores participants and servings on an individual meal slot', function () {
 
     $slot->participants()->attach($person, ['servings' => 1.5]);
 
-    expect((float) $slot->participants()->sole()->pivot->servings)->toBe(1.5);
+    expect((float) $slot->participants()->sole()->pivot->getAttribute('servings'))->toBe(1.5);
 });
 
 it('allows both family members to work with the same plan', function () {
@@ -88,8 +86,7 @@ it('persists attributed user and assistant messages through the engine boundary'
     $conversation = $plan->conversations->first();
 
     $engine = Mockery::mock(ChefConversationEngine::class);
-    $engine->shouldReceive('respondTo')
-        ->once()
+    MockExpectation::for($engine, 'respondTo')
         ->withArgs(fn (Conversation $sentConversation, $message) => $sentConversation->is($conversation)
             && $message->role === MessageRole::User
             && $message->user_id === $user->id)

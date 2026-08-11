@@ -1,0 +1,29 @@
+{
+    "authenticated": true,
+    "live_view_url": "about:blank",
+    "basket_lines": [
+        {
+            "sku": "existing-apples",
+            "title": "Apples",
+            "absolute_quantity": 2,
+            "unit_price_cents": 100,
+            "line_price_cents": 200
+        }
+    ],
+    "search_candidates": [
+        {
+            "origin_host": "www.coles.com.au",
+            "sku": "recorded-satay-500",
+            "title": "Recorded Satay Chicken Ingredients 500g",
+            "brand": "Coles",
+            "semantic_key": "satay chicken ingredients",
+            "product_path": "/product/recorded-satay-chicken-ingredients-500",
+            "pack_quantity": 500,
+            "pack_unit": "g",
+            "price_cents": 450,
+            "available": true,
+            "restricted_product": false,
+            "label_evidence": []
+        }
+    ]
+}

@@ -12,16 +12,28 @@ use App\Ai\Tools\RecordHouseholdPreference;
 use App\Enums\MessageRole;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
+use App\Models\Conversation;
+use App\Models\MealPlan;
 use App\Models\Message;
+use App\Models\Person;
+use App\Models\Team;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Tools\Request as ToolRequest;
 
-uses(RefreshDatabase::class);
-
+/**
+ * @return array{
+ *     user: User,
+ *     team: Team,
+ *     plan: MealPlan,
+ *     conversation: Conversation,
+ *     source: Message,
+ *     tahlia: Person,
+ *     guest: Person
+ * }
+ */
 function truthReliabilityWorkspace(): array
 {
     $user = User::factory()->create(['name' => 'Daniel']);
@@ -40,6 +52,17 @@ function truthReliabilityWorkspace(): array
     return compact('user', 'team', 'plan', 'conversation', 'source', 'tahlia', 'guest');
 }
 
+/**
+ * @param array{
+ *     user: User,
+ *     team: Team,
+ *     plan: MealPlan,
+ *     conversation: Conversation,
+ *     source: Message,
+ *     tahlia: Person,
+ *     guest: Person
+ * } $workspace
+ */
 function preferenceTool(array $workspace, Message $message): RecordHouseholdPreference
 {
     return new RecordHouseholdPreference(
@@ -50,6 +73,38 @@ function preferenceTool(array $workspace, Message $message): RecordHouseholdPref
         app(ValidatePreferenceEvidence::class),
     );
 }
+
+it('groups stated preferences under each household person with source evidence', function () {
+    $user = User::factory()->create(['name' => 'Daniel']);
+    $team = app(CreateTeamForUser::class)->handle($user, 'Daniel & Tahlia');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(6));
+    $message = app(CreateUserMessage::class)->handle(
+        $plan->conversations->firstOrFail(),
+        $user,
+        'Tahlia avoids mushrooms, raw tomatoes, and fish.',
+        (string) Str::uuid(),
+    );
+    $tahlia = app(CreateHouseholdPerson::class)->handle($team, $user, 'Tahlia', $message);
+
+    foreach (['Mushrooms', 'Raw tomatoes', 'Fish'] as $subject) {
+        app(RecordPreference::class)->handle(
+            $team,
+            $user,
+            $subject,
+            PreferenceSentiment::Dislike,
+            PreferenceProvenance::Stated,
+            $tahlia,
+            sourceMessage: $message,
+            evidenceQuote: $message->content,
+        );
+    }
+
+    $preferences = $tahlia->preferences()->orderBy('subject')->get();
+
+    expect($preferences)->toHaveCount(3)
+        ->and($preferences->pluck('source_message_id')->all())->each->toBe($message->id)
+        ->and($preferences->pluck('subject')->all())->toBe(['Fish', 'Mushrooms', 'Raw tomatoes']);
+});
 
 it('rejects a stated preference assigned to a person not supported by the quoted message', function () {
     $workspace = truthReliabilityWorkspace();

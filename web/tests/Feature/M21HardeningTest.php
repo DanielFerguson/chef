@@ -10,6 +10,7 @@ use App\Actions\Planning\AcceptMealProposal;
 use App\Actions\Planning\CreateMealSlot;
 use App\Actions\Planning\ProposeMeal;
 use App\Actions\Planning\RejectMealProposal;
+use App\Actions\Teams\BuildTeamInvitationUrl;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Ai\Agents\ChefAgent;
 use App\Ai\Contracts\ChefConversationEngine;
@@ -21,17 +22,19 @@ use App\Enums\MessageResponseStatus;
 use App\Enums\MessageRole;
 use App\Enums\PreferenceProvenance;
 use App\Enums\PreferenceSentiment;
+use App\Models\Conversation;
+use App\Models\MealPlan;
 use App\Models\Message;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Tests\Support\MockExpectation;
 
-uses(RefreshDatabase::class);
-
+/** @return array{user: User, team: Team, plan: MealPlan, conversation: Conversation} */
 function m21Workspace(): array
 {
     $user = User::factory()->create();
@@ -42,6 +45,7 @@ function m21Workspace(): array
     return compact('user', 'team', 'plan', 'conversation');
 }
 
+/** @param array{user: User, team: Team, plan: MealPlan, conversation: Conversation} $workspace */
 function m21UserMessage(array $workspace, string $content = 'Tahlia is allergic to peanuts.'): Message
 {
     return app(CreateUserMessage::class)->handle(
@@ -95,13 +99,18 @@ it('links an invitation to an existing household person without duplicating them
     );
     $invitee = User::factory()->create(['email' => 'tahlia@example.test']);
 
-    $this->actingAs($workspace['user'])->post(route('team-invitations.store'), [
+    $response = $this->actingAs($workspace['user'])->post(route('team-invitations.store'), [
         'email' => $invitee->email,
         'person_id' => $person->id,
-    ])->assertRedirect();
+    ]);
+    $response->assertRedirect();
 
     $invitation = $workspace['team']->invitations()->sole();
-    $this->actingAs($invitee)->get(route('team-invitations.show', $invitation))
+    $invitationUrl = app(BuildTeamInvitationUrl::class)->handle($invitation);
+
+    expect(session('invitation_url'))->toBe($invitationUrl);
+
+    $this->actingAs($invitee)->get($invitationUrl)
         ->assertInertia(fn (Assert $page) => $page
             ->where('invitation.person.name', 'Tahlia')
             ->where('invitation.matches_user', true));
@@ -333,7 +342,7 @@ it('makes meal proposal decisions a one-way state transition', function () {
 it('replays an already completed client turn without a second model invocation', function () {
     $workspace = m21Workspace();
     $engine = Mockery::mock(ChefConversationEngine::class);
-    $engine->shouldReceive('streamResponse')->once()->andReturn([
+    MockExpectation::for($engine, 'streamResponse')->andReturn([
         new AssistantStreamChunk('delta', 'One response.'),
         new AssistantStreamChunk('complete'),
     ]);
@@ -377,9 +386,8 @@ it('rejects a reused client id with changed content and an actively processing t
 it('marks a failed turn retryable and persists only one response', function () {
     $workspace = m21Workspace();
     $failing = Mockery::mock(ChefConversationEngine::class);
-    $failing->shouldReceive('streamResponse')->once()->andReturnUsing(function (): iterable {
+    MockExpectation::for($failing, 'streamResponse')->andReturnUsing(function (): iterable {
         throw new RuntimeException('Provider failed.');
-        yield;
     });
     app()->instance(ChefConversationEngine::class, $failing);
     $clientId = (string) Str::uuid();
@@ -392,7 +400,7 @@ it('marks a failed turn retryable and persists only one response', function () {
         ->toContain('"retryable":true');
 
     $successful = Mockery::mock(ChefConversationEngine::class);
-    $successful->shouldReceive('streamResponse')->once()->andReturn([new AssistantStreamChunk('delta', 'Recovered.'), new AssistantStreamChunk('complete')]);
+    MockExpectation::for($successful, 'streamResponse')->andReturn([new AssistantStreamChunk('delta', 'Recovered.'), new AssistantStreamChunk('complete')]);
     app()->instance(ChefConversationEngine::class, $successful);
     $retry = $this->post(route('conversations.messages.stream', $workspace['conversation']), [
         'content' => 'Try this safely.', 'client_message_id' => $clientId,

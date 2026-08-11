@@ -1,7 +1,8 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
+import PendingInvitationBanner from '@/components/pending-invitation-banner';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,9 +19,15 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
+    const { pendingInvitation } = usePage().props;
+
     return (
         <>
             <Head title="Log in" />
+
+            {pendingInvitation && (
+                <PendingInvitationBanner invitation={pendingInvitation} />
+            )}
 
             <PasskeyVerify />
 

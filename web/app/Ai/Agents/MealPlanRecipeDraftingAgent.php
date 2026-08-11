@@ -38,7 +38,7 @@ class MealPlanRecipeDraftingAgent implements Agent, HasProviderOptions, HasStruc
         conflict with a safety constraint. Keep each recipe faithful to the selected meal, economical,
         high quality, and within any explicitly requested maximum total time.
 
-        Include shopping-ready quantities and units, concise sequential steps, equipment, material
+        Include practical quantities and units, concise sequential steps, equipment, material
         preparation notices, and practical storage guidance. Return only supplied planned_meal_id values,
         exactly once each. Do not add or omit meals.
 

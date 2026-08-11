@@ -11,12 +11,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 use Illuminate\Support\Collection;
 
 /**
  * @property int $id
  * @property int $team_id
  * @property string $name
+ * @property-read Pivot|null $pivot
  * @property-read Collection<int, Preference> $preferences
  * @property-read Collection<int, Constraint> $constraints
  */

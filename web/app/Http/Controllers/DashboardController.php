@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\PreferenceCandidateStatus;
-use App\Enums\RetailerOrderRunStatus;
 use App\Models\MealPlan;
 use App\Models\MealSlot;
 use Illuminate\Http\Request;
@@ -94,34 +93,6 @@ class DashboardController extends Controller
             ];
         }
 
-        $journey = null;
-        if ($activePlan !== null) {
-            $shoppingList = $activePlan->shoppingList;
-            $latestRun = $shoppingList?->retailerOrderRuns()->latest('id')->first();
-            $cartReady = $latestRun !== null && in_array($latestRun->status, [
-                RetailerOrderRunStatus::CartReady,
-                RetailerOrderRunStatus::FetchingFulfilmentOptions,
-                RetailerOrderRunStatus::AwaitingFulfilmentSelection,
-                RetailerOrderRunStatus::AwaitingOrderConfirmation,
-                RetailerOrderRunStatus::SubmittingOrder,
-                RetailerOrderRunStatus::AwaitingPlacementVerification,
-                RetailerOrderRunStatus::Placed,
-            ], true);
-
-            $journey = [
-                'plan_id' => $activePlan->id,
-                'shopping_url' => route('meal-plans.show', [
-                    'mealPlan' => $activePlan,
-                    'phase' => 'shopping',
-                ]),
-                'phase' => $cartReady
-                    ? 'cart_ready'
-                    : ($activePlan->shopping_approved_at !== null ? 'preparing_shop' : 'plan_confirmed'),
-                'fulfilment_method' => $shoppingList?->fulfilment_method,
-                'fulfilment_scheduled_for' => $shoppingList?->fulfilment_scheduled_for?->toIso8601String(),
-            ];
-        }
-
         return Inertia::render('dashboard', [
             'household' => [
                 'id' => $team->id,
@@ -133,7 +104,6 @@ class DashboardController extends Controller
                 'date' => $today,
                 'showing_next' => $showingNext,
                 'meals' => $this->serializeMeals($slots),
-                'journey' => $journey,
             ],
             'preferenceCandidates' => $preferenceCandidates,
         ]);

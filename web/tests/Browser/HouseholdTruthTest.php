@@ -1,105 +1,113 @@
 <?php
 
-use App\Actions\Conversations\CreateUserMessage;
-use App\Actions\Households\CreateHouseholdPerson;
-use App\Actions\Households\RecordPreference;
 use App\Actions\MealPlans\StartMealPlan;
+use App\Actions\Planning\CreateMealSlot;
+use App\Actions\Planning\SelectPlannedMeal;
 use App\Actions\Teams\CreateTeamForUser;
-use App\Enums\PreferenceProvenance;
-use App\Enums\PreferenceSentiment;
+use App\Enums\MealSlotKind;
+use App\Enums\PlannedMealType;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Str;
 
-uses(RefreshDatabase::class);
-
-it('groups stated preferences under each household person', function () {
+it('captures an explicitly confirmed safety rule without restoring inspector chrome', function () {
     $user = User::factory()->create(['name' => 'Daniel']);
-    $team = app(CreateTeamForUser::class)->handle($user, 'Daniel & Tahlia');
-    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(6));
-    $message = app(CreateUserMessage::class)->handle(
-        $plan->conversations->first(),
+    $team = app(CreateTeamForUser::class)->handle($user, 'Safety family');
+    $plan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
+    $slot = app(CreateMealSlot::class)->handle(
+        $plan,
         $user,
-        'Tahlia avoids mushrooms, raw tomatoes, and fish.',
-        (string) Str::uuid(),
+        today(),
+        MealSlotKind::Dinner,
+        $team->people,
     );
-    $tahlia = app(CreateHouseholdPerson::class)->handle($team, $user, 'Tahlia', $message);
-
-    foreach (['Mushrooms', 'Raw tomatoes', 'Fish'] as $subject) {
-        app(RecordPreference::class)->handle(
-            $team,
-            $user,
-            $subject,
-            PreferenceSentiment::Dislike,
-            PreferenceProvenance::Stated,
-            $tahlia,
-            sourceMessage: $message,
-            evidenceQuote: $message->content,
-        );
-    }
-
-    expect($tahlia->preferences()->pluck('source_message_id')->all())
-        ->each->toBe($message->id);
-
+    app(SelectPlannedMeal::class)->handle(
+        $slot,
+        $user,
+        PlannedMealType::Takeaway,
+        title: 'Takeaway night',
+    );
     $this->actingAs($user);
 
-    visit(route('meal-plans.show', $plan))->on()->desktop()
-        ->assertPresent('[data-truth-owner="Tahlia"] > h4')
-        ->assertPresent('ul[aria-label="Tahlia stated preferences"]')
-        ->assertScript("() => {
-            const list = document.querySelector('ul[aria-label=\"Tahlia stated preferences\"]');
-            return list?.children.length === 3
-                && list.textContent.includes('Avoid Mushrooms')
-                && list.textContent.includes('Avoid Raw tomatoes')
-                && list.textContent.includes('Avoid Fish')
-                && !list.textContent.includes('stated')
-                && list.querySelectorAll('[data-truth-actions]').length === 3
-                && list.querySelectorAll('button[title=\"View source message\"]').length === 3;
-        }")
-        ->assertVisible('button[aria-label="View source for Mushrooms"]')
-        ->click('button[aria-label="View source for Mushrooms"]')
-        ->wait(1)
-        ->assertScript("() => {
-            const viewport = document.querySelector('[data-slot=message-scroller-viewport]');
-            const source = document.querySelector('[data-message-id=\"{$message->id}\"]');
-            const viewportBounds = viewport.getBoundingClientRect();
-            const sourceBounds = source.getBoundingClientRect();
-            const announcement = [...document.querySelectorAll('[role=status]')]
-                .some((item) => item.textContent.includes('Source message shown.'));
-            return sourceBounds.top >= viewportBounds.top
-                && sourceBounds.bottom <= viewportBounds.bottom
-                && source.dataset.sourceTarget === 'true'
-                && document.activeElement === source
-                && announcement;
-        }")
-        ->assertNoJavaScriptErrors();
-});
-
-it('keeps unreviewed safety distinct from none reported at tablet width', function () {
-    $user = User::factory()->create(['name' => 'Daniel']);
-    $team = app(CreateTeamForUser::class)->handle($user, 'Safety family');
-    $tabletPlan = app(StartMealPlan::class)->handle($team, $user, today(), today()->addDays(2));
-    $this->actingAs($user);
-
-    visit(route('meal-plans.show', $tabletPlan))
-        ->resize(1004, 900)
-        ->assertPresent('button[aria-label="Open plan details"]')
-        ->click('button[aria-label="Open plan details"]')
-        ->assertSee('Safety details have not been reviewed yet')
-        ->assertSee('Confirm none reported')
-        ->assertNoJavaScriptErrors();
-});
-
-it('keeps unreviewed safety distinct from none reported at mobile width', function () {
-    $user = User::factory()->create(['name' => 'Daniel']);
-    $team = app(CreateTeamForUser::class)->handle($user, 'Safety family');
-    $mobilePlan = app(StartMealPlan::class)->handle($team, $user, today()->addDays(3), today()->addDays(5));
-    $this->actingAs($user);
-
-    visit(route('meal-plans.show', $mobilePlan))
+    $page = visit(route('meal-plans.show', $plan))
         ->resize(390, 844)
-        ->click('button[aria-label="Open plan details"]')
-        ->assertSee('Safety details have not been reviewed yet')
+        ->assertDontSee('Household truth')
+        ->assertDontSee('Plan together')
+        ->assertSee('Household safety')
         ->assertSee('Confirm none reported')
+        ->assertNotPresent('button[aria-label="Open plan details"]')
+        ->press('Add safety rule')
+        ->assertSee('Question 1 of 5')
+        ->assertSee('Who does this safety rule apply to?')
+        ->click('fieldset[data-active] label:has-text("Daniel")')
+        ->press('Next')
+        ->assertSee('What kind of rule is it?')
+        ->click('fieldset[data-active] label:has-text("Allergy")')
+        ->press('Next')
+        ->assertSee('State the safety rule')
+        ->type('input[aria-label="Safety rule subject"]', 'Peanut allergy')
+        ->press('Next')
+        ->assertSee('Add any important details')
+        ->type('input[aria-label="Safety rule details"]', 'Avoid cross-contamination.')
+        ->press('Next')
+        ->assertSee('Review and explicitly confirm')
+        ->assertSee('Peanut allergy')
+        ->assertScript('() => document.querySelector("input[type=checkbox]")?.checked === false')
+        ->press('Record rule')
+        ->assertSee('Confirm the rule before recording it.');
+
+    $this->assertDatabaseMissing('constraints', [
+        'team_id' => $team->id,
+        'subject' => 'Peanut allergy',
+    ]);
+
+    $page->check('input[type="checkbox"]')
+        ->pressAndWaitFor('Record rule')
+        ->assertSee('Peanut allergy')
+        ->assertSee('I reviewed these details')
+        ->assertScript('() => document.documentElement.scrollWidth <= document.documentElement.clientWidth')
+        ->assertNoAccessibilityIssues()
         ->assertNoJavaScriptErrors();
+
+    $this->assertDatabaseHas('constraints', [
+        'team_id' => $team->id,
+        'person_id' => $team->people()->sole()->id,
+        'kind' => 'allergy',
+        'subject' => 'Peanut allergy',
+        'details' => 'Avoid cross-contamination.',
+    ]);
+});
+
+it('discards unfinished safety capture after cancellation or reload', function () {
+    $user = User::factory()->create(['name' => 'Daniel']);
+    $team = app(CreateTeamForUser::class)->handle($user, 'Safety family');
+    $plan = app(StartMealPlan::class)->handle(
+        $team,
+        $user,
+        today(),
+        today()->addDays(2),
+    );
+    $this->actingAs($user);
+
+    visit(route('meal-plans.show', $plan))
+        ->press('Add safety rule')
+        ->click('fieldset[data-active] label:has-text("Daniel")')
+        ->press('Cancel')
+        ->press('Add safety rule')
+        ->assertSee('Question 1 of 5')
+        ->assertScript('() => document.querySelector("fieldset[data-active] input:checked") === null')
+        ->click('fieldset[data-active] label:has-text("Daniel")')
+        ->press('Next')
+        ->click('fieldset[data-active] label:has-text("Allergy")')
+        ->press('Next')
+        ->type('input[aria-label="Safety rule subject"]', 'Temporary draft');
+
+    visit(route('meal-plans.show', $plan))
+        ->press('Add safety rule')
+        ->assertSee('Question 1 of 5')
+        ->assertDontSee('Temporary draft')
+        ->assertNoJavaScriptErrors();
+
+    $this->assertDatabaseMissing('constraints', [
+        'team_id' => $team->id,
+        'subject' => 'Temporary draft',
+    ]);
 });

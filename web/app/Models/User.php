@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
  * @property int $id
@@ -37,7 +38,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+    use HasApiTokens, HasFactory, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
 
     /** @return BelongsTo<Team, $this> */
     public function currentTeam(): BelongsTo
@@ -71,16 +72,22 @@ class User extends Authenticatable implements PasskeyUser
         return $this->hasMany(MealPlan::class, 'created_by_user_id');
     }
 
-    /** @return HasMany<RetailerConnection, $this> */
-    public function retailerConnections(): HasMany
-    {
-        return $this->hasMany(RetailerConnection::class, 'owner_user_id');
-    }
-
     /** @return HasMany<Message, $this> */
     public function messages(): HasMany
     {
         return $this->hasMany(Message::class);
+    }
+
+    /** @return HasMany<RetailerConnection, $this> */
+    public function ownedRetailerConnections(): HasMany
+    {
+        return $this->hasMany(RetailerConnection::class, 'owner_user_id');
+    }
+
+    /** @return HasMany<RetailerAutomationGrant, $this> */
+    public function retailerAutomationGrants(): HasMany
+    {
+        return $this->hasMany(RetailerAutomationGrant::class, 'owner_user_id');
     }
 
     /**

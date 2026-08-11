@@ -1,6 +1,11 @@
 <?php
 
-use App\Http\Controllers\CartProductPlanController;
+use App\Http\Controllers\BasketReviewSessionController;
+use App\Http\Controllers\BasketRunBudgetOverrideController;
+use App\Http\Controllers\BasketRunController;
+use App\Http\Controllers\BasketRunItemProductPreferenceController;
+use App\Http\Controllers\BasketRunRestorationController;
+use App\Http\Controllers\BasketRunRetryController;
 use App\Http\Controllers\ConstraintController;
 use App\Http\Controllers\ConversationFeedbackController;
 use App\Http\Controllers\ConversationMessageStreamController;
@@ -13,36 +18,36 @@ use App\Http\Controllers\MealOutcomeController;
 use App\Http\Controllers\MealPlanApprovalController;
 use App\Http\Controllers\MealPlanController;
 use App\Http\Controllers\MealPlanMilestoneController;
+use App\Http\Controllers\MealPlanPurchasePreferenceController;
 use App\Http\Controllers\MealPlanRecipePreparationController;
 use App\Http\Controllers\MealPlanSafetyReviewController;
 use App\Http\Controllers\MealProposalDecisionController;
 use App\Http\Controllers\MealSlotController;
 use App\Http\Controllers\MealSlotParticipantController;
 use App\Http\Controllers\MealSlotPlannedMealController;
+use App\Http\Controllers\MessageAttachmentController;
 use App\Http\Controllers\MessageFeedbackController;
-use App\Http\Controllers\OrderSnapshotController;
+use App\Http\Controllers\NotificationReadController;
 use App\Http\Controllers\PlannedMealController;
 use App\Http\Controllers\PlannedMealMoveController;
 use App\Http\Controllers\PreferenceCandidateController;
 use App\Http\Controllers\PreferenceController;
-use App\Http\Controllers\ProductMatchController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\RecipeImportController;
 use App\Http\Controllers\RecipeVersionController;
-use App\Http\Controllers\RetailerConnectionAuthenticationController;
 use App\Http\Controllers\RetailerConnectionController;
-use App\Http\Controllers\RetailerOrderRunController;
-use App\Http\Controllers\ShoppingBudgetController;
-use App\Http\Controllers\ShoppingFulfilmentController;
-use App\Http\Controllers\ShoppingListCompletionController;
-use App\Http\Controllers\ShoppingListController;
-use App\Http\Controllers\ShoppingListGenerationController;
-use App\Http\Controllers\ShoppingListItemController;
+use App\Http\Controllers\RetailerConnectionVerificationController;
+use App\Http\Controllers\RetailerLiveSessionController;
+use App\Http\Controllers\RetailerProductPreferenceController;
 use App\Http\Controllers\SwitchTeamController;
 use App\Http\Controllers\TeamInvitationController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard')->middleware('auth')->name('home');
+
+Route::get('invitations/{teamInvitation}', [TeamInvitationController::class, 'show'])
+    ->middleware('signed')
+    ->name('team-invitations.show');
 
 Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -57,32 +62,21 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::put('meal-plans/{mealPlan}', [MealPlanController::class, 'update'])->name('meal-plans.update');
     Route::delete('meal-plans/{mealPlan}', [MealPlanController::class, 'destroy'])->name('meal-plans.destroy');
     Route::post('meal-plans/{mealPlan}/approve', MealPlanApprovalController::class)->name('meal-plans.approve');
-    Route::get('shopping', [ShoppingListController::class, 'index'])->name('shopping.index');
-    Route::get('meal-plans/{mealPlan}/shopping', [ShoppingListController::class, 'show'])->name('meal-plans.shopping.show');
-    Route::post('meal-plans/{mealPlan}/shopping-list', ShoppingListGenerationController::class)->name('meal-plans.shopping-list.generate');
+    Route::put('meal-plans/{mealPlan}/purchase-preference', MealPlanPurchasePreferenceController::class)->name('meal-plans.purchase-preference.update');
     Route::post('meal-plans/{mealPlan}/recipes/prepare', MealPlanRecipePreparationController::class)->name('meal-plans.recipes.prepare');
-    Route::post('shopping-lists/{shoppingList}/items', [ShoppingListItemController::class, 'store'])->name('shopping-lists.items.store');
-    Route::put('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'update'])->name('shopping-list-items.update');
-    Route::delete('shopping-list-items/{shoppingListItem}', [ShoppingListItemController::class, 'destroy'])->name('shopping-list-items.destroy');
-    Route::post('shopping-lists/{shoppingList}/complete', ShoppingListCompletionController::class)->name('shopping-lists.complete');
-    Route::put('shopping-lists/{shoppingList}/fulfilment', ShoppingFulfilmentController::class)->name('shopping-lists.fulfilment.update');
-    Route::put('meal-plans/{mealPlan}/shopping-budget', ShoppingBudgetController::class)->name('meal-plans.shopping-budget.update');
-    Route::put('shopping-list-items/{shoppingListItem}/product-match', ProductMatchController::class)->name('shopping-list-items.product-match.update');
-    Route::post('shopping-lists/{shoppingList}/orders', OrderSnapshotController::class)->name('shopping-lists.orders.store');
-    Route::post('shopping-lists/{shoppingList}/retailer-connections', [RetailerConnectionController::class, 'store'])->name('shopping-lists.retailer-connections.store');
-    Route::post('shopping-lists/{shoppingList}/cart-product-plan', [CartProductPlanController::class, 'store'])->name('shopping-lists.cart-product-plan.store');
-    Route::put('cart-product-plan-items/{cartProductPlanItem}', [CartProductPlanController::class, 'update'])->name('cart-product-plan-items.update');
-    Route::post('shopping-lists/{shoppingList}/retailer-order-runs', [RetailerOrderRunController::class, 'store'])->name('shopping-lists.retailer-order-runs.store');
-    Route::post('retailer-connections/{retailerConnection}/authenticate', [RetailerConnectionAuthenticationController::class, 'start'])->name('retailer-connections.authenticate.start');
+    Route::post('retailer-connections', [RetailerConnectionController::class, 'store'])->name('retailer-connections.store');
+    Route::post('retailer-connections/{retailerConnection}/verify', RetailerConnectionVerificationController::class)->name('retailer-connections.verify');
+    Route::delete('retailer-connections/{retailerConnection}/live-session', RetailerLiveSessionController::class)->name('retailer-connections.live-session.destroy');
+    Route::delete('retailer-connections/{retailerConnection}/grant', [RetailerConnectionController::class, 'revokeGrant'])->name('retailer-connections.grant.destroy');
     Route::delete('retailer-connections/{retailerConnection}', [RetailerConnectionController::class, 'destroy'])->name('retailer-connections.destroy');
-    Route::get('browser-sessions/{browserSession}/authenticate', [RetailerConnectionAuthenticationController::class, 'show'])->name('browser-sessions.authenticate.show');
-    Route::get('browser-sessions/{browserSession}/live-view', [RetailerConnectionAuthenticationController::class, 'liveView'])->name('browser-sessions.live-view');
-    Route::post('browser-sessions/{browserSession}/verify', [RetailerConnectionAuthenticationController::class, 'verify'])->name('browser-sessions.verify');
-    Route::post('retailer-order-runs/{retailerOrderRun}/fulfilment', [RetailerOrderRunController::class, 'selectFulfilment'])->name('retailer-order-runs.fulfilment.select');
-    Route::post('retailer-order-runs/{retailerOrderRun}/confirm', [RetailerOrderRunController::class, 'confirm'])->name('retailer-order-runs.confirm');
-    Route::post('retailer-order-runs/{retailerOrderRun}/verify', [RetailerOrderRunController::class, 'verify'])->name('retailer-order-runs.verify');
-    Route::delete('retailer-order-runs/{retailerOrderRun}', [RetailerOrderRunController::class, 'destroy'])->name('retailer-order-runs.destroy');
-    Route::put('retailer-order-runs/{retailerOrderRun}/cart-decision', [RetailerOrderRunController::class, 'resolveCartDecision'])->name('retailer-order-runs.cart-decision.update');
+    Route::get('basket-runs/{basketRun}', [BasketRunController::class, 'show'])->name('basket-runs.show');
+    Route::post('basket-runs/{basketRun}/retry', BasketRunRetryController::class)->name('basket-runs.retry');
+    Route::post('basket-runs/{basketRun}/restore', BasketRunRestorationController::class)->name('basket-runs.restore');
+    Route::post('basket-runs/{basketRun}/review-session', BasketReviewSessionController::class)->name('basket-runs.review-session');
+    Route::post('basket-runs/{basketRun}/budget-override', BasketRunBudgetOverrideController::class)->name('basket-runs.budget-override');
+    Route::put('basket-runs/{basketRun}/items/{basketRunItem}/product-preference', BasketRunItemProductPreferenceController::class)->name('basket-runs.items.product-preference.update');
+    Route::delete('retailer-product-preferences/{preference}', RetailerProductPreferenceController::class)->name('retailer-product-preferences.destroy');
+    Route::put('notifications/{notification}/read', NotificationReadController::class)->name('notifications.read');
     Route::post('meal-plans/{mealPlan}/slots', [MealSlotController::class, 'store'])->name('meal-plans.slots.store');
     Route::post('meal-plans/{mealPlan}/milestones', [MealPlanMilestoneController::class, 'store'])->name('meal-plans.milestones.store');
     Route::post('meal-plans/{mealPlan}/safety-review', MealPlanSafetyReviewController::class)->name('meal-plans.safety-review.store');
@@ -90,6 +84,8 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
     Route::put('meal-slots/{mealSlot}/participants', [MealSlotParticipantController::class, 'update'])->name('meal-slots.participants.update');
     Route::post('conversations/{conversation}/messages/stream', ConversationMessageStreamController::class)
         ->name('conversations.messages.stream');
+    Route::get('message-attachments/{messageAttachment}', MessageAttachmentController::class)
+        ->name('message-attachments.show');
     Route::put('messages/{message}/feedback', [MessageFeedbackController::class, 'update'])->name('messages.feedback.update');
     Route::delete('messages/{message}/feedback', [MessageFeedbackController::class, 'destroy'])->name('messages.feedback.destroy');
     Route::put('conversations/{conversation}/feedback', [ConversationFeedbackController::class, 'update'])->name('conversations.feedback.update');
@@ -113,7 +109,6 @@ Route::middleware(['auth', 'verified', 'current-team'])->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('invitations/{teamInvitation}', [TeamInvitationController::class, 'show'])->name('team-invitations.show');
     Route::post('invitations/{teamInvitation}/accept', [TeamInvitationController::class, 'accept'])->name('team-invitations.accept');
 });
 

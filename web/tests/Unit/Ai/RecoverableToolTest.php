@@ -1,15 +1,15 @@
 <?php
 
 use App\Ai\Tools\RecoverableTool;
+use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Illuminate\JsonSchema\Types\StringType;
 use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 function reliabilityTool(string $outcome): Tool
 {
@@ -22,16 +22,16 @@ function reliabilityTool(string $outcome): Tool
             return 'ReliabilityTool';
         }
 
-        public function description(): Stringable|string
+        public function description(): string
         {
             return 'A test tool.';
         }
 
-        public function handle(Request $request): Stringable|string
+        public function handle(Request $request): string
         {
             return match ($this->outcome) {
                 'validation' => throw ValidationException::withMessages(['meal_slot_id' => 'Choose a current meal slot.']),
-                'missing' => throw (new ModelNotFoundException)->setModel('HiddenModel', [99]),
+                'missing' => throw (new ModelNotFoundException)->setModel(User::class, [99]),
                 'authorization' => throw new AuthorizationException('Private household detail.'),
                 'provider' => throw new RuntimeException('Provider failed.'),
                 default => 'unchanged success result',
@@ -46,13 +46,12 @@ function reliabilityTool(string $outcome): Tool
 }
 
 it('preserves tool identity, description, schema, and successful output', function () {
-    $schema = Mockery::mock(JsonSchema::class);
-    $schema->shouldReceive('string')->once()->andReturn('string-schema');
+    $schema = new JsonSchemaTypeFactory;
     $tool = new RecoverableTool(reliabilityTool('success'));
 
     expect($tool->name())->toBe('ReliabilityTool')
         ->and((string) $tool->description())->toBe('A test tool.')
-        ->and($tool->schema($schema))->toBe(['title' => 'string-schema'])
+        ->and($tool->schema($schema)['title'])->toBeInstanceOf(StringType::class)
         ->and($tool->handle(new Request))->toBe('unchanged success result');
 });
 
@@ -61,7 +60,7 @@ it('returns safe structured results for correctable tool input failures', functi
 
     expect($result['ok'])->toBeFalse()
         ->and($result['error']['code'])->toBe($code)
-        ->and(json_encode($result))->not->toContain('HiddenModel')->not->toContain('99');
+        ->and(json_encode($result))->not->toContain(User::class)->not->toContain('99');
 })->with([
     'validation' => ['validation', 'validation_failed'],
     'missing resource' => ['missing', 'resource_not_found'],

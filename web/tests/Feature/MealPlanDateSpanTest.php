@@ -4,9 +4,6 @@ use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\MealPlans\UpdateMealPlanDateSpan;
 use App\Actions\Teams\CreateTeamForUser;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-
-uses(RefreshDatabase::class);
 
 it('updates generated plan and conversation titles with one date-span revision', function () {
     $user = User::factory()->create();

@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Households\RecordConstraint;
+use App\Actions\MealPlans\ApproveMealPlan;
 use App\Actions\MealPlans\RecordMealPlanMilestone;
 use App\Actions\MealPlans\StartMealPlan;
 use App\Actions\Planning\CreateMealSlot;
@@ -18,17 +19,18 @@ use App\Enums\MealPlanMilestoneKind;
 use App\Enums\MealSlotKind;
 use App\Enums\PlannedMealStatus;
 use App\Enums\PlannedMealType;
+use App\Models\MealPlan;
+use App\Models\Recipe;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Ai\Responses\Data\ToolCall;
 
-uses(RefreshDatabase::class);
-
+/** @return array{user: User, team: Team, plan: MealPlan} */
 function m3PlanningWorkspace(int $days = 13): array
 {
     $user = User::factory()->create();
@@ -38,7 +40,10 @@ function m3PlanningWorkspace(int $days = 13): array
     return compact('user', 'team', 'plan');
 }
 
-function m3CreateRecipe(array $workspace, string $title = 'Satay chicken')
+/**
+ * @param  array{user: User, team: Team, plan: MealPlan}  $workspace
+ */
+function m3CreateRecipe(array $workspace, string $title = 'Satay chicken'): Recipe
 {
     return app(CreateRecipe::class)->handle(
         $workspace['team'],
@@ -170,7 +175,7 @@ it('supports custom meal states and participant serving overrides per slot', fun
     app(UpdatePlannedMeal::class)->handle($planned, $workspace['user'], 2.25, PlannedMealStatus::Skipped, 'Plans changed.');
 
     expect($slot->refresh()->participants)->toHaveCount(2)
-        ->and((float) $slot->participants->firstWhere('id', $secondPerson->id)->pivot->servings)->toBe(0.75)
+        ->and((float) $slot->participants->firstWhere('id', $secondPerson->id)->pivot->getAttribute('servings'))->toBe(0.75)
         ->and($planned->refresh()->type)->toBe(PlannedMealType::Takeaway)
         ->and($planned->status)->toBe(PlannedMealStatus::Skipped)
         ->and($planned->notes)->toBe('Plans changed.');
@@ -489,7 +494,7 @@ it('revises a complete fourteen-day plan without losing recipe versions or parti
         $workspace['team']->people()->oldest('id')->firstOrFail()->id => 1.5,
         $tahlia->id => 0.5,
     ]);
-    app(RecordMealPlanMilestone::class)->handle($workspace['plan'], $workspace['user'], MealPlanMilestoneKind::PlanningConfirmed);
+    app(ApproveMealPlan::class)->handle($workspace['plan'], $workspace['user']);
 
     $cookableMeals = $workspace['plan']->plannedMeals()->whereIn('type', [
         PlannedMealType::Recipe->value,

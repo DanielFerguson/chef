@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Teams\AcceptTeamInvitation;
+use App\Actions\Teams\BuildTeamInvitationUrl;
 use App\Actions\Teams\InviteUserToTeam;
+use App\Actions\Teams\PendingTeamInvitation;
 use App\Models\Person;
 use App\Models\TeamInvitation;
 use Illuminate\Http\RedirectResponse;
@@ -13,8 +15,11 @@ use Inertia\Response;
 
 class TeamInvitationController extends Controller
 {
-    public function store(Request $request, InviteUserToTeam $invite): RedirectResponse
-    {
+    public function store(
+        Request $request,
+        InviteUserToTeam $invite,
+        BuildTeamInvitationUrl $buildInvitationUrl,
+    ): RedirectResponse {
         $validated = $request->validate([
             'email' => ['required', 'email:rfc', 'max:255'],
             'person_id' => ['nullable', 'integer'],
@@ -30,12 +35,27 @@ class TeamInvitationController extends Controller
             : null;
         $invitation = $invite->handle($team, $request->user(), $validated['email'], $person);
 
-        return back()->with('invitation_url', route('team-invitations.show', $invitation));
+        return back()->with('invitation_url', $buildInvitationUrl->handle($invitation));
     }
 
-    public function show(Request $request, TeamInvitation $teamInvitation): Response
-    {
+    public function show(
+        Request $request,
+        TeamInvitation $teamInvitation,
+        PendingTeamInvitation $pendingInvitation,
+    ): Response|RedirectResponse {
         abort_if($teamInvitation->accepted_at !== null || $teamInvitation->expires_at->isPast(), 410);
+
+        if ($request->user() === null) {
+            $pendingInvitation->remember($request, $teamInvitation);
+
+            return redirect()->guest(route('login'));
+        }
+
+        if (mb_strtolower($request->user()->email) !== mb_strtolower($teamInvitation->email)) {
+            $pendingInvitation->forget($request);
+
+            abort(403);
+        }
 
         return Inertia::render('invitations/show', [
             'invitation' => [
@@ -49,9 +69,14 @@ class TeamInvitationController extends Controller
         ]);
     }
 
-    public function accept(Request $request, TeamInvitation $teamInvitation, AcceptTeamInvitation $accept): RedirectResponse
-    {
+    public function accept(
+        Request $request,
+        TeamInvitation $teamInvitation,
+        AcceptTeamInvitation $accept,
+        PendingTeamInvitation $pendingInvitation,
+    ): RedirectResponse {
         $accept->handle($teamInvitation, $request->user());
+        $pendingInvitation->forget($request);
         $plan = $teamInvitation->team->mealPlans()->latest()->first();
 
         return $plan === null ? to_route('dashboard') : to_route('meal-plans.show', $plan);
